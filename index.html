@@ -1,0 +1,1513 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Shithead - Prototype</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🃏</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+<style>
+  html,body{margin:0;padding:0;background:#000;overflow:hidden;font-family:'VT323',monospace;}
+  #game-container{width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;}
+
+  #rotate-overlay{
+    display:none;
+    position:fixed; inset:0; z-index:9999;
+    background:#0d1117;
+    flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:24px; box-sizing:border-box;
+  }
+  #rotate-overlay .icon{ font-size:64px; animation:rotate-hint 1.6s ease-in-out infinite; }
+  #rotate-overlay .msg{ color:#e9ddc8; font-family:'VT323',monospace; font-size:28px; margin-top:14px; line-height:1.4; }
+  @keyframes rotate-hint{
+    0%,100%{ transform:rotate(0deg); }
+    50%{ transform:rotate(90deg); }
+  }
+  /* Uniquement sur les appareils tactiles en portrait (pas les fenetres
+     desktop redimensionnees en etroit) : on cache le jeu et on affiche
+     l'ecran de rotation. */
+  @media (orientation: portrait) and (pointer: coarse){
+    #rotate-overlay{ display:flex; }
+    #game-container{ display:none; }
+  }
+</style>
+</head>
+<body>
+<div id="rotate-overlay">
+  <div class="icon">📱</div>
+  <div class="msg">Tourne ton telephone<br>Rotate your phone</div>
+</div>
+<div id="game-container"></div>
+<script>
+/* =========================================================
+   MOTEUR DE REGLES - Shithead (variante "Danisz")
+   (inchange par rapport a la version precedente, la couleur/suit
+   n'a aucun impact sur les regles, seul le rang compte)
+   ========================================================= */
+
+const SUITS = ['♠','♥','♦','♣']; // uniquement pour garantir 4 exemplaires distincts par rang
+const RANKS = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
+const RANK_VALUE = Object.fromEntries(RANKS.map((r,i)=>[r,i]));
+
+const RANK_TO_TEXTURE = {
+  '2':'card_2', '3':'card_3', '4':'card_4', '5':'card_5', '6':'card_6',
+  '7':'card_7', '8':'card_8', '9':'card_9', '10':'card_10',
+  'J':'card_J', 'Q':'card_Q', 'K':'card_K', 'A':'card_A'
+};
+
+/* =========================================================
+   TRADUCTIONS (FR/EN)
+   Le moteur ne stocke que des cles + parametres dans le journal
+   (state.log), jamais du texte deja traduit : comme ca, changer
+   de langue en cours de partie re-traduit aussi tout l'historique.
+   ========================================================= */
+let lang = (typeof localStorage!=='undefined' && localStorage.getItem('shithead_lang')) || 'fr';
+
+const I18N = {
+  fr: {
+    logStarterYou: "C'est toi qui commences, avec la carte la plus basse.",
+    logStarterAI: "C'est l'IA qui commence, avec la carte la plus basse.",
+    logPlayYou: "Tu poses {countx}{rank}.",
+    logPlayAI: "L'IA pose {countx}{rank}.",
+    logCopy3War: "Le 3 copie l'As, le duel continue.",
+    logCopy3Chain: "Le 3 recopie la chaine : effet du {rank}.",
+    logCopy3: "Le 3 copie la valeur du {rank}.",
+    logReset: "Reset : n'importe quelle carte peut suivre.",
+    logSeven: "7 joue : la prochaine carte doit etre 7 ou moins (specials exemptes).",
+    logBonus8You: "+{extra} tour(s) bonus pour toi (combo de 8) !",
+    logBonus8AI: "+{extra} tour(s) bonus pour l'IA (combo de 8) !",
+    logEight: "8 joue : le prochain tour est saute.",
+    logAceRebound: "L'As rebondit, le duel continue.",
+    logWarDeclareYou: "Tu declares la guerre !",
+    logWarDeclareAI: "L'IA declare la guerre !",
+    logCutQuad: "Coupe (4 identiques) ! Pile videe, tu rejoues.",
+    logCut10: "10 joue : pile videe, tu rejoues.",
+    logWinYou: "Tu as gagne !",
+    logWinAI: "L'IA a gagne.",
+    logTakePileYou: "Tu ramasses le tas ({count} cartes en main).",
+    logTakePileAI: "L'IA ramasse le tas ({count} cartes en main).",
+    logBonusReplayYou: "Tu rejoues (bonus 8).",
+    logBonusReplayAI: "L'IA rejoue (bonus 8).",
+    logSkipYou: "Ton tour est saute.",
+    logSkipAI: "Le tour de l'IA est saute.",
+
+    mainAI: "MAIN IA : {n}",
+    pileCount: "{n} carte(s) en jeu",
+    cutCount: "{n} coupees",
+    forceConstraint: "CONTRAINTE ≤ 7",
+    battle: "BATAILLE {n} : {turn}",
+    turnYou: "A TOI DE JOUER",
+    turnAI: "TOUR DE L'IA",
+    statusWin: "TU AS GAGNE !",
+    statusLose: "L'IA A GAGNE.",
+    statusAITurn: "L'IA JOUE...",
+    statusChooseFaceUp: "CHOISIS UNE CARTE A RECUPERER AVEC LE TAS",
+    statusSelected: "{n} CARTE(S) SELECTIONNEE(S)",
+    statusChoose: "CHOISIS UNE OU PLUSIEURS CARTES",
+    refreshToReplay: "Rafraichis la page pour rejouer",
+    btnPlay: "Jouer",
+    btnTake: "Prendre",
+    btnCancel: "Annuler",
+    victory: "VICTOIRE",
+    defeat: "DEFAITE",
+    takenLabel: "+{n} carte(s)",
+    takenLabelBig: "+{n} carte(s) !",
+    menuVsAI: "1v1 vs IA",
+    menuOnline: "1v1 online",
+    menuFFA: "1v1v1v1",
+    comingSoon: "Bientot"
+  },
+  en: {
+    logStarterYou: "You go first, with the lowest card.",
+    logStarterAI: "The AI goes first, with the lowest card.",
+    logPlayYou: "You play {countx}{rank}.",
+    logPlayAI: "The AI plays {countx}{rank}.",
+    logCopy3War: "The 3 copies the Ace, the duel continues.",
+    logCopy3Chain: "The 3 re-copies the chain: {rank}'s effect.",
+    logCopy3: "The 3 copies the value of the {rank}.",
+    logReset: "Reset: any card can follow.",
+    logSeven: "7 played: next card must be 7 or lower (specials exempt).",
+    logBonus8You: "+{extra} bonus turn(s) for you (8-combo)!",
+    logBonus8AI: "+{extra} bonus turn(s) for the AI (8-combo)!",
+    logEight: "8 played: next turn is skipped.",
+    logAceRebound: "The Ace bounces back, the duel continues.",
+    logWarDeclareYou: "You declare war!",
+    logWarDeclareAI: "The AI declares war!",
+    logCutQuad: "Cut (4 of a kind)! Pile cleared, play again.",
+    logCut10: "10 played: pile cleared, play again.",
+    logWinYou: "You won!",
+    logWinAI: "The AI won.",
+    logTakePileYou: "You take the pile ({count} cards in hand).",
+    logTakePileAI: "The AI takes the pile ({count} cards in hand).",
+    logBonusReplayYou: "You play again (8-bonus).",
+    logBonusReplayAI: "The AI plays again (8-bonus).",
+    logSkipYou: "Your turn is skipped.",
+    logSkipAI: "The AI's turn is skipped.",
+
+    mainAI: "AI HAND: {n}",
+    pileCount: "{n} card(s) in play",
+    cutCount: "{n} cut",
+    forceConstraint: "LIMIT ≤ 7",
+    battle: "BATTLE {n}: {turn}",
+    turnYou: "YOUR TURN",
+    turnAI: "AI'S TURN",
+    statusWin: "YOU WON!",
+    statusLose: "THE AI WON.",
+    statusAITurn: "AI IS PLAYING...",
+    statusChooseFaceUp: "CHOOSE A CARD TO KEEP WITH THE PILE",
+    statusSelected: "{n} CARD(S) SELECTED",
+    statusChoose: "CHOOSE ONE OR MORE CARDS",
+    refreshToReplay: "Refresh the page to play again",
+    btnPlay: "Play",
+    btnTake: "Take",
+    btnCancel: "Cancel",
+    victory: "VICTORY",
+    defeat: "DEFEAT",
+    takenLabel: "+{n} card(s)",
+    takenLabelBig: "+{n} card(s)!",
+    menuVsAI: "1v1 vs AI",
+    menuOnline: "1v1 online",
+    menuFFA: "1v1v1v1",
+    comingSoon: "Coming soon"
+  }
+};
+
+function t(key, params){
+  const template = (I18N[lang] && I18N[lang][key]) || key;
+  if(!params) return template;
+  return template.replace(/\{(\w+)\}/g, (_, k) => (params[k]!==undefined ? params[k] : ''));
+}
+
+function buildDeck(){
+  const deck = [];
+  for(const s of SUITS) for(const r of RANKS) deck.push({rank:r, suit:s, id:r+s});
+  return deck;
+}
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+  return arr;
+}
+function sortHand(cards){
+  return [...cards].sort((a,b)=>RANK_VALUE[a.rank]-RANK_VALUE[b.rank]);
+}
+function isSpecial(rank){ return ['2','3','10','A'].includes(rank); }
+
+function newPlayerState(){
+  return { hand:[], faceUp:[], faceDown:[], zone:'hand' };
+}
+
+function createGame(){
+  const deck = shuffle(buildDeck());
+  const state = {
+    deck,
+    discardOut: [],
+    cutBatches: [], // historique des coupes, pour l'affichage "tas chaotique"
+    pile: [],
+    player: newPlayerState(),
+    ai: newPlayerState(),
+    turn: null,
+    forceMax: null,
+    war: null,
+    skipNext: 0,
+    resetOpen: false,
+    copyEffectiveTop: null,
+    bonusTurnsPlayer: null,
+    bonusTurns: 0,
+    winner: null,
+    log: []
+  };
+
+  for(const who of [state.player, state.ai]){
+    who.faceDown = state.deck.splice(0,3);
+    who.faceUp   = state.deck.splice(0,3);
+    who.hand     = state.deck.splice(0,3);
+    // Slot fixe (0-2) pour chaque carte face cachee/visible : comme ca,
+    // jouer l'une d'elles ne fait pas "glisser" les autres dans sa position,
+    // exactement comme sur une vraie table ou seule la carte jouee bouge.
+    who.faceDown.forEach((c,i)=>{ c.slot = i; });
+    who.faceUp.forEach((c,i)=>{ c.slot = i; });
+  }
+
+  const lowestOf = (cards)=> sortHand(cards)[0];
+  const pLow = lowestOf(state.player.hand);
+  const aLow = lowestOf(state.ai.hand);
+  const starter = RANK_VALUE[pLow.rank] <= RANK_VALUE[aLow.rank] ? 'player' : 'ai';
+  state.turn = starter;
+  log(state, starter==='player' ? 'logStarterYou' : 'logStarterAI');
+
+  return state;
+}
+
+function log(state, key, params){ state.log.push({key, params:params||{}}); if(state.log.length>60) state.log.shift(); }
+function opponentOf(who){ return who==='player' ? 'ai' : 'player'; }
+
+function getActiveZoneCards(pState){
+  if(pState.hand.length>0) return {zone:'hand', cards:pState.hand};
+  if(pState.faceUp.length>0) return {zone:'faceUp', cards:pState.faceUp};
+  if(pState.faceDown.length>0) return {zone:'faceDown', cards:pState.faceDown};
+  return {zone:'done', cards:[]};
+}
+
+function pileTop(state){ return state.pile.length ? state.pile[state.pile.length-1] : null; }
+
+function canPlayGroup(state, rank){
+  if(state.war) return rank==='A' || rank==='3' || rank==='2' || rank==='10';
+  // Sous la contrainte d'un 7, seuls 2 et 3 restent jouables en force.
+  // 10 et As sont "au-dessus" de 7 et redeviennent contrables.
+  if(state.forceMax !== null){
+    if(rank==='2' || rank==='3') return true;
+    return RANK_VALUE[rank] <= state.forceMax;
+  }
+  // Apres un 2, la pile est "ouverte" : n'importe quelle carte passe, une seule fois.
+  if(state.resetOpen) return true;
+  if(isSpecial(rank)) return true;
+  if(state.pile.length===0) return true;
+  const topVal = state.copyEffectiveTop !== null ? RANK_VALUE[state.copyEffectiveTop] : RANK_VALUE[pileTop(state).rank];
+  const val = RANK_VALUE[rank];
+  return val >= topVal;
+}
+
+function resolvePlay(state, who, cards){
+  const rank = cards[0].rank;
+  const count = cards.length;
+  const wasWarActive = !!state.war;
+  // Ce que le 3 precedent copiait, si le coup d'avant etait lui-meme une copie
+  // (necessaire pour faire remonter une chaine de 3 jusqu'a la carte d'origine).
+  const prevCopyEffectiveTop = state.copyEffectiveTop;
+  state.pile.push(...cards);
+  log(state, who==='player' ? 'logPlayYou' : 'logPlayAI', {countx: count>1?count+'x ':'', rank});
+
+  // Le reset et la copie ne valent que pour le tout prochain coup : on les
+  // referme par defaut, seuls les cases '2' et '3' ci-dessous les rouvrent.
+  state.resetOpen = false;
+  state.copyEffectiveTop = null;
+
+  if(rank === '3' && wasWarActive){
+    log(state, 'logCopy3War');
+    // Le defenseur (celui qui doit repondre) est toujours l'adversaire de
+    // qui vient de jouer, peu importe qui etait attaquant/defenseur avant.
+    // (L'ancienne formule ne mettait a jour le defenseur que dans un seul
+    // des deux cas, ce qui pouvait figer la guerre sur le meme joueur.)
+    state.war.defender = opponentOf(who);
+    state.war.round = (state.war.round || 1) + 1;
+    return { replay:false };
+  }
+
+  // Rang "effectif" de ce coup, pour la comparaison suivante ET pour detecter
+  // une coupe : un rang normal vaut son propre rang ; un ou plusieurs 3
+  // copient le rang de la carte juste en dessous du groupe (ou remontent la
+  // chaine si c'est un autre 3). La copie de VALEUR marche que le(s) 3
+  // soi(en)t joue(s) seul(s) ou en groupe ; seul l'HERITAGE DE L'EFFET
+  // SPECIAL (skip du 8, reset du 2, etc.) reste reserve a une copie isolee
+  // (sinon jouer 2x 3 ensemble redeclencherait l'effet deux fois).
+  let effectiveRank = rank;
+  let copyBelowRank = null;
+  let isCopy3 = false;
+  if(rank === '3'){
+    const below = state.pile[state.pile.length-1-count];
+    if(below){
+      let br = below.effectiveRank || below.rank;
+      if(br === '3'){
+        br = prevCopyEffectiveTop || null;
+      }
+      if(br){ effectiveRank = br; copyBelowRank = br; isCopy3 = true; }
+    }
+  }
+  cards.forEach(c => { c.effectiveRank = effectiveRank; c.isCopy3 = isCopy3; });
+
+  // Coupe si 4 (ou plus) cartes consecutives en fin de pile partagent le meme
+  // rang effectif : que ce soit 4 vraies cartes posees d'un coup, un
+  // enchainement etale sur plusieurs tours, ou une suite de 3 identiques
+  // completee par UN SEUL 3-copie (regle : "you can only do it with one
+  // copy, you can't play more than one 3 that way").
+  let tail = 0, copy3Count = 0;
+  for(let i=state.pile.length-1; i>=0; i--){
+    if(state.pile[i].effectiveRank !== effectiveRank) break;
+    tail++;
+    if(state.pile[i].isCopy3) copy3Count++;
+  }
+  if(tail >= 4 && copy3Count <= 1){ return cutPile(state, who, true); }
+
+  if(rank === '3'){
+    if(!copyBelowRank) return { replay:false };
+    if(count === 1){
+      if(state.pile[state.pile.length-1-count].rank === '3'){
+        log(state, 'logCopy3Chain', {rank: effectiveRank});
+      } else {
+        log(state, 'logCopy3', {rank: copyBelowRank});
+      }
+      // Le 3 herite a la fois de la valeur ET de l'effet special de la carte
+      // copiee (le skip du 8, le reset du 2, le plafond du 7, la coupe du
+      // 10...), mais sans bonus de combo puisque c'est une seule carte.
+      state.copyEffectiveTop = effectiveRank;
+      return applyRankEffect(state, who, effectiveRank, 1);
+    }
+    // Plusieurs 3 joues ensemble : la valeur de comparaison suit quand meme
+    // (sinon n'importe quelle carte redeviendrait jouable juste apres),
+    // mais pas d'heritage de l'effet special du rang copie.
+    state.copyEffectiveTop = effectiveRank;
+    return applyRankEffect(state, who, rank, count);
+  }
+
+  return applyRankEffect(state, who, rank, count);
+}
+
+function applyRankEffect(state, who, rank, count){
+  switch(rank){
+    case '2':
+      state.forceMax = null; state.war = null; state.resetOpen = true;
+      log(state, 'logReset');
+      break;
+    case '7':
+      state.forceMax = RANK_VALUE['7'];
+      log(state, 'logSeven');
+      break;
+    case '8':
+      // En 1v1, un 8 (peu importe le nombre) bloque toujours l'IA une seule fois.
+      // Chaque 8 supplementaire donne un tour bonus au lanceur.
+      state.skipNext = 1;
+      { const extra = count - 1;
+        if(extra > 0){
+          if(state.bonusTurnsPlayer === who) state.bonusTurns += extra;
+          else { state.bonusTurnsPlayer = who; state.bonusTurns = extra; }
+          log(state, who==='player' ? 'logBonus8You' : 'logBonus8AI', {extra});
+        }
+      }
+      log(state, 'logEight');
+      break;
+    case '10':
+      return cutPile(state, who, false);
+    case 'A':
+      // Entrer/continuer dans une guerre a sa propre logique d'alternance
+      // stricte : on efface tout skip ou tour bonus en attente d'un combo de
+      // 8 pour que ca n'interfere pas avec le passage de tour attaquant/defenseur.
+      state.skipNext = 0;
+      if(state.bonusTurnsPlayer === who){ state.bonusTurnsPlayer = null; state.bonusTurns = 0; }
+      if(state.war){
+        state.war.defender = opponentOf(who);
+        state.war.round = (state.war.round || 1) + 1;
+        log(state, 'logAceRebound');
+      } else {
+        state.war = { attacker: who, defender: opponentOf(who), round: 1 };
+        log(state, who==='player' ? 'logWarDeclareYou' : 'logWarDeclareAI');
+      }
+      break;
+    default:
+      state.forceMax = null;
+      break;
+  }
+  return { replay:false };
+}
+
+function cutPile(state, who, fromQuad){
+  // Angle aleatoire fige au moment de la coupe (pas recalcule a chaque
+  // rendu), pour un empilement chaotique qui grandit au fil de la partie.
+  const angle = Math.round(90 + (Math.random()*50 - 25));
+  state.cutBatches.push({ count: state.pile.length, angle });
+  state.discardOut.push(...state.pile);
+  state.pile = [];
+  state.forceMax = null; state.war = null;
+  log(state, fromQuad ? 'logCutQuad' : 'logCut10');
+  return { replay:true, by:who };
+}
+
+function drawUpTo3(state, who){
+  const pState = who==='player' ? state.player : state.ai;
+  while(pState.hand.length < 3 && state.deck.length>0) pState.hand.push(state.deck.pop());
+}
+
+function checkWin(state, who){
+  const pState = who==='player' ? state.player : state.ai;
+  if(pState.hand.length===0 && pState.faceUp.length===0 && pState.faceDown.length===0){
+    state.winner = who;
+    log(state, who==='player' ? 'logWinYou' : 'logWinAI');
+    return true;
+  }
+  return false;
+}
+
+function takePile(state, who, extraCard){
+  const pState = who==='player' ? state.player : state.ai;
+  pState.hand.push(...state.pile);
+  if(extraCard) pState.hand.push(extraCard);
+  state.pile = [];
+  state.forceMax = null; state.war = null;
+  log(state, who==='player' ? 'logTakePileYou' : 'logTakePileAI', {count: pState.hand.length});
+}
+
+function playGroup(state, who, chosenCards){
+  if(state.winner) return {ok:false, message:"Partie terminee."};
+  if(state.turn !== who) return {ok:false, message:"Pas ton tour."};
+
+  const pState = who==='player' ? state.player : state.ai;
+  const zoneInfo = getActiveZoneCards(pState);
+  const fromZone = zoneInfo.zone;
+  const rank = chosenCards[0].rank;
+  const sameRank = chosenCards.every(c=>c.rank===rank);
+  if(!sameRank) return {ok:false, message:"Les cartes doivent avoir le meme rang."};
+
+  if(!canPlayGroup(state, rank)) return {ok:false, message:"Cette carte n'est pas jouable actuellement."};
+
+  for(const c of chosenCards){
+    const idx = zoneInfo.cards.findIndex(cc=>cc.id===c.id);
+    if(idx===-1) return {ok:false, message:"Carte introuvable dans ta zone active."};
+    zoneInfo.cards.splice(idx,1);
+  }
+
+  const result = resolvePlay(state, who, chosenCards);
+  if(checkWin(state, who)) return {ok:true, ended:true, fromZone, cards:chosenCards};
+  if(zoneInfo.zone==='hand' || fromZone==='hand') drawUpTo3(state, who);
+
+  if(result.replay) return {ok:true, replay:true, fromZone, cards:chosenCards};
+
+  advanceTurn(state, who);
+  return {ok:true, fromZone, cards:chosenCards};
+}
+
+function forceTakePile(state, who, extraFaceUpCard){
+  // Prendre le tas annule tout combo de 8 en cours (bonus ET skip en attente) :
+  // le tour repasse normalement a l'adversaire, sans rebond.
+  if(state.bonusTurnsPlayer === who){ state.bonusTurnsPlayer = null; state.bonusTurns = 0; }
+  state.skipNext = 0;
+  // Regle "phase decouverte" : si on ramasse le tas pendant qu'on joue ses
+  // cartes face visible (plus de main ni de pioche), on peut recuperer en
+  // plus l'une de ses cartes face visible dans sa main. Ca evite d'etre
+  // bloque indefiniment avec les 3 memes cartes previsibles.
+  if(extraFaceUpCard){
+    const pState = who==='player' ? state.player : state.ai;
+    const idx = pState.faceUp.findIndex(c=>c.id===extraFaceUpCard.id);
+    if(idx!==-1) pState.faceUp.splice(idx,1);
+  }
+  const takenCount = state.pile.length + (extraFaceUpCard?1:0);
+  takePile(state, who, extraFaceUpCard);
+  advanceTurn(state, who);
+  return {ok:true, tookPile:true, takenCount, faceUpCardTaken: extraFaceUpCard || null};
+}
+
+function tryFaceDownCard(state, who, card){
+  const pState = who==='player' ? state.player : state.ai;
+  const idx = pState.faceDown.findIndex(c=>c.id===card.id);
+  if(idx===-1) return {ok:false};
+  const playable = canPlayGroup(state, card.rank);
+  pState.faceDown.splice(idx,1);
+  if(playable){
+    const result = resolvePlay(state, who, [card]);
+    if(checkWin(state, who)) return {ok:true, ended:true, fromZone:'faceDown', card};
+    if(result.replay) return {ok:true, replay:true, fromZone:'faceDown', card};
+    advanceTurn(state, who);
+    return {ok:true, fromZone:'faceDown', card};
+  } else {
+    if(state.bonusTurnsPlayer === who){ state.bonusTurnsPlayer = null; state.bonusTurns = 0; }
+    state.skipNext = 0;
+    const takenCount = state.pile.length + 1;
+    takePile(state, who, card);
+    advanceTurn(state, who);
+    return {ok:true, failed:true, tookPile:true, takenCount, fromZone:'faceDown', card};
+  }
+}
+
+function advanceTurn(state, who){
+  // Une guerre en cours a sa propre alternance stricte attaquant/defenseur :
+  // elle prend le pas sur tout skip ou tour bonus en attente d'un combo de 8
+  // (filet de securite, en plus du nettoyage fait au moment de jouer l'As).
+  if(state.war){
+    state.turn = opponentOf(who);
+    return;
+  }
+  // Tours bonus en cours (combo de 8) : le lanceur rejoue directement.
+  if(state.bonusTurnsPlayer === who && state.bonusTurns > 0){
+    state.bonusTurns--;
+    log(state, who==='player' ? 'logBonusReplayYou' : 'logBonusReplayAI');
+    if(state.bonusTurns === 0) state.bonusTurnsPlayer = null;
+    state.turn = who;
+    return;
+  }
+  let next = opponentOf(who);
+  if(state.skipNext > 0){
+    log(state, next==='player' ? 'logSkipYou' : 'logSkipAI');
+    state.skipNext = 0;
+    next = who; // l'adversaire est saute -> la main revient au lanceur du 8
+  }
+  state.turn = next;
+}
+
+function aiTakeTurn(state){
+  if(state.winner || state.turn!=='ai') return null;
+  const zoneInfo = getActiveZoneCards(state.ai);
+
+  if(zoneInfo.zone==='faceDown'){
+    const card = zoneInfo.cards[Math.floor(Math.random()*zoneInfo.cards.length)];
+    return tryFaceDownCard(state, 'ai', card);
+  }
+  if(zoneInfo.zone==='done'){ return null; }
+
+  const byRank = {};
+  for(const c of zoneInfo.cards){ (byRank[c.rank]=byRank[c.rank]||[]).push(c); }
+  const playableRanks = Object.keys(byRank).filter(r=>canPlayGroup(state, r));
+
+  if(playableRanks.length===0){
+    if(zoneInfo.zone==='faceUp' && state.ai.faceUp.length>0){
+      // Recupere la carte face visible la plus basse : la moins dangereuse
+      // a garder en main pour la suite.
+      const chosen = sortHand(state.ai.faceUp)[0];
+      return forceTakePile(state, 'ai', chosen);
+    }
+    return forceTakePile(state, 'ai');
+  }
+
+  playableRanks.sort((a,b)=>{
+    const aSpec = isSpecial(a) ? 1 : 0, bSpec = isSpecial(b) ? 1 : 0;
+    if(aSpec!==bSpec) return aSpec-bSpec;
+    return RANK_VALUE[a]-RANK_VALUE[b];
+  });
+
+  const chosenRank = playableRanks[0];
+  const group = byRank[chosenRank];
+  const play = group.slice(0, Math.min(group.length,4));
+  return playGroup(state, 'ai', play);
+}
+
+/* =========================================================
+   RENDU PHASER (assets pixel art)
+   ========================================================= */
+const CARD_W = 80, CARD_H = 110;
+// Zones detectees sur table.png (coords natives 1280x720), decalees de +TABLE_Y_OFFSET en y
+const TABLE_Y_OFFSET = 90;
+const ZONES = {
+  aiSlots: [ {x:576,y:68}, {x:640,y:68}, {x:704,y:68} ],       // face down/up de l'IA (miroir, plus petit)
+  playerSlots: [ {x:513,y:546}, {x:640,y:546}, {x:766,y:546} ], // face down/up du joueur
+  cut:  {x:288, y:360},
+  pile: {x:638, y:360},
+  deck: {x:924, y:362}
+};
+function ty(y){ return y + TABLE_Y_OFFSET; }
+
+let game, gameState, selected = [];
+
+/* =========================================================
+   MENU DE DEMARRAGE
+   ========================================================= */
+class MenuScene extends Phaser.Scene {
+  constructor(){ super('menu'); }
+
+  create(){
+    this.render();
+    // Meme filet de securite que MainScene : si Google Fonts finit de
+    // charger APRES ce premier rendu, on redessine pour appliquer le bon
+    // style partout (sinon ca reste fige sur la police de secours jusqu'au
+    // prochain redessin, ex: un clic sur le toggle FR/EN).
+    if(document.fonts && document.fonts.ready){
+      document.fonts.ready.then(()=>{ this.render(); });
+    }
+  }
+
+  render(){
+    this.children.removeAll();
+
+    // Fond : feutre vert uni de la table de jeu
+    this.add.rectangle(640, 450, 1280, 900, 0x2e4928);
+
+    // Toggle FR/EN, visible et fonctionnel des le menu (meme style qu'en jeu)
+    const frColor = lang==='fr' ? '#ffd23f' : '#8a95a0';
+    const enColor = lang==='en' ? '#ffd23f' : '#8a95a0';
+    const frLbl = this.add.text(20, 18, 'FR', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:frColor}).setOrigin(0,0.5);
+    frLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('fr'));
+    const enLbl = this.add.text(68, 18, 'EN', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:enColor}).setOrigin(0,0.5);
+    enLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('en'));
+
+    // Titre
+    this.add.text(640, 210, 'Danisz', {fontFamily:'"Press Start 2P"', fontSize:'72px', color:'#e9ddc8'}).setOrigin(0.5);
+
+    // Boutons, alignes verticalement au centre
+    this.menuButton(640, 450, 340, 74, t('menuVsAI'), true, ()=>this.scene.start('main'));
+    this.menuButton(640, 552, 340, 74, t('menuOnline'), false);
+    this.menuButton(640, 654, 340, 74, t('menuFFA'), false);
+
+    // Marque, discrete en bas
+    this.add.text(640, 872, 'Hugin Corp™', {fontFamily:'"VT323"', fontSize:'18px', color:'#e9ddc8'}).setOrigin(0.5).setAlpha(0.25);
+  }
+
+  setLang(newLang){
+    if(lang===newLang) return;
+    lang = newLang;
+    try{ localStorage.setItem('shithead_lang', newLang); }catch(e){}
+    this.render();
+  }
+
+  menuButton(x, y, w, h, label, enabled, onClick){
+    const g = this.add.graphics();
+    const fill = enabled ? 0x3f6b3f : 0x2a332a;
+    const stroke = enabled ? 0x8fd18f : 0x556155;
+    g.fillStyle(fill, 1);
+    g.fillRoundedRect(x-w/2, y-h/2, w, h, 10);
+    g.lineStyle(3, stroke, 1);
+    g.strokeRoundedRect(x-w/2, y-h/2, w, h, 10);
+    this.add.text(x, y, label, {
+      fontFamily:'"Press Start 2P"', fontSize:'18px',
+      color: enabled ? '#f2ead9' : '#7c887c'
+    }).setOrigin(0.5);
+    if(!enabled){
+      this.add.text(x, y+h/2+16, t('comingSoon'), {fontFamily:'"VT323"', fontSize:'16px', color:'#8a95a0'}).setOrigin(0.5);
+    }
+    if(enabled){
+      const hit = this.add.rectangle(x, y, w, h, 0x000000, 0).setInteractive({useHandCursor:true});
+      hit.on('pointerdown', onClick);
+    }
+  }
+}
+
+class MainScene extends Phaser.Scene {
+  constructor(){ super('main'); }
+
+  preload(){
+    this.load.image('table', 'assets/table.jpeg');
+    this.load.image('card_back', 'assets/cards/back.png');
+    const files = {
+      '2':'2.png','3':'3.png','4':'4.png','5':'5.png','6':'6.png','7':'7.png',
+      '8':'8.png','9':'9.png','10':'10.png','J':'11-J.png','Q':'12-Q.png',
+      'K':'13-K.png','A':'14-A.png'
+    };
+    for(const [rank, file] of Object.entries(files)){
+      this.load.image(RANK_TO_TEXTURE[rank], 'assets/cards/'+file);
+    }
+  }
+
+  create(){
+    gameState = createGame();
+    this.spriteByCardId = {};
+    this.dragReleasePos = {};
+    this.animating = false;
+    this.awaitingFaceUpChoice = false;
+    // Sans ca, Phaser demarre un "drag" des le moindre micro-mouvement de
+    // souris entre l'appui et le relachement (quasi inevitable a la main),
+    // et le clic simple se fait avaler par le systeme de drag au lieu de
+    // declencher la selection. On exige un vrai deplacement avant de
+    // considerer que c'est un glisser plutot qu'un clic.
+    this.input.dragDistanceThreshold = 10;
+    this.initLog();
+    this.drawAll();
+    // Filet de securite : si les polices Google Fonts finissent de charger
+    // APRES ce premier rendu, on redessine pour que le bon style s'applique
+    // partout (sinon le canvas reste fige sur la police de secours).
+    if(document.fonts && document.fonts.ready){
+      document.fonts.ready.then(()=>{ this.drawAll(); });
+    }
+    if(gameState.turn==='ai') this.time.delayedCall(700, ()=>this.aiLoop());
+  }
+
+  // ---- Journal persistant avec defilement anime (au lieu de tout
+  // redessiner d'un coup a chaque tour) : les objets Text du journal ne
+  // sont jamais detruits par drawAll(), seulement decales/fades en tween. ----
+  initLog(){
+    this.logMaxVisible = 6;
+    this.logLineH = 22;
+    this.logPanelMinW = 260;
+    this.logPanelW = this.logPanelMinW;
+    const panelH = this.logLineH*this.logMaxVisible + 16;
+    this.logPanelRight = 1270;
+    this.logPanelX = this.logPanelRight - this.logPanelW;
+    this.logPanelY = 5;
+    this.logPanelBg = this.add.graphics();
+    this.logPanelBg.setDepth(4999);
+    this.redrawLogPanelBg(panelH);
+    this.logLines = []; // {obj, key, params}
+    this.lastLogCount = 0;
+  }
+
+  redrawLogPanelBg(panelH){
+    this.logPanelBg.clear();
+    this.logPanelBg.fillStyle(0x0c1410, 0.55);
+    this.logPanelBg.fillRoundedRect(this.logPanelX, this.logPanelY, this.logPanelW, panelH, 6);
+    this.logPanelBg.lineStyle(1, 0xd7a45c, 0.5);
+    this.logPanelBg.strokeRoundedRect(this.logPanelX, this.logPanelY, this.logPanelW, panelH, 6);
+  }
+
+  // Ajoute toute nouvelle entree du journal du moteur depuis le dernier
+  // appel (idempotent : ne fait rien si rien de neuf).
+  syncLog(){
+    const total = gameState.log.length;
+    for(let i=this.lastLogCount; i<total; i++){
+      const entry = gameState.log[i];
+      this.pushLogLine(entry.key, entry.params);
+    }
+    this.lastLogCount = total;
+  }
+
+  pushLogLine(key, params){
+    const lineH = this.logLineH, maxVisible = this.logMaxVisible;
+    const text = t(key, params);
+
+    // Nouvelle ligne : creee au slot du bas, invisible, pas encore dans le
+    // tableau (necessaire pour bien la reperer plus bas).
+    const bottomSlotY = this.logPanelY + 10 + (maxVisible-1)*lineH;
+    const obj = this.add.text(this.logPanelRight-10, bottomSlotY+12, text,
+      {fontFamily:'"VT323"', fontSize:'17px', color:'#a9b8c2', align:'right'}).setOrigin(1,0);
+    obj.setAlpha(0);
+    obj.setDepth(5001);
+    this.logLines.push({ obj, key, params });
+
+    // Si le panneau est plein, la plus ancienne s'efface.
+    if(this.logLines.length > maxVisible){
+      const oldest = this.logLines.shift();
+      this.tweens.killTweensOf(oldest.obj);
+      this.tweens.add({
+        targets: oldest.obj, alpha:0, duration:220, ease:'Sine.easeIn',
+        onComplete: ()=>{ oldest.obj.destroy(); }
+      });
+    }
+
+    // Largeur du panneau recalculee sur les lignes reellement visibles (pas
+    // de largeur fixe qui debordait sur les phrases longues, mais pas non
+    // plus un recalcul brut a chaque frame : juste ici, a chaque ajout).
+    const neededW = Math.max(this.logPanelMinW, ...this.logLines.map(e=>e.obj.width + 26));
+    if(neededW !== this.logPanelW){
+      this.logPanelW = neededW;
+      this.logPanelX = this.logPanelRight - this.logPanelW;
+      this.redrawLogPanelBg(lineH*maxVisible + 16);
+    }
+    const anchorX = this.logPanelRight - 10;
+
+    // Repositionne TOUTES les lignes visibles d'apres leur index final (et
+    // pas depuis leur position actuelle), en tuant tout tween en cours sur
+    // chacune avant d'en relancer un. Sans ca, deux appels rapproches de
+    // pushLogLine (ex: deux messages logges dans le meme tour) empilaient
+    // des animations concurrentes sur la meme ligne, qui finissait par se
+    // superposer a une autre au lieu de se placer au bon endroit.
+    const n = this.logLines.length;
+    this.logLines.forEach((entry, idx)=>{
+      entry.obj.x = anchorX;
+      const targetY = this.logPanelY + 10 + (maxVisible - n + idx) * lineH;
+      this.tweens.killTweensOf(entry.obj);
+      if(entry.obj === obj){
+        this.tweens.add({ targets: entry.obj, y: targetY, alpha:1, duration:280, ease:'Sine.easeOut' });
+      } else {
+        this.tweens.add({ targets: entry.obj, y: targetY, duration:260, ease:'Sine.easeInOut' });
+      }
+    });
+  }
+
+  // Change de langue sans casser l'animation en cours : on retraduit juste
+  // le texte des lignes deja affichees, sans les recreer ni les redeplacer.
+  refreshLogText(){
+    this.logLines.forEach(entry=>{ entry.obj.setText(t(entry.key, entry.params)); });
+  }
+
+  // ---- Change de langue et persiste le choix pour la prochaine visite ----
+  setLang(newLang){
+    if(lang===newLang) return;
+    lang = newLang;
+    try{ localStorage.setItem('shithead_lang', newLang); }catch(e){}
+    this.refreshLogText();
+    this.drawAll();
+  }
+
+  // ---- Continuation apres n'importe quelle action + son animation ----
+  afterAnimation(){
+    this.drawAll();
+    this.animating = false;
+    if(gameState.winner) return;
+    if(gameState.turn==='ai') this.time.delayedCall(500, ()=>this.aiLoop());
+  }
+
+  aiLoop(){
+    if(gameState.winner || this.animating) return;
+    this.animating = true;
+    const pileTopBefore = pileTop(gameState);
+    const pileSnapshotBefore = [...gameState.pile];
+    const res = aiTakeTurn(gameState);
+    this.animateResult('ai', res, pileTopBefore, pileSnapshotBefore);
+  }
+
+  // ---- Aide : point de depart par defaut quand aucun sprite precis n'existe
+  // (main de l'IA, generique puisque cachee) ----
+  fallbackOrigin(who, fromZone){
+    if(who==='ai' && fromZone==='hand'){
+      return {x:640, y:50, scale:0.38, angle:0, textureKey:'card_back'};
+    }
+    // repli generique : centre de la table
+    return {x:640, y:ty(360), scale:0.5, angle:0, textureKey:'card_back'};
+  }
+
+  // ---- Anime le resultat d'une action (jouer des cartes OU prendre le tas) ----
+  animateResult(who, res, pileTopBefore, pileSnapshotBefore){
+    if(!res || !res.ok){ this.animating = false; this.drawAll(); return; }
+
+    if(res.tookPile){
+      if(res.fromZone==='faceDown' && res.card){
+        // On revele d'abord la carte cachee tentee, sur place, avant le
+        // ramassage : sinon le joueur ne voit jamais ce qu'il a sorti.
+        this.animateFailedFaceDown(who, res.card, pileTopBefore, pileSnapshotBefore, res.takenCount || 0, ()=>this.afterAnimation());
+      } else {
+        this.animateTakePile(who, pileTopBefore, pileSnapshotBefore, res.takenCount || 0, res.faceUpCardTaken || null, ()=>this.afterAnimation());
+      }
+      return;
+    }
+
+    const cards = res.cards || (res.card ? [res.card] : []);
+    if(cards.length===0){ this.afterAnimation(); return; }
+
+    let remaining = cards.length;
+    const onOneDone = ()=>{ remaining--; if(remaining<=0) this.afterAnimation(); };
+
+    cards.forEach((card, i)=>{
+      const dragOrigin = this.dragReleasePos[card.id];
+      let origin, needsFlip;
+      if(dragOrigin){
+        // La carte vient d'un drag & drop : le vol reprend exactement la ou
+        // elle a ete lachee, pour enchainer sans saut avec le geste du joueur.
+        origin = { x:dragOrigin.x, y:dragOrigin.y, scale:dragOrigin.scale, angle:0, textureKey:RANK_TO_TEXTURE[card.rank] };
+        needsFlip = false;
+      } else if(this.spriteByCardId[card.id]){
+        origin = this.captureSpriteOrigin(this.spriteByCardId[card.id]);
+        needsFlip = origin.textureKey === 'card_back';
+        // On retire tout de suite la sprite d'origine (celle du dernier
+        // drawAll) : sinon elle reste affichee en double pendant que la
+        // copie volante s'anime par dessus, ce qui donne un effet dedouble.
+        this.spriteByCardId[card.id].destroy();
+        delete this.spriteByCardId[card.id];
+      } else {
+        origin = this.fallbackOrigin(who, res.fromZone);
+        needsFlip = origin.textureKey === 'card_back';
+      }
+      this.time.delayedCall(i*90, ()=>{
+        this.flyCardToPile(origin, RANK_TO_TEXTURE[card.rank], needsFlip, i, onOneDone);
+      });
+    });
+    this.dragReleasePos = {};
+  }
+
+  // ---- Face cachee qui echoue : on la retourne SUR PLACE pour la reveler,
+  // on laisse le temps de la lire, puis seulement ensuite le tas est ramasse ----
+  animateFailedFaceDown(who, card, pileTopBefore, pileSnapshotBefore, takenCount, onComplete){
+    const origin = this.spriteByCardId[card.id]
+      ? this.captureSpriteOrigin(this.spriteByCardId[card.id])
+      : this.fallbackOrigin(who, 'faceDown');
+    if(this.spriteByCardId[card.id]){
+      this.spriteByCardId[card.id].destroy();
+      delete this.spriteByCardId[card.id];
+    }
+    const spr = this.add.image(origin.x, origin.y, origin.textureKey).setScale(origin.scale).setDepth(2000);
+    this.tweens.add({
+      targets: spr, scaleX: 0, duration: 130, ease:'Sine.easeIn',
+      onComplete: ()=>{
+        spr.setTexture(RANK_TO_TEXTURE[card.rank]);
+        this.tweens.add({
+          targets: spr, scaleX: origin.scale, duration: 130, ease:'Sine.easeOut',
+          onComplete: ()=>{
+            // petit temps de lecture avant que le tas ne parte
+            this.time.delayedCall(650, ()=>{
+              spr.destroy();
+              this.animateTakePile(who, pileTopBefore, pileSnapshotBefore, takenCount, null, onComplete);
+            });
+          }
+        });
+      }
+    });
+  }
+
+  captureSpriteOrigin(spr){
+    return { x:spr.x, y:spr.y, scale:spr.scaleX, angle:spr.angle, textureKey:spr.texture.key };
+  }
+
+  // ---- Vol d'une carte vers la pile, avec un petit flottement avant la pose ----
+  flyCardToPile(origin, destTextureKey, needsFlip, stackIndex, onComplete){
+    const spr = this.add.image(origin.x, origin.y, origin.textureKey);
+    spr.setScale(origin.scale);
+    spr.setAngle(origin.angle);
+    spr.setDepth(2000 + stackIndex);
+
+    const destX = ZONES.pile.x + stackIndex*3;
+    const destY = ty(ZONES.pile.y) + stackIndex*2;
+    const destScale = 1.25;
+    const hoverX = destX, hoverY = destY - 55;
+
+    const settle = ()=>{
+      this.tweens.add({
+        targets: spr, x: hoverX, y: hoverY, scale: destScale*1.08, angle:0,
+        duration: 240, ease:'Sine.easeOut',
+        onComplete: ()=>{
+          this.time.delayedCall(260, ()=>{
+            this.tweens.add({
+              targets: spr, x: destX, y: destY, scale: destScale, angle:0,
+              duration: 190, ease:'Sine.easeIn',
+              onComplete: ()=>{ spr.destroy(); onComplete(); }
+            });
+          });
+        }
+      });
+    };
+
+    if(needsFlip){
+      this.tweens.add({
+        targets: spr, scaleX: 0, duration: 130, ease:'Sine.easeIn',
+        onComplete: ()=>{
+          spr.setTexture(destTextureKey);
+          this.tweens.add({ targets: spr, scaleX: origin.scale, duration: 130, ease:'Sine.easeOut', onComplete: settle });
+        }
+      });
+    } else {
+      settle();
+    }
+  }
+
+  // ---- Ramassage du tas : glisse et s'estompe vers la main du preneur ----
+  animateTakePile(who, pileTopBefore, pileSnapshotBefore, takenCount, faceUpCardTaken, onComplete){
+    const destX = 640;
+    const destY = who==='player' ? 900 : -20;
+    // Gros tas (+10 cartes) : vol plus lent et en tournoyant, effet "banane
+    // Mario Kart". En dessous, animation plus sobre : les vraies cartes
+    // arrivent une par une, espacees, sans rotation.
+    const bigPile = takenCount > 10;
+
+    const labelSize = bigPile ? Math.min(46, 26 + takenCount) : 26;
+    const label = this.add.text(ZONES.pile.x, ty(ZONES.pile.y)-40, t(bigPile ? 'takenLabelBig' : 'takenLabel', {n: takenCount}),
+      {fontFamily:'"VT323"', fontSize:labelSize+'px', color:'#ff6b6b', stroke:'#1a1008', strokeThickness:4}).setOrigin(0.5).setDepth(2001);
+    this.tweens.add({ targets: label, y: label.y-40, alpha:0, duration:700, ease:'Sine.easeOut' });
+
+    // La carte face visible choisie (regle "phase decouverte") part aussi
+    // vers la main, en parallele, plutot que de disparaitre d'un coup sans
+    // transition (ce qui donnait l'impression que les autres se realignaient).
+    let extraSpr = null;
+    if(faceUpCardTaken && this.spriteByCardId[faceUpCardTaken.id]){
+      const eo = this.captureSpriteOrigin(this.spriteByCardId[faceUpCardTaken.id]);
+      this.spriteByCardId[faceUpCardTaken.id].destroy();
+      delete this.spriteByCardId[faceUpCardTaken.id];
+      extraSpr = this.add.image(eo.x, eo.y, eo.textureKey).setScale(eo.scale).setDepth(2000);
+    }
+
+    if(bigPile){
+      const duration = 950;
+      // On detruit tout de suite le sprite statique du dessus de la pile
+      // (sinon il reste plante la pendant que les cartes individuelles
+      // ci-dessous s'envolent par dessus, meme probleme de doublon que
+      // pour le petit tas).
+      if(pileTopBefore && this.spriteByCardId[pileTopBefore.id]){
+        this.spriteByCardId[pileTopBefore.id].destroy();
+        delete this.spriteByCardId[pileTopBefore.id];
+      }
+      if(extraSpr){
+        this.tweens.add({ targets: extraSpr, x: destX, y: destY, scale:0.35, alpha:0, duration, ease:'Sine.easeInOut', onComplete: ()=>extraSpr.destroy() });
+        this.tweens.add({ targets: extraSpr, angle: 720 + Math.random()*360, duration, ease:'Sine.easeInOut' });
+      }
+      // Plusieurs vraies cartes, chacune avec sa propre trajectoire/rotation
+      // (effet banane Mario Kart), plafonnees pour ne pas surcharger l'ecran
+      // meme sur un tas de 20+ cartes.
+      const spinCount = Math.min(8, pileSnapshotBefore ? pileSnapshotBefore.length : 0);
+      const shown = spinCount>0 ? pileSnapshotBefore.slice(-spinCount) : [];
+      if(shown.length===0){
+        const spr = this.add.image(ZONES.pile.x, ty(ZONES.pile.y), 'card_back').setScale(1.0).setDepth(2000);
+        this.tweens.add({
+          targets: spr, x: destX, y: destY, scale:0.35, alpha:0, duration, ease:'Sine.easeInOut',
+          onComplete: ()=>{ spr.destroy(); label.destroy(); onComplete(); }
+        });
+        this.tweens.add({ targets: spr, angle: 720 + Math.random()*360, duration, ease:'Sine.easeInOut' });
+        return;
+      }
+      let remaining = shown.length;
+      shown.forEach((c, i)=>{
+        this.time.delayedCall(i*60, ()=>{
+          const jitterX = ZONES.pile.x + (Math.random()*50-25);
+          const jitterY = ty(ZONES.pile.y) + (Math.random()*36-18);
+          const cs = this.add.image(jitterX, jitterY, RANK_TO_TEXTURE[c.rank]).setScale(0.9).setDepth(2000+i);
+          const arcX = destX + (Math.random()*70-35);
+          this.tweens.add({
+            targets: cs, x: arcX, y: destY, scale:0.3, alpha:0,
+            duration: duration - i*15, ease:'Sine.easeInOut',
+            onComplete: ()=>{
+              cs.destroy();
+              remaining--;
+              if(remaining<=0){ label.destroy(); onComplete(); }
+            }
+          });
+          this.tweens.add({
+            targets: cs, angle: (Math.random()<0.5?-1:1) * (540 + Math.random()*540),
+            duration: duration - i*15, ease:'Sine.easeInOut'
+          });
+        });
+      });
+      return;
+    }
+
+    // ---- Petit tas : les vraies cartes arrivent une par une dans la main ----
+    if(extraSpr){
+      this.tweens.add({ targets: extraSpr, x: destX, y: destY, scale:0.4, alpha:0, duration:430, ease:'Sine.easeIn', onComplete: ()=>extraSpr.destroy() });
+    }
+    // La carte du dessus de la pile (affichee depuis le dernier drawAll)
+    // doit disparaitre tout de suite : sinon elle reste plantee la pendant
+    // que les cartes individuelles ci-dessous s'envolent par dessus.
+    if(pileTopBefore && this.spriteByCardId[pileTopBefore.id]){
+      this.spriteByCardId[pileTopBefore.id].destroy();
+      delete this.spriteByCardId[pileTopBefore.id];
+    }
+    const shown = (pileSnapshotBefore && pileSnapshotBefore.length>0) ? pileSnapshotBefore.slice(-8) : [];
+    if(shown.length===0){
+      // Filet de securite si jamais aucun snapshot n'est disponible.
+      const spr = this.add.image(ZONES.pile.x, ty(ZONES.pile.y), 'card_back').setScale(1.0);
+      spr.setDepth(2000);
+      this.tweens.add({
+        targets: spr, x: destX, y: destY, scale:0.35, alpha:0, duration:430, ease:'Sine.easeIn',
+        onComplete: ()=>{ spr.destroy(); label.destroy(); onComplete(); }
+      });
+      return;
+    }
+    let remaining = shown.length;
+    shown.forEach((c, i)=>{
+      this.time.delayedCall(i*90, ()=>{
+        const jitterX = ZONES.pile.x + (Math.random()*24-12);
+        const jitterY = ty(ZONES.pile.y) + (Math.random()*16-8);
+        const cs = this.add.image(jitterX, jitterY, RANK_TO_TEXTURE[c.rank]).setScale(0.85).setDepth(2000+i);
+        this.tweens.add({
+          targets: cs, x: destX + (Math.random()*30-15), y: destY, scale:0.32, alpha:0,
+          duration: 430, ease:'Sine.easeIn',
+          onComplete: ()=>{
+            cs.destroy();
+            remaining--;
+            if(remaining<=0){ label.destroy(); onComplete(); }
+          }
+        });
+      });
+    });
+  }
+
+  addCardSprite(x, y, textureKey, scale, onClick, highlighted, angle, dragConfig){
+    // Selection = la carte se souleve legerement, plutot qu'un cadre autour
+    // (qui se chevauchait entre cartes voisines quand plusieurs etaient
+    // choisies). Pas de lift si la carte est tournee (fan/cut), ca n'aurait
+    // pas de sens visuellement dans ces cas-la (angle jamais combine a highlighted).
+    const liftedY = highlighted ? y - 24*scale : y;
+    const spr = this.add.image(x, liftedY, textureKey).setScale(scale);
+    if(angle) spr.setAngle(angle);
+    // Position de repos memorisee : sert de reference pour deplacer les
+    // autres cartes du groupe en meme temps pendant un drag multi-carte.
+    spr.restX = x; spr.restY = liftedY;
+
+    if(dragConfig){
+      spr.setInteractive({useHandCursor:true});
+      this.input.setDraggable(spr);
+      let dragged = false;
+      let groupSprites = [];
+      spr.on('dragstart', ()=>{
+        dragged = true;
+        spr.setDepth(3000);
+        groupSprites = [];
+        // Si cette carte fait partie d'une selection multiple, on entraine
+        // visuellement les autres cartes du groupe avec elle (portees ensemble).
+        if(dragConfig.card && selected.length>1 && selected.some(s=>s.id===dragConfig.card.id)){
+          for(const s of selected){
+            if(s.id===dragConfig.card.id) continue;
+            const gs = this.spriteByCardId[s.id];
+            if(gs){ gs.setDepth(2999); groupSprites.push(gs); }
+          }
+        }
+      });
+      spr.on('drag', (pointer, dragX, dragY)=>{
+        const dx = dragX - spr.restX, dy = dragY - spr.restY;
+        spr.x = dragX; spr.y = dragY;
+        groupSprites.forEach(gs=>{ gs.x = gs.restX + dx; gs.y = gs.restY + dy; });
+      });
+      spr.on('dragend', (pointer)=>{ dragConfig.onDrop(pointer); dragged = false; });
+      spr.on('pointerup', ()=>{ if(!dragged && onClick) onClick(); });
+    } else if(onClick){
+      spr.setInteractive({useHandCursor:true});
+      spr.on('pointerdown', onClick);
+    }
+    return spr;
+  }
+
+  drawStackedZone(centerX, centerY, faceDownCard, faceUpCard, scale, clickableUp, clickableDown){
+    if(faceDownCard){
+      const spr = this.addCardSprite(centerX, centerY, 'card_back', scale,
+        clickableDown ? ()=>this.onPlayerFaceDownClick(faceDownCard) : null);
+      this.spriteByCardId[faceDownCard.id] = spr;
+    }
+    if(faceUpCard){
+      const isSel = selected.some(s=>s.id===faceUpCard.id);
+      const dragCfg = clickableUp ? { onDrop: (pointer)=>this.onCardDropped(faceUpCard, pointer), card: faceUpCard } : null;
+      const spr = this.addCardSprite(centerX, centerY - 6*scale, RANK_TO_TEXTURE[faceUpCard.rank], scale,
+        clickableUp ? ()=>this.onPlayerCardClick(faceUpCard) : null, isSel, 0, dragCfg);
+      this.spriteByCardId[faceUpCard.id] = spr;
+    }
+  }
+
+  // ---- Aide UI : panneau semi-transparent derriere un texte pour la lisibilite ----
+  panel(x, y, w, h, originX=0.5, originY=0.5, alpha=0.55){
+    const px = x - w*originX, py = y - h*originY;
+    const g = this.add.graphics();
+    g.fillStyle(0x0c1410, alpha);
+    g.fillRoundedRect(px, py, w, h, 6);
+    g.lineStyle(1, 0xd7a45c, 0.5);
+    g.strokeRoundedRect(px, py, w, h, 6);
+    return g;
+  }
+
+  label(x, y, str, opts={}){
+    const cfg = Object.assign({
+      fontFamily:'"VT323"', fontSize:'20px', color:'#e9ddc8',
+      align:'left'
+    }, opts);
+    const t = this.add.text(x, y, str, cfg);
+    if(opts.originX!==undefined || opts.originY!==undefined) t.setOrigin(opts.originX||0, opts.originY||0);
+    return t;
+  }
+
+  // ---- Panneau qui se dimensionne automatiquement autour du texte, pour
+  // ne jamais deborder (mesure le texte avant de dessiner le fond) ----
+  autoLabel(x, y, str, textOpts={}, panelOpts={}){
+    const measure = this.add.text(0, 0, str, Object.assign({
+      fontFamily:'"VT323"', fontSize:'20px', color:'#e9ddc8'
+    }, textOpts)).setVisible(false);
+    const w = measure.width, h = measure.height;
+    measure.destroy();
+    const padX = panelOpts.padX ?? 14, padY = panelOpts.padY ?? 7;
+    const originX = textOpts.originX ?? 0, originY = textOpts.originY ?? 0;
+    if(panelOpts.show !== false){
+      this.panel(x, y, w+padX*2, h+padY*2, originX, originY, panelOpts.alpha ?? 0.55);
+    }
+    return this.label(x, y, str, textOpts);
+  }
+
+  // ---- Bouton rond style GBA (A/B) : cercle + lettre + legende en dessous ----
+  // ---- Bouton rond (place "comme" A/B GBA, mais avec le mot ecrit dedans) :
+  // la taille de police s'ajuste automatiquement pour tenir dans le cercle ----
+  roundButton(x, y, radius, fillColor, strokeColor, word, onClick){
+    const g = this.add.graphics();
+    g.fillStyle(fillColor, 1);
+    g.fillCircle(x, y, radius);
+    g.lineStyle(3, strokeColor, 1);
+    g.strokeCircle(x, y, radius);
+    let fontSize = 16;
+    let t = this.add.text(x, y, word, {fontFamily:'"Press Start 2P"', fontSize:fontSize+'px', color:'#1a1008'}).setOrigin(0.5);
+    while(t.width > radius*1.7 && fontSize > 7){
+      fontSize--;
+      t.setFontSize(fontSize);
+    }
+    const hit = this.add.circle(x, y, radius, 0x000000, 0).setInteractive({useHandCursor:true});
+    hit.on('pointerdown', onClick);
+  }
+
+  drawAll(){
+    // On detruit tout SAUF les elements persistants du journal (panneau de
+    // fond + lignes en cours d'animation), qui gerent leur propre cycle de
+    // vie via pushLogLine/syncLog pour un defilement anime plutot qu'un
+    // redessin brutal a chaque tour.
+    const preserved = new Set([this.logPanelBg, ...this.logLines.map(e=>e.obj)]);
+    this.children.list.slice().forEach(child=>{ if(!preserved.has(child)) child.destroy(); });
+    this.spriteByCardId = {};
+    this.add.image(640, ty(360), 'table').setOrigin(0.5).setDisplaySize(1280, 720);
+
+    // ---- Bouton FR/EN (coin haut-gauche, hors du chemin de tout le reste) ----
+    const frColor = lang==='fr' ? '#ffd23f' : '#8a95a0';
+    const enColor = lang==='en' ? '#ffd23f' : '#8a95a0';
+    const frLbl = this.label(20, 18, 'FR', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:frColor, originY:0.5});
+    frLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('fr'));
+    const enLbl = this.label(68, 18, 'EN', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:enColor, originY:0.5});
+    enLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('en'));
+
+    // ---- Bandeau IA (au dessus de la table) : main de l'IA, cachee ----
+    const aiHandCount = gameState.ai.hand.length;
+    this.autoLabel(640, 18, t('mainAI', {n: aiHandCount}),
+      {fontFamily:'"Press Start 2P"', fontSize:'10px', color:'#e9ddc8', originX:0.5, originY:0.5},
+      {alpha:0.5});
+    const fanCount = Math.min(aiHandCount, 7);
+    for(let i=0;i<fanCount;i++){
+      this.addCardSprite(640 - (fanCount-1)*12 + i*24, 50, 'card_back', 0.38);
+    }
+
+    // ---- Zones face cachee / face visible de l'IA (miroir, plus petites) ----
+    for(let i=0;i<3;i++){
+      const z = ZONES.aiSlots[i];
+      const fd = gameState.ai.faceDown.find(c=>c.slot===i);
+      const fu = gameState.ai.faceUp.find(c=>c.slot===i);
+      this.drawStackedZone(z.x, ty(z.y), fd, fu, 0.6, false, false);
+    }
+
+    // ---- Pile centrale ----
+    const top = pileTop(gameState);
+
+    // Eventail des 2 cartes jouees juste avant celle du dessus (avec elle, ca
+    // fait la suite de 3 a connaitre pour couper via un 3). Pivot = vrai coin
+    // bas-gauche de la carte du dessus. La plus ancienne (angle le plus fort)
+    // doit etre dessinee EN PREMIER (couche du dessous), sinon elle recouvre
+    // la plus recente qui devrait au contraire etre presque sous la carte du
+    // dessus. Valide visuellement avant integration (voir /home/claude/fan_test).
+    const TOP_SCALE = 1.25;
+    const FAN_SCALE = 1.15;
+    const pivotX = ZONES.pile.x - (CARD_W*TOP_SCALE)/2;
+    const pivotY = ty(ZONES.pile.y) + (CARD_H*TOP_SCALE)/2;
+    const previous2 = gameState.pile.slice(-3,-1); // ordre : plus ancien -> plus recent
+    previous2.forEach((c, idx)=>{
+      const depthFromTop = previous2.length - idx; // ancien=2, recent=1
+      const spr = this.add.image(pivotX, pivotY, RANK_TO_TEXTURE[c.rank]);
+      spr.setOrigin(0,1);
+      spr.setScale(FAN_SCALE);
+      spr.setAngle(-16*depthFromTop);
+    });
+
+    if(top){
+      const sprTop = this.addCardSprite(ZONES.pile.x, ty(ZONES.pile.y), RANK_TO_TEXTURE[top.rank], 1.25);
+      this.spriteByCardId[top.id] = sprTop;
+    }
+    this.autoLabel(ZONES.pile.x, ty(ZONES.pile.y)+95, t('pileCount', {n: gameState.pile.length}),
+      {fontSize:'17px', originX:0.5, originY:0.5}, {alpha:0.45});
+
+    // ---- Deck (pioche) : tranches derriere qui disparaissent au fil des dernieres cartes ----
+    const deckSliverCount = Math.min(2, Math.max(0, gameState.deck.length-1));
+    for(let i=deckSliverCount; i>=1; i--){
+      this.addCardSprite(ZONES.deck.x + i*13, ty(ZONES.deck.y), 'card_back', 1.25);
+    }
+    if(gameState.deck.length>0){
+      this.addCardSprite(ZONES.deck.x, ty(ZONES.deck.y), 'card_back', 1.25);
+    }
+    this.autoLabel(ZONES.deck.x, ty(ZONES.deck.y)+95, `${gameState.deck.length}`,
+      {fontSize:'18px', originX:0.5, originY:0.5}, {alpha:0.45});
+
+    // ---- Cut / cartes hors jeu : empilement chaotique, un angle fige par coupe ----
+    gameState.cutBatches.forEach((batch, i)=>{
+      this.addCardSprite(ZONES.cut.x, ty(ZONES.cut.y), 'card_back', 1.0, null, false, batch.angle);
+    });
+    this.autoLabel(ZONES.cut.x, ty(ZONES.cut.y)+70, t('cutCount', {n: gameState.discardOut.length}),
+      {fontSize:'17px', originX:0.5, originY:0.5}, {alpha:0.45});
+
+    // ---- Contraintes / guerre ----
+    if(gameState.forceMax!==null){
+      this.autoLabel(ZONES.pile.x, ty(ZONES.pile.y)-118, t('forceConstraint'),
+        {fontFamily:'"Press Start 2P"', fontSize:'9px', color:'#f0a840', originX:0.5, originY:0.5},
+        {alpha:0.6});
+    }
+    if(gameState.war){
+      const round = gameState.war.round || 1;
+      const turnWord = gameState.turn==='player' ? t('turnYou') : t('turnAI');
+      this.autoLabel(ZONES.pile.x, ty(ZONES.pile.y)-148,
+        t('battle', {n: round, turn: turnWord}),
+        {fontFamily:'"Press Start 2P"', fontSize:'9px', color:'#ff5f5f', originX:0.5, originY:0.5},
+        {alpha:0.65});
+    }
+
+    // ---- Zones face cachee / face visible du joueur ----
+    const pZoneInfo = getActiveZoneCards(gameState.player);
+    for(let i=0;i<3;i++){
+      const z = ZONES.playerSlots[i];
+      const fd = gameState.player.faceDown.find(c=>c.slot===i);
+      const fu = gameState.player.faceUp.find(c=>c.slot===i);
+      const canClickUp = pZoneInfo.zone==='faceUp';
+      const canClickDown = pZoneInfo.zone==='faceDown';
+      this.drawStackedZone(z.x, ty(z.y), fd, fu, 1.25, canClickUp, canClickDown);
+    }
+
+    // ---- Main du joueur (sous la table) ----
+    const handY = 830;
+    const isHandActive = pZoneInfo.zone==='hand';
+    const hand = sortHand(gameState.player.hand);
+    // La main se resserre (spacing) puis retrecit (scale) automatiquement
+    // pour toujours tenir dans l'espace dispo, meme apres avoir ramasse
+    // un gros tas.
+    const N = hand.length;
+    const maxHandWidth = 1180;
+    const minSpacing = 22;
+    let handScale = 1.0;
+    let spacing = 64;
+    if(N>1){
+      const desiredWidth = (N-1)*spacing + CARD_W*handScale;
+      if(desiredWidth > maxHandWidth){
+        spacing = Math.max(minSpacing, (maxHandWidth - CARD_W*handScale) / (N-1));
+        const widthAtMinSpacing = (N-1)*minSpacing + CARD_W*handScale;
+        if(widthAtMinSpacing > maxHandWidth){
+          handScale = Math.max(0.5, (maxHandWidth - (N-1)*minSpacing) / CARD_W);
+          spacing = minSpacing;
+        }
+      }
+    }
+    const startX = 640 - (N-1)*spacing/2;
+    hand.forEach((c,i)=>{
+      const isSel = selected.some(s=>s.id===c.id);
+      // Une carte non jouable par rapport a l'etat actuel de la pile est
+      // grisee et non interactive (sauf si deja selectionnee, pour pouvoir
+      // toujours la deselectionner si l'etat de la pile a change entre temps).
+      const playable = isHandActive ? canPlayGroup(gameState, c.rank) : true;
+      const interactive = isHandActive && (playable || isSel);
+      const dragCfg = (isHandActive && playable) ? { onDrop: (pointer)=>this.onCardDropped(c, pointer), card: c } : null;
+      const spr = this.addCardSprite(startX + i*spacing, handY, RANK_TO_TEXTURE[c.rank], handScale,
+        interactive ? ()=>this.onPlayerCardClick(c) : null, isSel, 0, dragCfg);
+      if(isHandActive && !playable){
+        spr.setAlpha(0.42);
+        spr.setTint(0x777777);
+      }
+      this.spriteByCardId[c.id] = spr;
+    });
+
+    // ---- Statut / boutons ----
+    let statusMsg = '';
+    let statusColor = '#e9ddc8';
+    if(gameState.winner){
+      statusMsg = gameState.winner==='player' ? t('statusWin') : t('statusLose');
+      statusColor = gameState.winner==='player' ? '#5fdc7a' : '#ff5f5f';
+    } else if(gameState.turn==='ai'){
+      statusMsg = t('statusAITurn');
+    } else if(this.awaitingFaceUpChoice){
+      statusMsg = t('statusChooseFaceUp');
+      statusColor = '#f0a840';
+    } else {
+      statusMsg = selected.length ? t('statusSelected', {n: selected.length}) : t('statusChoose');
+    }
+    this.autoLabel(20, 900-30, statusMsg,
+      {fontFamily:'"Press Start 2P"', fontSize:'11px', color:statusColor, originY:0.5},
+      {padX:15, padY:9, alpha:0.55});
+    if(gameState.winner){
+      this.autoLabel(20, 900-58, t('refreshToReplay'),
+        {fontSize:'16px', color:'#9aa8b0', originY:0.5}, {padX:14, padY:6, alpha:0.45});
+    }
+
+    // ---- Boutons ronds, positionnes "comme" A/B GBA (Jouer a gauche, plus
+    // gros), dans l'espace libre entre la zone face visible/cachee et la
+    // main, pour ne jamais se melanger avec les cartes ----
+    if(gameState.turn==='player' && !gameState.winner){
+      if(!this.awaitingFaceUpChoice){
+        this.roundButton(1120, 725, 42, 0x2f8f4e, 0x5fdc7a, t('btnPlay'), ()=>this.onPlayClick());
+      }
+      const takeWord = this.awaitingFaceUpChoice ? t('btnCancel') : t('btnTake');
+      this.roundButton(1195, 690, 34, 0x9a2f2f, 0xff5f5f, takeWord, ()=>this.onTakeClick());
+    }
+
+    // ---- Log (panneau persistant + defilement anime, voir syncLog) ----
+    this.syncLog();
+
+    // ---- Grand emoji + texte de fin de partie, par dessus tout le reste ----
+    if(gameState.winner){
+      const isWin = gameState.winner==='player';
+      const emoji = isWin ? '🏆' : '💀';
+      const bigWord = isWin ? t('victory') : t('defeat');
+      const wordColor = isWin ? '#ffd23f' : '#ff4d4d';
+      this.add.circle(640, 370, 110, 0x0c1410, 0.55);
+      this.add.text(640, 370, emoji, {fontSize:'150px'}).setOrigin(0.5);
+      this.add.text(642, 502, bigWord,
+        {fontFamily:'"Press Start 2P"', fontSize:'40px', color:'#1a1008'}).setOrigin(0.5);
+      this.add.text(640, 500, bigWord,
+        {fontFamily:'"Press Start 2P"', fontSize:'40px', color:wordColor}).setOrigin(0.5);
+    }
+  }
+
+  onPlayerFaceDownClick(card){
+    if(gameState.turn!=='player' || gameState.winner || this.animating) return;
+    this.animating = true;
+    const pileTopBefore = pileTop(gameState);
+    const pileSnapshotBefore = [...gameState.pile];
+    const res = tryFaceDownCard(gameState, 'player', card);
+    selected = [];
+    this.animateResult('player', res, pileTopBefore, pileSnapshotBefore);
+  }
+
+  onPlayerCardClick(card){
+    if(gameState.turn!=='player' || gameState.winner || this.animating) return;
+    if(this.awaitingFaceUpChoice){
+      this.confirmTakePileWithFaceUp(card);
+      return;
+    }
+    const idx = selected.findIndex(c=>c.id===card.id);
+    if(idx>=0){ selected.splice(idx,1); }
+    else {
+      if(selected.length>0 && selected[0].rank!==card.rank) selected = [];
+      selected.push(card);
+    }
+    this.drawAll();
+  }
+
+  // ---- Depose (drag & drop) d'une carte : si lachee assez pres de la pile,
+  // on tente de jouer (elle seule, ou tout le groupe selectionne si elle en
+  // fait partie) ; sinon la carte revient simplement a sa place. ----
+  onCardDropped(card, pointer){
+    if(gameState.turn!=='player' || gameState.winner || this.animating || this.awaitingFaceUpChoice){
+      this.drawAll();
+      return;
+    }
+    const dx = pointer.x - ZONES.pile.x;
+    const dy = pointer.y - ty(ZONES.pile.y);
+    const closeEnough = Math.sqrt(dx*dx + dy*dy) < 170;
+    if(!closeEnough){ this.drawAll(); return; }
+
+    const group = (selected.length>0 && selected.some(s=>s.id===card.id)) ? [...selected] : [card];
+
+    // On capture la position LIVE de chaque carte du groupe (la ou le drag
+    // les a laissees, pas leur position de repos en main) et on retire leurs
+    // sprites de drag : l'animation de vol va prendre le relai exactement
+    // de la, sans saut entre les deux animations.
+    this.dragReleasePos = {};
+    for(const c of group){
+      const s = this.spriteByCardId[c.id];
+      if(s){
+        this.dragReleasePos[c.id] = { x:s.x, y:s.y, scale:s.scaleX };
+        s.destroy();
+        delete this.spriteByCardId[c.id];
+      }
+    }
+
+    selected = group;
+    this.onPlayClick();
+  }
+
+  onPlayClick(){
+    if(selected.length===0 || this.animating || this.awaitingFaceUpChoice) return;
+    this.animating = true;
+    const pileTopBefore = pileTop(gameState);
+    const pileSnapshotBefore = [...gameState.pile];
+    const res = playGroup(gameState, 'player', [...selected]);
+    selected = [];
+    if(!res.ok){ this.animating = false; this.drawAll(); return; }
+    this.animateResult('player', res, pileTopBefore, pileSnapshotBefore);
+  }
+
+  onTakeClick(){
+    if(this.animating) return;
+    // Annuler le choix en cours (re-clic sur le bouton pendant la selection)
+    if(this.awaitingFaceUpChoice){
+      this.awaitingFaceUpChoice = false;
+      this.drawAll();
+      return;
+    }
+    const pZoneInfo = getActiveZoneCards(gameState.player);
+    // Phase "decouverte" (face visible) : on doit choisir une carte a
+    // recuperer avec le tas avant de valider.
+    if(pZoneInfo.zone==='faceUp' && gameState.player.faceUp.length>0){
+      this.awaitingFaceUpChoice = true;
+      selected = [];
+      this.drawAll();
+      return;
+    }
+    this.animating = true;
+    const pileTopBefore = pileTop(gameState);
+    const pileSnapshotBefore = [...gameState.pile];
+    const res = forceTakePile(gameState, 'player');
+    selected = [];
+    this.animateResult('player', res, pileTopBefore, pileSnapshotBefore);
+  }
+
+  confirmTakePileWithFaceUp(card){
+    if(this.animating) return;
+    this.awaitingFaceUpChoice = false;
+    this.animating = true;
+    const pileTopBefore = pileTop(gameState);
+    const pileSnapshotBefore = [...gameState.pile];
+    const res = forceTakePile(gameState, 'player', card);
+    selected = [];
+    this.animateResult('player', res, pileTopBefore, pileSnapshotBefore);
+  }
+}
+
+const config = {
+  type: Phaser.AUTO,
+  parent: 'game-container',
+  width: 1280,
+  height: 900,
+  backgroundColor: '#12181f',
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scene: [MenuScene, MainScene]
+};
+game = new Phaser.Game(config);
+</script>
+</body>
+</html>
