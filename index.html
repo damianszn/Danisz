@@ -10,36 +10,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
 <style>
-  html,body{margin:0;padding:0;background:#000;overflow:hidden;font-family:'VT323',monospace;}
-  #game-container{width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;}
-
-  #rotate-overlay{
-    display:none;
-    position:fixed; inset:0; z-index:9999;
-    background:#0d1117;
-    flex-direction:column; align-items:center; justify-content:center;
-    text-align:center; padding:24px; box-sizing:border-box;
-  }
-  #rotate-overlay .icon{ font-size:64px; animation:rotate-hint 1.6s ease-in-out infinite; }
-  #rotate-overlay .msg{ color:#e9ddc8; font-family:'VT323',monospace; font-size:28px; margin-top:14px; line-height:1.4; }
-  @keyframes rotate-hint{
-    0%,100%{ transform:rotate(0deg); }
-    50%{ transform:rotate(90deg); }
-  }
-  /* Uniquement sur les appareils tactiles en portrait (pas les fenetres
-     desktop redimensionnees en etroit) : on cache le jeu et on affiche
-     l'ecran de rotation. */
-  @media (orientation: portrait) and (pointer: coarse){
-    #rotate-overlay{ display:flex; }
-    #game-container{ display:none; }
-  }
+  html,body{margin:0;padding:0;background:#2e4928;overflow:hidden;font-family:'VT323',monospace;}
+  #game-container{width:100vw;height:100vh;}
 </style>
 </head>
 <body>
-<div id="rotate-overlay">
-  <div class="icon">📱</div>
-  <div class="msg">Tourne ton telephone<br>Rotate your phone</div>
-</div>
 <div id="game-container"></div>
 <script>
 /* =========================================================
@@ -580,11 +555,11 @@ const CARD_W = 80, CARD_H = 110;
 // Zones detectees sur table.png (coords natives 1280x720), decalees de +TABLE_Y_OFFSET en y
 const TABLE_Y_OFFSET = 90;
 const ZONES = {
-  aiSlots: [ {x:576,y:68}, {x:640,y:68}, {x:704,y:68} ],       // face down/up de l'IA (miroir, plus petit)
-  playerSlots: [ {x:513,y:546}, {x:640,y:546}, {x:766,y:546} ], // face down/up du joueur
-  cut:  {x:288, y:360},
-  pile: {x:638, y:360},
-  deck: {x:924, y:362}
+  aiSlots: [ {x:576,y:80}, {x:640,y:80}, {x:704,y:80} ],       // face down/up de l'IA (miroir, plus petit)
+  playerSlots: [ {x:513,y:431}, {x:640,y:431}, {x:766,y:431} ], // face down/up du joueur
+  cut:  {x:288, y:248},
+  pile: {x:638, y:248},
+  deck: {x:924, y:250}
 };
 function ty(y){ return y + TABLE_Y_OFFSET; }
 
@@ -597,7 +572,10 @@ class MenuScene extends Phaser.Scene {
   constructor(){ super('menu'); }
 
   create(){
+    this.cameras.main.setBackgroundColor(0x2e4928);
+    this.fitCamera();
     this.render();
+    this.scale.on('resize', ()=>{ this.fitCamera(); });
     // Meme filet de securite que MainScene : si Google Fonts finit de
     // charger APRES ce premier rendu, on redessine pour appliquer le bon
     // style partout (sinon ca reste fige sur la police de secours jusqu'au
@@ -607,11 +585,19 @@ class MenuScene extends Phaser.Scene {
     }
   }
 
+  // Le menu garde toujours le meme design 1280x900 (une simple carte de
+  // titre + boutons n'a pas besoin d'une mise en page distincte en
+  // portrait) : on zoome/centre juste la camera pour qu'il tienne dans
+  // n'importe quel ecran, feutre vert visible tout autour si ca deborde.
+  fitCamera(){
+    const W = this.scale.width, H = this.scale.height;
+    const Z = Math.min(W/1280, H/900);
+    this.cameras.main.setZoom(Z);
+    this.cameras.main.centerOn(640, 450);
+  }
+
   render(){
     this.children.removeAll();
-
-    // Fond : feutre vert uni de la table de jeu
-    this.add.rectangle(640, 450, 1280, 900, 0x2e4928);
 
     // Toggle FR/EN, visible et fonctionnel des le menu (meme style qu'en jeu)
     const frColor = lang==='fr' ? '#ffd23f' : '#8a95a0';
@@ -666,7 +652,6 @@ class MainScene extends Phaser.Scene {
   constructor(){ super('main'); }
 
   preload(){
-    this.load.image('table', 'assets/table.jpeg');
     this.load.image('card_back', 'assets/cards/back.png');
     const files = {
       '2':'2.png','3':'3.png','4':'4.png','5':'5.png','6':'6.png','7':'7.png',
@@ -690,15 +675,54 @@ class MainScene extends Phaser.Scene {
     // declencher la selection. On exige un vrai deplacement avant de
     // considerer que c'est un glisser plutot qu'un clic.
     this.input.dragDistanceThreshold = 10;
+    this.cameras.main.setBackgroundColor(0x2e4928);
     this.initLog();
-    this.drawAll();
+    this.layoutAndDraw();
+    this.scale.on('resize', ()=>{ this.layoutAndDraw(); });
     // Filet de securite : si les polices Google Fonts finissent de charger
     // APRES ce premier rendu, on redessine pour que le bon style s'applique
     // partout (sinon le canvas reste fige sur la police de secours).
     if(document.fonts && document.fonts.ready){
-      document.fonts.ready.then(()=>{ this.drawAll(); });
+      document.fonts.ready.then(()=>{ this.layoutAndDraw(); });
     }
     if(gameState.turn==='ai') this.time.delayedCall(700, ()=>this.aiLoop());
+  }
+
+  // ---- Choisit la largeur du canevas virtuel paysage selon le ratio reel
+  // de l'ecran, et cale la camera dessus : sur un telephone large, le
+  // canevas s'elargit pour que le feutre remplisse tout l'ecran au lieu de
+  // laisser des bandes vertes mortes sur les cotes (uniquement sur les
+  // ecrans PLUS larges que le design d'origine 1280x900 ; sur un ecran plus
+  // etroit/carre, on garde le comportement "fit" classique pour ne rien
+  // perdre a l'affichage). Le portrait n'est pas encore construit (chantier
+  // separe) : on reste en paysage pour l'instant, meme si l'ecran est plus
+  // haut que large, plutot que de planter sur une mise en page qui n'existe pas.
+  layoutAndDraw(){
+    const W = this.scale.width, H = this.scale.height;
+    this.isPortrait = false; // TODO chantier portrait separe
+    const DH = 900;
+    const baseAspect = 1280/900;
+    const screenAspect = W/H;
+    let DW, Z;
+    if(screenAspect >= baseAspect){
+      DW = Math.round(DH * screenAspect);
+      Z = H/DH;
+    } else {
+      DW = 1280;
+      Z = W/DW;
+    }
+    this.W = DW;
+    this.cameras.main.setZoom(Z);
+    this.cameras.main.centerOn(DW/2, DH/2);
+    this.drawAll();
+  }
+
+  // Redessine avec la largeur actuelle, sans retoucher au zoom de la camera
+  // (utilise par tous les rafraichissements "normaux" suite a une action ;
+  // layoutAndDraw() est reserve au tout premier rendu et aux vrais
+  // changements de taille/orientation d'ecran).
+  render(){
+    this.drawAll();
   }
 
   // ---- Journal persistant avec defilement anime (au lieu de tout
@@ -706,7 +730,7 @@ class MainScene extends Phaser.Scene {
   // sont jamais detruits par drawAll(), seulement decales/fades en tween. ----
   initLog(){
     this.logMaxVisible = 6;
-    this.logLineH = 22;
+    this.logLineH = 26;
     this.logPanelMinW = 260;
     this.logPanelW = this.logPanelMinW;
     const panelH = this.logLineH*this.logMaxVisible + 16;
@@ -747,7 +771,7 @@ class MainScene extends Phaser.Scene {
     // tableau (necessaire pour bien la reperer plus bas).
     const bottomSlotY = this.logPanelY + 10 + (maxVisible-1)*lineH;
     const obj = this.add.text(this.logPanelRight-10, bottomSlotY+12, text,
-      {fontFamily:'"VT323"', fontSize:'17px', color:'#a9b8c2', align:'right'}).setOrigin(1,0);
+      {fontFamily:'"VT323"', fontSize:this.scaledFontSize('21px'), color:'#a9b8c2', align:'right'}).setOrigin(1,0);
     obj.setAlpha(0);
     obj.setDepth(5001);
     this.logLines.push({ obj, key, params });
@@ -804,12 +828,12 @@ class MainScene extends Phaser.Scene {
     lang = newLang;
     try{ localStorage.setItem('shithead_lang', newLang); }catch(e){}
     this.refreshLogText();
-    this.drawAll();
+    this.render();
   }
 
   // ---- Continuation apres n'importe quelle action + son animation ----
   afterAnimation(){
-    this.drawAll();
+    this.render();
     this.animating = false;
     if(gameState.winner) return;
     if(gameState.turn==='ai') this.time.delayedCall(500, ()=>this.aiLoop());
@@ -828,15 +852,15 @@ class MainScene extends Phaser.Scene {
   // (main de l'IA, generique puisque cachee) ----
   fallbackOrigin(who, fromZone){
     if(who==='ai' && fromZone==='hand'){
-      return {x:640, y:50, scale:0.38, angle:0, textureKey:'card_back'};
+      return {x:this.aiHandX, y:this.aiHandOffY+70, scale:0.38, angle:0, textureKey:'card_back'};
     }
-    // repli generique : centre de la table
-    return {x:640, y:ty(360), scale:0.5, angle:0, textureKey:'card_back'};
+    // repli generique : centre de la pile
+    return {x:this.pileX, y:this.pileY, scale:0.5, angle:0, textureKey:'card_back'};
   }
 
   // ---- Anime le resultat d'une action (jouer des cartes OU prendre le tas) ----
   animateResult(who, res, pileTopBefore, pileSnapshotBefore){
-    if(!res || !res.ok){ this.animating = false; this.drawAll(); return; }
+    if(!res || !res.ok){ this.animating = false; this.render(); return; }
 
     if(res.tookPile){
       if(res.fromZone==='faceDown' && res.card){
@@ -922,9 +946,9 @@ class MainScene extends Phaser.Scene {
     spr.setAngle(origin.angle);
     spr.setDepth(2000 + stackIndex);
 
-    const destX = ZONES.pile.x + stackIndex*3;
-    const destY = ty(ZONES.pile.y) + stackIndex*2;
-    const destScale = 1.25;
+    const destX = this.pileX + stackIndex*3;
+    const destY = this.pileY + stackIndex*2;
+    const destScale = this.pileScale;
     const hoverX = destX, hoverY = destY - 55;
 
     const settle = ()=>{
@@ -958,15 +982,15 @@ class MainScene extends Phaser.Scene {
 
   // ---- Ramassage du tas : glisse et s'estompe vers la main du preneur ----
   animateTakePile(who, pileTopBefore, pileSnapshotBefore, takenCount, faceUpCardTaken, onComplete){
-    const destX = 640;
-    const destY = who==='player' ? 900 : -20;
+    const destX = who==='player' ? this.playerHandX : this.aiHandX;
+    const destY = who==='player' ? this.playerHandOffY : this.aiHandOffY;
     // Gros tas (+10 cartes) : vol plus lent et en tournoyant, effet "banane
     // Mario Kart". En dessous, animation plus sobre : les vraies cartes
     // arrivent une par une, espacees, sans rotation.
     const bigPile = takenCount > 10;
 
     const labelSize = bigPile ? Math.min(46, 26 + takenCount) : 26;
-    const label = this.add.text(ZONES.pile.x, ty(ZONES.pile.y)-40, t(bigPile ? 'takenLabelBig' : 'takenLabel', {n: takenCount}),
+    const label = this.add.text(this.pileX, this.pileY-40, t(bigPile ? 'takenLabelBig' : 'takenLabel', {n: takenCount}),
       {fontFamily:'"VT323"', fontSize:labelSize+'px', color:'#ff6b6b', stroke:'#1a1008', strokeThickness:4}).setOrigin(0.5).setDepth(2001);
     this.tweens.add({ targets: label, y: label.y-40, alpha:0, duration:700, ease:'Sine.easeOut' });
 
@@ -1001,7 +1025,7 @@ class MainScene extends Phaser.Scene {
       const spinCount = Math.min(8, pileSnapshotBefore ? pileSnapshotBefore.length : 0);
       const shown = spinCount>0 ? pileSnapshotBefore.slice(-spinCount) : [];
       if(shown.length===0){
-        const spr = this.add.image(ZONES.pile.x, ty(ZONES.pile.y), 'card_back').setScale(1.0).setDepth(2000);
+        const spr = this.add.image(this.pileX, this.pileY, 'card_back').setScale(1.0).setDepth(2000);
         this.tweens.add({
           targets: spr, x: destX, y: destY, scale:0.35, alpha:0, duration, ease:'Sine.easeInOut',
           onComplete: ()=>{ spr.destroy(); label.destroy(); onComplete(); }
@@ -1012,8 +1036,8 @@ class MainScene extends Phaser.Scene {
       let remaining = shown.length;
       shown.forEach((c, i)=>{
         this.time.delayedCall(i*60, ()=>{
-          const jitterX = ZONES.pile.x + (Math.random()*50-25);
-          const jitterY = ty(ZONES.pile.y) + (Math.random()*36-18);
+          const jitterX = this.pileX + (Math.random()*50-25);
+          const jitterY = this.pileY + (Math.random()*36-18);
           const cs = this.add.image(jitterX, jitterY, RANK_TO_TEXTURE[c.rank]).setScale(0.9).setDepth(2000+i);
           const arcX = destX + (Math.random()*70-35);
           this.tweens.add({
@@ -1048,7 +1072,7 @@ class MainScene extends Phaser.Scene {
     const shown = (pileSnapshotBefore && pileSnapshotBefore.length>0) ? pileSnapshotBefore.slice(-8) : [];
     if(shown.length===0){
       // Filet de securite si jamais aucun snapshot n'est disponible.
-      const spr = this.add.image(ZONES.pile.x, ty(ZONES.pile.y), 'card_back').setScale(1.0);
+      const spr = this.add.image(this.pileX, this.pileY, 'card_back').setScale(1.0);
       spr.setDepth(2000);
       this.tweens.add({
         targets: spr, x: destX, y: destY, scale:0.35, alpha:0, duration:430, ease:'Sine.easeIn',
@@ -1059,8 +1083,8 @@ class MainScene extends Phaser.Scene {
     let remaining = shown.length;
     shown.forEach((c, i)=>{
       this.time.delayedCall(i*90, ()=>{
-        const jitterX = ZONES.pile.x + (Math.random()*24-12);
-        const jitterY = ty(ZONES.pile.y) + (Math.random()*16-8);
+        const jitterX = this.pileX + (Math.random()*24-12);
+        const jitterY = this.pileY + (Math.random()*16-8);
         const cs = this.add.image(jitterX, jitterY, RANK_TO_TEXTURE[c.rank]).setScale(0.85).setDepth(2000+i);
         this.tweens.add({
           targets: cs, x: destX + (Math.random()*30-15), y: destY, scale:0.32, alpha:0,
@@ -1146,11 +1170,23 @@ class MainScene extends Phaser.Scene {
     return g;
   }
 
+  // Convertit une taille de police (nombre ou "Npx") en tenant compte du
+  // boost responsive (this.fontScale, calcule dans drawAll selon la largeur
+  // reelle de l'ecran). Utilise partout ou du texte est cree, pour que les
+  // polices grossissent un peu sur les grands ecrans paysage.
+  scaledFontSize(size){
+    const scale = this.fontScale || 1;
+    const n = parseFloat(size);
+    if(isNaN(n)) return size;
+    return Math.round(n*scale)+'px';
+  }
+
   label(x, y, str, opts={}){
     const cfg = Object.assign({
       fontFamily:'"VT323"', fontSize:'20px', color:'#e9ddc8',
       align:'left'
     }, opts);
+    cfg.fontSize = this.scaledFontSize(cfg.fontSize);
     const t = this.add.text(x, y, str, cfg);
     if(opts.originX!==undefined || opts.originY!==undefined) t.setOrigin(opts.originX||0, opts.originY||0);
     return t;
@@ -1159,9 +1195,8 @@ class MainScene extends Phaser.Scene {
   // ---- Panneau qui se dimensionne automatiquement autour du texte, pour
   // ne jamais deborder (mesure le texte avant de dessiner le fond) ----
   autoLabel(x, y, str, textOpts={}, panelOpts={}){
-    const measure = this.add.text(0, 0, str, Object.assign({
-      fontFamily:'"VT323"', fontSize:'20px', color:'#e9ddc8'
-    }, textOpts)).setVisible(false);
+    const base = Object.assign({ fontFamily:'"VT323"', fontSize:'20px', color:'#e9ddc8' }, textOpts);
+    const measure = this.add.text(0, 0, str, Object.assign({}, base, { fontSize: this.scaledFontSize(base.fontSize) })).setVisible(false);
     const w = measure.width, h = measure.height;
     measure.destroy();
     const padX = panelOpts.padX ?? 14, padY = panelOpts.padY ?? 7;
@@ -1181,7 +1216,7 @@ class MainScene extends Phaser.Scene {
     g.fillCircle(x, y, radius);
     g.lineStyle(3, strokeColor, 1);
     g.strokeCircle(x, y, radius);
-    let fontSize = 16;
+    let fontSize = Math.round(16 * (this.fontScale||1));
     let t = this.add.text(x, y, word, {fontFamily:'"Press Start 2P"', fontSize:fontSize+'px', color:'#1a1008'}).setOrigin(0.5);
     while(t.width > radius*1.7 && fontSize > 7){
       fontSize--;
@@ -1199,9 +1234,53 @@ class MainScene extends Phaser.Scene {
     const preserved = new Set([this.logPanelBg, ...this.logLines.map(e=>e.obj)]);
     this.children.list.slice().forEach(child=>{ if(!preserved.has(child)) child.destroy(); });
     this.spriteByCardId = {};
-    this.add.image(640, ty(360), 'table').setOrigin(0.5).setDisplaySize(1280, 720);
 
-    // ---- Bouton FR/EN (coin haut-gauche, hors du chemin de tout le reste) ----
+    // Etirement horizontal : tout ce qui a ete pense pour un canevas
+    // 1280 de large (le design d'origine) passe par sx() pour s'ecarter
+    // proportionnellement du centre sur un ecran plus large, plutot que de
+    // rester tasse au milieu avec du feutre vert mort sur les cotes. Les
+    // coordonnees Y ne bougent pas (la hauteur logique reste 900).
+    const W = this.W || 1280;
+    const sx = (x) => W/2 + (x-640)*(W/1280);
+    // Etirement attenue (40% de l'intensite normale) : pour les elements
+    // qui doivent rester groupes/proches (les 3 cartes face visible/cachee)
+    // meme sur un tres large ecran, plutot que de s'ecarter autant que le
+    // reste de la table.
+    const cx = (x) => W/2 + (x-640)*(1 + (W/1280-1)*0.4);
+    // Boost de police sur les grands ecrans (paysage etire), plafonne a 1.5x
+    // pour ne pas devenir absurde sur un ecran ultra-large.
+    this.fontScale = Math.min(1.5, Math.max(1, W/1280));
+
+    // Le panneau de journal est ancre au bord droit reel : s'il a bouge
+    // depuis la derniere fois (largeur d'ecran changee), on le recale
+    // (panneau + lignes deja affichees) sans casser leurs animations en cours.
+    const newLogPanelRight = W - 10;
+    if(this.logPanelRight !== newLogPanelRight){
+      this.logPanelRight = newLogPanelRight;
+      this.logPanelX = this.logPanelRight - this.logPanelW;
+      this.redrawLogPanelBg(this.logLineH*this.logMaxVisible + 16);
+      this.logLines.forEach(entry=>{ entry.obj.x = this.logPanelRight - 10; });
+    }
+
+    // Fond : juste un bandeau brun en haut (zone main de l'IA), le reste est
+    // le feutre vert de la camera. Pas d'image fixe : que des couleurs, donc
+    // ca s'etire proprement a n'importe quelle taille d'ecran.
+    this.add.rectangle(W/2, 65, W, 130, 0x5a3a30).setOrigin(0.5);
+
+    // Positions partagees avec les fonctions d'animation (vol de cartes,
+    // ramassage du tas...), qui doivent savoir ou est la pile/la main peu
+    // importe la largeur actuelle.
+    this.pileX = sx(ZONES.pile.x);
+    this.pileY = ty(ZONES.pile.y);
+    this.pileScale = 1.25;
+    this.pileDropRadius = 170;
+    this.playerHandX = W/2;
+    this.playerHandOffY = 900;
+    this.aiHandX = W/2;
+    this.aiHandOffY = -20;
+
+    // ---- Bouton FR/EN (coin haut-gauche, hors du chemin de tout le reste,
+    // toujours colle au vrai bord gauche donc pas de sx() ici) ----
     const frColor = lang==='fr' ? '#ffd23f' : '#8a95a0';
     const enColor = lang==='en' ? '#ffd23f' : '#8a95a0';
     const frLbl = this.label(20, 18, 'FR', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:frColor, originY:0.5});
@@ -1211,12 +1290,21 @@ class MainScene extends Phaser.Scene {
 
     // ---- Bandeau IA (au dessus de la table) : main de l'IA, cachee ----
     const aiHandCount = gameState.ai.hand.length;
-    this.autoLabel(640, 18, t('mainAI', {n: aiHandCount}),
+    this.autoLabel(W/2, 18, t('mainAI', {n: aiHandCount}),
       {fontFamily:'"Press Start 2P"', fontSize:'10px', color:'#e9ddc8', originX:0.5, originY:0.5},
       {alpha:0.5});
     const fanCount = Math.min(aiHandCount, 7);
+    // Meme principe d'arc + rotation que la main du joueur (mais mirroir :
+    // les cartes du centre plongent LEGEREMENT vers la table plutot que de
+    // remonter), pour que l'eventail de l'IA ait aussi un cote "tenu en main".
+    const aiArcHeight = 0.25 * CARD_H * 0.38;
+    const aiMaxAngle = 10;
+    const aiHalfSpan = (fanCount-1)/2 || 1;
     for(let i=0;i<fanCount;i++){
-      this.addCardSprite(640 - (fanCount-1)*12 + i*24, 50, 'card_back', 0.38);
+      const u = fanCount>1 ? (i-(fanCount-1)/2)/aiHalfSpan : 0;
+      const y = 50 + aiArcHeight*(1-u*u);
+      const angle = aiMaxAngle*u;
+      this.addCardSprite(W/2 - (fanCount-1)*12 + i*24, y, 'card_back', 0.38, null, false, angle);
     }
 
     // ---- Zones face cachee / face visible de l'IA (miroir, plus petites) ----
@@ -1224,7 +1312,7 @@ class MainScene extends Phaser.Scene {
       const z = ZONES.aiSlots[i];
       const fd = gameState.ai.faceDown.find(c=>c.slot===i);
       const fu = gameState.ai.faceUp.find(c=>c.slot===i);
-      this.drawStackedZone(z.x, ty(z.y), fd, fu, 0.6, false, false);
+      this.drawStackedZone(cx(z.x), ty(z.y), fd, fu, 0.5, false, false);
     }
 
     // ---- Pile centrale ----
@@ -1238,8 +1326,8 @@ class MainScene extends Phaser.Scene {
     // dessus. Valide visuellement avant integration (voir /home/claude/fan_test).
     const TOP_SCALE = 1.25;
     const FAN_SCALE = 1.15;
-    const pivotX = ZONES.pile.x - (CARD_W*TOP_SCALE)/2;
-    const pivotY = ty(ZONES.pile.y) + (CARD_H*TOP_SCALE)/2;
+    const pivotX = this.pileX - (CARD_W*TOP_SCALE)/2;
+    const pivotY = this.pileY + (CARD_H*TOP_SCALE)/2;
     const previous2 = gameState.pile.slice(-3,-1); // ordre : plus ancien -> plus recent
     previous2.forEach((c, idx)=>{
       const depthFromTop = previous2.length - idx; // ancien=2, recent=1
@@ -1250,40 +1338,42 @@ class MainScene extends Phaser.Scene {
     });
 
     if(top){
-      const sprTop = this.addCardSprite(ZONES.pile.x, ty(ZONES.pile.y), RANK_TO_TEXTURE[top.rank], 1.25);
+      const sprTop = this.addCardSprite(this.pileX, this.pileY, RANK_TO_TEXTURE[top.rank], 1.25);
       this.spriteByCardId[top.id] = sprTop;
     }
-    this.autoLabel(ZONES.pile.x, ty(ZONES.pile.y)+95, t('pileCount', {n: gameState.pile.length}),
+    this.autoLabel(this.pileX, this.pileY+95, t('pileCount', {n: gameState.pile.length}),
       {fontSize:'17px', originX:0.5, originY:0.5}, {alpha:0.45});
 
     // ---- Deck (pioche) : tranches derriere qui disparaissent au fil des dernieres cartes ----
+    const deckX = sx(ZONES.deck.x), deckY = ty(ZONES.deck.y);
     const deckSliverCount = Math.min(2, Math.max(0, gameState.deck.length-1));
     for(let i=deckSliverCount; i>=1; i--){
-      this.addCardSprite(ZONES.deck.x + i*13, ty(ZONES.deck.y), 'card_back', 1.25);
+      this.addCardSprite(deckX + i*13, deckY, 'card_back', 1.25);
     }
     if(gameState.deck.length>0){
-      this.addCardSprite(ZONES.deck.x, ty(ZONES.deck.y), 'card_back', 1.25);
+      this.addCardSprite(deckX, deckY, 'card_back', 1.25);
     }
-    this.autoLabel(ZONES.deck.x, ty(ZONES.deck.y)+95, `${gameState.deck.length}`,
+    this.autoLabel(deckX, deckY+95, `${gameState.deck.length}`,
       {fontSize:'18px', originX:0.5, originY:0.5}, {alpha:0.45});
 
     // ---- Cut / cartes hors jeu : empilement chaotique, un angle fige par coupe ----
+    const cutX = sx(ZONES.cut.x), cutY = ty(ZONES.cut.y);
     gameState.cutBatches.forEach((batch, i)=>{
-      this.addCardSprite(ZONES.cut.x, ty(ZONES.cut.y), 'card_back', 1.0, null, false, batch.angle);
+      this.addCardSprite(cutX, cutY, 'card_back', 1.0, null, false, batch.angle);
     });
-    this.autoLabel(ZONES.cut.x, ty(ZONES.cut.y)+70, t('cutCount', {n: gameState.discardOut.length}),
+    this.autoLabel(cutX, cutY+70, t('cutCount', {n: gameState.discardOut.length}),
       {fontSize:'17px', originX:0.5, originY:0.5}, {alpha:0.45});
 
     // ---- Contraintes / guerre ----
     if(gameState.forceMax!==null){
-      this.autoLabel(ZONES.pile.x, ty(ZONES.pile.y)-118, t('forceConstraint'),
+      this.autoLabel(this.pileX, this.pileY-85, t('forceConstraint'),
         {fontFamily:'"Press Start 2P"', fontSize:'9px', color:'#f0a840', originX:0.5, originY:0.5},
         {alpha:0.6});
     }
     if(gameState.war){
       const round = gameState.war.round || 1;
       const turnWord = gameState.turn==='player' ? t('turnYou') : t('turnAI');
-      this.autoLabel(ZONES.pile.x, ty(ZONES.pile.y)-148,
+      this.autoLabel(this.pileX, this.pileY-110,
         t('battle', {n: round, turn: turnWord}),
         {fontFamily:'"Press Start 2P"', fontSize:'9px', color:'#ff5f5f', originX:0.5, originY:0.5},
         {alpha:0.65});
@@ -1297,21 +1387,28 @@ class MainScene extends Phaser.Scene {
       const fu = gameState.player.faceUp.find(c=>c.slot===i);
       const canClickUp = pZoneInfo.zone==='faceUp';
       const canClickDown = pZoneInfo.zone==='faceDown';
-      this.drawStackedZone(z.x, ty(z.y), fd, fu, 1.25, canClickUp, canClickDown);
+      this.drawStackedZone(cx(z.x), ty(z.y), fd, fu, 1.05, canClickUp, canClickDown);
     }
 
     // ---- Main du joueur (sous la table) ----
-    const handY = 830;
+    // handY = position des cartes aux EXTREMITES de l'eventail (le bas de
+    // l'arc) ; les cartes du centre remontent grace a arcHeight, comme une
+    // main de cartes tenue dans la vraie vie. Occupe ~80% de l'espace entre
+    // le bas des decouvertes et le bas de l'ecran.
+    const handY = 796;
     const isHandActive = pZoneInfo.zone==='hand';
     const hand = sortHand(gameState.player.hand);
     // La main se resserre (spacing) puis retrecit (scale) automatiquement
     // pour toujours tenir dans l'espace dispo, meme apres avoir ramasse
-    // un gros tas.
+    // un gros tas. L'espace dispo suit la largeur reelle de l'ecran.
+    // C'est l'element principal du jeu : base largement agrandie par
+    // rapport aux zones face visible/cachee, qui sont secondaires.
     const N = hand.length;
-    const maxHandWidth = 1180;
+    const maxHandWidth = W - 100;
     const minSpacing = 22;
-    let handScale = 1.0;
-    let spacing = 64;
+    const baseHandScale = 1.7;
+    let handScale = baseHandScale;
+    let spacing = 109;
     if(N>1){
       const desiredWidth = (N-1)*spacing + CARD_W*handScale;
       if(desiredWidth > maxHandWidth){
@@ -1323,7 +1420,13 @@ class MainScene extends Phaser.Scene {
         }
       }
     }
-    const startX = 640 - (N-1)*spacing/2;
+    const startX = W/2 - (N-1)*spacing/2;
+    // Arc + legere rotation par carte, comme un eventail tenu a une main.
+    // Les deux suivent l'echelle REELLE (handScale, qui peut avoir retreci
+    // pour une grosse main) pour rester coherents et lisibles a toute taille.
+    const arcHeight = 0.25 * CARD_H * handScale;
+    const maxFanAngle = 12; // degres, aux deux extremites
+    const halfSpan = (N-1)/2 || 1;
     hand.forEach((c,i)=>{
       const isSel = selected.some(s=>s.id===c.id);
       // Une carte non jouable par rapport a l'etat actuel de la pile est
@@ -1332,8 +1435,11 @@ class MainScene extends Phaser.Scene {
       const playable = isHandActive ? canPlayGroup(gameState, c.rank) : true;
       const interactive = isHandActive && (playable || isSel);
       const dragCfg = (isHandActive && playable) ? { onDrop: (pointer)=>this.onCardDropped(c, pointer), card: c } : null;
-      const spr = this.addCardSprite(startX + i*spacing, handY, RANK_TO_TEXTURE[c.rank], handScale,
-        interactive ? ()=>this.onPlayerCardClick(c) : null, isSel, 0, dragCfg);
+      const u = N>1 ? (i - (N-1)/2) / halfSpan : 0; // -1 (gauche) .. 0 (centre) .. 1 (droite)
+      const cardY = handY - arcHeight*(1-u*u);
+      const cardAngle = maxFanAngle*u;
+      const spr = this.addCardSprite(startX + i*spacing, cardY, RANK_TO_TEXTURE[c.rank], handScale,
+        interactive ? ()=>this.onPlayerCardClick(c) : null, isSel, cardAngle, dragCfg);
       if(isHandActive && !playable){
         spr.setAlpha(0.42);
         spr.setTint(0x777777);
@@ -1363,15 +1469,19 @@ class MainScene extends Phaser.Scene {
         {fontSize:'16px', color:'#9aa8b0', originY:0.5}, {padX:14, padY:6, alpha:0.45});
     }
 
-    // ---- Boutons ronds, positionnes "comme" A/B GBA (Jouer a gauche, plus
-    // gros), dans l'espace libre entre la zone face visible/cachee et la
-    // main, pour ne jamais se melanger avec les cartes ----
+    // ---- Boutons ronds : colonne libre a droite (sous le journal, a cote
+    // du deck sans le toucher), avec un rayon qui grossit avec l'ecran
+    // (fontScale) pour rester lisibles/cliquables sur un large paysage
+    // etire, la ou l'espace entre les decouvertes et la main est trop
+    // serre pour les agrandir sur place. ----
     if(gameState.turn==='player' && !gameState.winner){
+      const btnX = W - 100;
+      const btnScale = this.fontScale;
       if(!this.awaitingFaceUpChoice){
-        this.roundButton(1120, 725, 42, 0x2f8f4e, 0x5fdc7a, t('btnPlay'), ()=>this.onPlayClick());
+        this.roundButton(btnX, 420, 42*btnScale, 0x2f8f4e, 0x5fdc7a, t('btnPlay'), ()=>this.onPlayClick());
       }
       const takeWord = this.awaitingFaceUpChoice ? t('btnCancel') : t('btnTake');
-      this.roundButton(1195, 690, 34, 0x9a2f2f, 0xff5f5f, takeWord, ()=>this.onTakeClick());
+      this.roundButton(btnX, 540, 34*btnScale, 0x9a2f2f, 0xff5f5f, takeWord, ()=>this.onTakeClick());
     }
 
     // ---- Log (panneau persistant + defilement anime, voir syncLog) ----
@@ -1383,11 +1493,11 @@ class MainScene extends Phaser.Scene {
       const emoji = isWin ? '🏆' : '💀';
       const bigWord = isWin ? t('victory') : t('defeat');
       const wordColor = isWin ? '#ffd23f' : '#ff4d4d';
-      this.add.circle(640, 370, 110, 0x0c1410, 0.55);
-      this.add.text(640, 370, emoji, {fontSize:'150px'}).setOrigin(0.5);
-      this.add.text(642, 502, bigWord,
+      this.add.circle(W/2, 370, 110, 0x0c1410, 0.55);
+      this.add.text(W/2, 370, emoji, {fontSize:'150px'}).setOrigin(0.5);
+      this.add.text(W/2+2, 502, bigWord,
         {fontFamily:'"Press Start 2P"', fontSize:'40px', color:'#1a1008'}).setOrigin(0.5);
-      this.add.text(640, 500, bigWord,
+      this.add.text(W/2, 500, bigWord,
         {fontFamily:'"Press Start 2P"', fontSize:'40px', color:wordColor}).setOrigin(0.5);
     }
   }
@@ -1414,7 +1524,7 @@ class MainScene extends Phaser.Scene {
       if(selected.length>0 && selected[0].rank!==card.rank) selected = [];
       selected.push(card);
     }
-    this.drawAll();
+    this.render();
   }
 
   // ---- Depose (drag & drop) d'une carte : si lachee assez pres de la pile,
@@ -1422,13 +1532,13 @@ class MainScene extends Phaser.Scene {
   // fait partie) ; sinon la carte revient simplement a sa place. ----
   onCardDropped(card, pointer){
     if(gameState.turn!=='player' || gameState.winner || this.animating || this.awaitingFaceUpChoice){
-      this.drawAll();
+      this.render();
       return;
     }
-    const dx = pointer.x - ZONES.pile.x;
-    const dy = pointer.y - ty(ZONES.pile.y);
-    const closeEnough = Math.sqrt(dx*dx + dy*dy) < 170;
-    if(!closeEnough){ this.drawAll(); return; }
+    const dx = pointer.worldX - this.pileX;
+    const dy = pointer.worldY - this.pileY;
+    const closeEnough = Math.sqrt(dx*dx + dy*dy) < this.pileDropRadius;
+    if(!closeEnough){ this.render(); return; }
 
     const group = (selected.length>0 && selected.some(s=>s.id===card.id)) ? [...selected] : [card];
 
@@ -1457,7 +1567,7 @@ class MainScene extends Phaser.Scene {
     const pileSnapshotBefore = [...gameState.pile];
     const res = playGroup(gameState, 'player', [...selected]);
     selected = [];
-    if(!res.ok){ this.animating = false; this.drawAll(); return; }
+    if(!res.ok){ this.animating = false; this.render(); return; }
     this.animateResult('player', res, pileTopBefore, pileSnapshotBefore);
   }
 
@@ -1466,7 +1576,7 @@ class MainScene extends Phaser.Scene {
     // Annuler le choix en cours (re-clic sur le bouton pendant la selection)
     if(this.awaitingFaceUpChoice){
       this.awaitingFaceUpChoice = false;
-      this.drawAll();
+      this.render();
       return;
     }
     const pZoneInfo = getActiveZoneCards(gameState.player);
@@ -1475,7 +1585,7 @@ class MainScene extends Phaser.Scene {
     if(pZoneInfo.zone==='faceUp' && gameState.player.faceUp.length>0){
       this.awaitingFaceUpChoice = true;
       selected = [];
-      this.drawAll();
+      this.render();
       return;
     }
     this.animating = true;
@@ -1501,10 +1611,10 @@ class MainScene extends Phaser.Scene {
 const config = {
   type: Phaser.AUTO,
   parent: 'game-container',
-  width: 1280,
-  height: 900,
+  width: window.innerWidth,
+  height: window.innerHeight,
   backgroundColor: '#12181f',
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scale: { mode: Phaser.Scale.RESIZE },
   scene: [MenuScene, MainScene]
 };
 game = new Phaser.Game(config);
