@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Shithead - Prototype</title>
+<title>Danisz</title>
+<meta property="og:title" content="Danisz">
+<meta property="og:description" content="Jeu de cartes Shithead, variante Danisz.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🃏</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,10 +14,53 @@
 <style>
   html,body{margin:0;padding:0;background:#2e4928;overflow:hidden;font-family:'VT323',monospace;}
   #game-container{width:100vw;height:100vh;}
+  #fullscreen-btn{
+    position:fixed; top:6px; left:96px; z-index:10000;
+    width:34px; height:34px; border-radius:8px;
+    background:rgba(12,20,16,0.55); border:1px solid rgba(215,164,92,0.5);
+    color:#e9ddc8; font-size:16px; line-height:32px; text-align:center;
+    cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;
+  }
+  #fullscreen-btn:active{ background:rgba(12,20,16,0.8); }
 </style>
 </head>
 <body>
 <div id="game-container"></div>
+<button id="fullscreen-btn" title="Plein ecran">⛶</button>
+<script>
+// Bouton plein ecran : sur mobile, la barre d'adresse et la barre de
+// navigation Android bouffent une bonne partie de la hauteur reelle. Le
+// mode plein ecran natif du navigateur les fait disparaitre.
+(function(){
+  const btn = document.getElementById('fullscreen-btn');
+  function isFs(){
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+  function updateIcon(){ btn.textContent = isFs() ? '⤢' : '⛶'; }
+  // Le jeu zoome son canevas logique (900 de haut) pour remplir l'ecran
+  // reel : sur un petit ecran, tout (dont le toggle FR/EN) s'affiche donc
+  // plus petit/plus proche du bord. On approxime ce meme zoom ici pour que
+  // le bouton reste visuellement colle au toggle, peu importe la taille
+  // d'ecran, plutot qu'une position fixe qui ne marche que sur un format.
+  function repositionButton(){
+    const zoom = Math.min(1, window.innerHeight / 900);
+    btn.style.left = Math.round(140 * zoom) + 'px';
+    btn.style.top = Math.round(6 * zoom + 4) + 'px';
+  }
+  repositionButton();
+  window.addEventListener('resize', repositionButton);
+  btn.addEventListener('click', ()=>{
+    const el = document.documentElement;
+    if(!isFs()){
+      (el.requestFullscreen || el.webkitRequestFullscreen || function(){}).call(el);
+    } else {
+      (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+    }
+  });
+  document.addEventListener('fullscreenchange', updateIcon);
+  document.addEventListener('webkitfullscreenchange', updateIcon);
+})();
+</script>
 <script>
 /* =========================================================
    MOTEUR DE REGLES - Shithead (variante "Danisz")
@@ -44,41 +89,41 @@ let lang = (typeof localStorage!=='undefined' && localStorage.getItem('shithead_
 const I18N = {
   fr: {
     logStarterYou: "C'est toi qui commences, avec la carte la plus basse.",
-    logStarterAI: "C'est l'IA qui commence, avec la carte la plus basse.",
+    logStarterAI: "C'est l'adversaire qui commence, avec la carte la plus basse.",
     logPlayYou: "Tu poses {countx}{rank}.",
-    logPlayAI: "L'IA pose {countx}{rank}.",
+    logPlayAI: "L'adversaire pose {countx}{rank}.",
     logCopy3War: "Le 3 copie l'As, le duel continue.",
     logCopy3Chain: "Le 3 recopie la chaine : effet du {rank}.",
     logCopy3: "Le 3 copie la valeur du {rank}.",
     logReset: "Reset : n'importe quelle carte peut suivre.",
     logSeven: "7 joue : la prochaine carte doit etre 7 ou moins (specials exemptes).",
     logBonus8You: "+{extra} tour(s) bonus pour toi (combo de 8) !",
-    logBonus8AI: "+{extra} tour(s) bonus pour l'IA (combo de 8) !",
+    logBonus8AI: "+{extra} tour(s) bonus pour l'adversaire (combo de 8) !",
     logEight: "8 joue : le prochain tour est saute.",
     logAceRebound: "L'As rebondit, le duel continue.",
     logWarDeclareYou: "Tu declares la guerre !",
-    logWarDeclareAI: "L'IA declare la guerre !",
+    logWarDeclareAI: "L'adversaire declare la guerre !",
     logCutQuad: "Coupe (4 identiques) ! Pile videe, tu rejoues.",
     logCut10: "10 joue : pile videe, tu rejoues.",
     logWinYou: "Tu as gagne !",
-    logWinAI: "L'IA a gagne.",
+    logWinAI: "L'adversaire a gagne.",
     logTakePileYou: "Tu ramasses le tas ({count} cartes en main).",
-    logTakePileAI: "L'IA ramasse le tas ({count} cartes en main).",
+    logTakePileAI: "L'adversaire ramasse le tas ({count} cartes en main).",
     logBonusReplayYou: "Tu rejoues (bonus 8).",
-    logBonusReplayAI: "L'IA rejoue (bonus 8).",
+    logBonusReplayAI: "L'adversaire rejoue (bonus 8).",
     logSkipYou: "Ton tour est saute.",
-    logSkipAI: "Le tour de l'IA est saute.",
+    logSkipAI: "Le tour de l'adversaire est saute.",
 
-    mainAI: "MAIN IA : {n}",
+    mainAI: "ADVERSAIRE : {n}",
     pileCount: "{n} carte(s) en jeu",
     cutCount: "{n} coupees",
     forceConstraint: "CONTRAINTE ≤ 7",
     battle: "BATAILLE {n} : {turn}",
     turnYou: "A TOI DE JOUER",
-    turnAI: "TOUR DE L'IA",
+    turnAI: "TOUR DE L'ADVERSAIRE",
     statusWin: "TU AS GAGNE !",
-    statusLose: "L'IA A GAGNE.",
-    statusAITurn: "L'IA JOUE...",
+    statusLose: "L'ADVERSAIRE A GAGNE.",
+    statusAITurn: "L'ADVERSAIRE JOUE...",
     statusChooseFaceUp: "CHOISIS UNE CARTE A RECUPERER AVEC LE TAS",
     statusSelected: "{n} CARTE(S) SELECTIONNEE(S)",
     statusChoose: "CHOISIS UNE OU PLUSIEURS CARTES",
@@ -86,52 +131,55 @@ const I18N = {
     btnPlay: "Jouer",
     btnTake: "Prendre",
     btnCancel: "Annuler",
+    btnReplay: "Rejouer",
     victory: "VICTOIRE",
     defeat: "DEFAITE",
     takenLabel: "+{n} carte(s)",
     takenLabelBig: "+{n} carte(s) !",
-    menuVsAI: "1v1 vs IA",
+    menuVsAI: "1v1 vs Adversaire",
     menuOnline: "1v1 online",
     menuFFA: "1v1v1v1",
-    comingSoon: "Bientot"
+    comingSoon: "Bientot",
+    turnCounter: "Tour {n}",
+    turnsSubtitle: "en {n} tours"
   },
   en: {
     logStarterYou: "You go first, with the lowest card.",
-    logStarterAI: "The AI goes first, with the lowest card.",
+    logStarterAI: "The opponent goes first, with the lowest card.",
     logPlayYou: "You play {countx}{rank}.",
-    logPlayAI: "The AI plays {countx}{rank}.",
+    logPlayAI: "The opponent plays {countx}{rank}.",
     logCopy3War: "The 3 copies the Ace, the duel continues.",
     logCopy3Chain: "The 3 re-copies the chain: {rank}'s effect.",
     logCopy3: "The 3 copies the value of the {rank}.",
     logReset: "Reset: any card can follow.",
     logSeven: "7 played: next card must be 7 or lower (specials exempt).",
     logBonus8You: "+{extra} bonus turn(s) for you (8-combo)!",
-    logBonus8AI: "+{extra} bonus turn(s) for the AI (8-combo)!",
+    logBonus8AI: "+{extra} bonus turn(s) for the opponent (8-combo)!",
     logEight: "8 played: next turn is skipped.",
     logAceRebound: "The Ace bounces back, the duel continues.",
     logWarDeclareYou: "You declare war!",
-    logWarDeclareAI: "The AI declares war!",
+    logWarDeclareAI: "The opponent declares war!",
     logCutQuad: "Cut (4 of a kind)! Pile cleared, play again.",
     logCut10: "10 played: pile cleared, play again.",
     logWinYou: "You won!",
-    logWinAI: "The AI won.",
+    logWinAI: "The opponent won.",
     logTakePileYou: "You take the pile ({count} cards in hand).",
-    logTakePileAI: "The AI takes the pile ({count} cards in hand).",
+    logTakePileAI: "The opponent takes the pile ({count} cards in hand).",
     logBonusReplayYou: "You play again (8-bonus).",
-    logBonusReplayAI: "The AI plays again (8-bonus).",
+    logBonusReplayAI: "The opponent plays again (8-bonus).",
     logSkipYou: "Your turn is skipped.",
-    logSkipAI: "The AI's turn is skipped.",
+    logSkipAI: "The opponent's turn is skipped.",
 
-    mainAI: "AI HAND: {n}",
+    mainAI: "OPPONENT: {n}",
     pileCount: "{n} card(s) in play",
     cutCount: "{n} cut",
     forceConstraint: "LIMIT ≤ 7",
     battle: "BATTLE {n}: {turn}",
     turnYou: "YOUR TURN",
-    turnAI: "AI'S TURN",
+    turnAI: "OPPONENT'S TURN",
     statusWin: "YOU WON!",
-    statusLose: "THE AI WON.",
-    statusAITurn: "AI IS PLAYING...",
+    statusLose: "THE OPPONENT WON.",
+    statusAITurn: "OPPONENT IS PLAYING...",
     statusChooseFaceUp: "CHOOSE A CARD TO KEEP WITH THE PILE",
     statusSelected: "{n} CARD(S) SELECTED",
     statusChoose: "CHOOSE ONE OR MORE CARDS",
@@ -139,14 +187,17 @@ const I18N = {
     btnPlay: "Play",
     btnTake: "Take",
     btnCancel: "Cancel",
+    btnReplay: "Replay",
     victory: "VICTORY",
     defeat: "DEFEAT",
     takenLabel: "+{n} card(s)",
     takenLabelBig: "+{n} card(s)!",
-    menuVsAI: "1v1 vs AI",
+    menuVsAI: "1v1 vs Opponent",
     menuOnline: "1v1 online",
     menuFFA: "1v1v1v1",
-    comingSoon: "Coming soon"
+    comingSoon: "Coming soon",
+    turnCounter: "Turn {n}",
+    turnsSubtitle: "in {n} turns"
   }
 };
 
@@ -161,15 +212,38 @@ function buildDeck(){
   for(const s of SUITS) for(const r of RANKS) deck.push({rank:r, suit:s, id:r+s});
   return deck;
 }
+// Genere un flottant [0,1) via crypto.getRandomValues plutot que
+// Math.random() : verifie statistiquement equitable, mais crypto-random
+// enleve tout doute possible (Math.random() n'est PAS garanti
+// cryptographiquement uniforme par la specification JS, meme si en
+// pratique les moteurs actuels le sont largement).
+function secureRandom(){
+  if(typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues){
+    const buf = new Uint32Array(1);
+    window.crypto.getRandomValues(buf);
+    return buf[0] / 4294967296; // 2^32
+  }
+  return Math.random();
+}
 function shuffle(arr){
   for(let i=arr.length-1;i>0;i--){
-    const j = Math.floor(Math.random()*(i+1));
+    const j = Math.floor(secureRandom()*(i+1));
     [arr[i],arr[j]]=[arr[j],arr[i]];
   }
   return arr;
 }
 function sortHand(cards){
   return [...cards].sort((a,b)=>RANK_VALUE[a.rank]-RANK_VALUE[b.rank]);
+}
+// Ordre d'AFFICHAGE de la main uniquement (le 2 ET le 3 a la fin plutot que
+// le 3 en tete comme le veut l'ordre de regles RANK_VALUE) : ne sert que
+// pour montrer les cartes au joueur, jamais pour la logique (qui commence,
+// choix de l'IA en decouverte...), ou l'ordre de regle (3 = carte la plus
+// basse) reste indispensable.
+const HAND_DISPLAY_ORDER = ['4','5','6','7','8','9','10','J','Q','K','A','3','2'];
+const HAND_DISPLAY_VALUE = Object.fromEntries(HAND_DISPLAY_ORDER.map((r,i)=>[r,i]));
+function sortHandDisplay(cards){
+  return [...cards].sort((a,b)=>HAND_DISPLAY_VALUE[a.rank]-HAND_DISPLAY_VALUE[b.rank]);
 }
 function isSpecial(rank){ return ['2','3','10','A'].includes(rank); }
 
@@ -195,6 +269,7 @@ function createGame(){
     bonusTurnsPlayer: null,
     bonusTurns: 0,
     winner: null,
+    turnCount: 0,
     log: []
   };
 
@@ -209,9 +284,17 @@ function createGame(){
     who.faceUp.forEach((c,i)=>{ c.slot = i; });
   }
 
-  const lowestOf = (cards)=> sortHand(cards)[0];
-  const pLow = lowestOf(state.player.hand);
-  const aLow = lowestOf(state.ai.hand);
+  // Pour determiner qui commence, les jokers (2, 3, 10, A) ne comptent pas :
+  // le 4 est donc la carte la plus basse "utile" pour ce calcul. Repli sur
+  // la main complete si jamais elle n'est composee QUE de jokers (rare mais
+  // possible sur une main de 3 cartes).
+  const lowestNonJoker = (cards)=>{
+    const normal = cards.filter(c=>!isSpecial(c.rank));
+    const pool = normal.length>0 ? normal : cards;
+    return pool.reduce((min,c)=> RANK_VALUE[c.rank]<RANK_VALUE[min.rank] ? c : min);
+  };
+  const pLow = lowestNonJoker(state.player.hand);
+  const aLow = lowestNonJoker(state.ai.hand);
   const starter = RANK_VALUE[pLow.rank] <= RANK_VALUE[aLow.rank] ? 'player' : 'ai';
   state.turn = starter;
   log(state, starter==='player' ? 'logStarterYou' : 'logStarterAI');
@@ -258,10 +341,76 @@ function resolvePlay(state, who, cards){
   state.pile.push(...cards);
   log(state, who==='player' ? 'logPlayYou' : 'logPlayAI', {countx: count>1?count+'x ':'', rank});
 
+  // Si ce coup vide completement la main/face visible/face cachee, la
+  // partie est gagnee net : AUCUN effet special ne doit s'activer (pas de
+  // guerre declaree, pas de skip du 8, pas de plafond du 7...). Une carte
+  // jouee "a l'aveugle" (face cachee) n'est de toute facon pas un choix
+  // conscient, ca ne peut pas etre un pari assume ; et meme depuis la main,
+  // le but du jeu est de finir ses cartes, pas de continuer une mecanique
+  // qui n'a plus de sens une fois la partie terminee.
+  const pState = who==='player' ? state.player : state.ai;
+  if(pState.hand.length===0 && pState.faceUp.length===0 && pState.faceDown.length===0){
+    state.resetOpen = false;
+    state.copyEffectiveTop = null;
+    return { replay:false };
+  }
+
   // Le reset et la copie ne valent que pour le tout prochain coup : on les
   // referme par defaut, seuls les cases '2' et '3' ci-dessous les rouvrent.
   state.resetOpen = false;
   state.copyEffectiveTop = null;
+
+  // Rang "effectif" de ce coup, pour la comparaison suivante ET pour detecter
+  // une coupe : un rang normal vaut son propre rang ; un ou plusieurs 3
+  // copient le rang de la carte juste en dessous du groupe (ou remontent la
+  // chaine si c'est un autre 3) -- SAUF pendant une guerre, ou le 3 copie
+  // toujours l'As (regle "le 3 copie l'As"), meme calcul que pour detecter
+  // un carre d'As complete par une copie. La copie de VALEUR marche que
+  // le(s) 3 soi(en)t joue(s) seul(s) ou en groupe ; seul l'HERITAGE DE
+  // L'EFFET SPECIAL (skip du 8, reset du 2, etc.) reste reserve a une copie
+  // isolee (sinon jouer 2x 3 ensemble redeclencherait l'effet deux fois).
+  let effectiveRank = rank;
+  let copyBelowRank = null;
+  let isCopy3 = false;
+  if(rank === '3'){
+    if(wasWarActive){
+      effectiveRank = 'A';
+      copyBelowRank = 'A';
+      isCopy3 = true;
+    } else {
+      const below = state.pile[state.pile.length-1-count];
+      if(below){
+        let br = below.effectiveRank || below.rank;
+        if(br === '3'){
+          br = prevCopyEffectiveTop || null;
+        }
+        if(br){ effectiveRank = br; copyBelowRank = br; isCopy3 = true; }
+      }
+    }
+  }
+  cards.forEach(c => { c.effectiveRank = effectiveRank; c.isCopy3 = isCopy3; });
+
+  // Coupe si 4 (ou plus) cartes consecutives en fin de pile partagent le meme
+  // rang effectif : que ce soit 4 vraies cartes posees d'un coup, un
+  // enchainement etale sur plusieurs tours, ou une suite de 3 identiques
+  // completee par UN SEUL 3-copie (regle : "you can only do it with one
+  // copy, you can't play more than one 3 that way") -- ET ce 3 doit etre la
+  // toute derniere carte de la suite (celle qui la COMPLETE), pas une carte
+  // inseree au milieu qu'une vraie carte suivante finirait par completer
+  // "par coincidence" (ex : K, K, 3, K ne doit pas couper). Cette coupe est
+  // prioritaire sur tout, y compris pendant une guerre : un 3 qui complete
+  // un carre d'As coupe et met fin a la guerre du meme coup.
+  let tail = 0, copy3Count = 0, copy3PositionValid = true;
+  for(let i=state.pile.length-1; i>=0; i--){
+    if(state.pile[i].effectiveRank !== effectiveRank) break;
+    const backwardIndex = tail; // 0 = la toute derniere carte jouee
+    tail++;
+    if(state.pile[i].isCopy3){
+      copy3Count++;
+      if(backwardIndex !== 0) copy3PositionValid = false;
+    }
+  }
+  if(tail >= 4 && copy3Count <= 1 && copy3PositionValid){ return cutPile(state, who, true); }
 
   if(rank === '3' && wasWarActive){
     log(state, 'logCopy3War');
@@ -273,41 +422,6 @@ function resolvePlay(state, who, cards){
     state.war.round = (state.war.round || 1) + 1;
     return { replay:false };
   }
-
-  // Rang "effectif" de ce coup, pour la comparaison suivante ET pour detecter
-  // une coupe : un rang normal vaut son propre rang ; un ou plusieurs 3
-  // copient le rang de la carte juste en dessous du groupe (ou remontent la
-  // chaine si c'est un autre 3). La copie de VALEUR marche que le(s) 3
-  // soi(en)t joue(s) seul(s) ou en groupe ; seul l'HERITAGE DE L'EFFET
-  // SPECIAL (skip du 8, reset du 2, etc.) reste reserve a une copie isolee
-  // (sinon jouer 2x 3 ensemble redeclencherait l'effet deux fois).
-  let effectiveRank = rank;
-  let copyBelowRank = null;
-  let isCopy3 = false;
-  if(rank === '3'){
-    const below = state.pile[state.pile.length-1-count];
-    if(below){
-      let br = below.effectiveRank || below.rank;
-      if(br === '3'){
-        br = prevCopyEffectiveTop || null;
-      }
-      if(br){ effectiveRank = br; copyBelowRank = br; isCopy3 = true; }
-    }
-  }
-  cards.forEach(c => { c.effectiveRank = effectiveRank; c.isCopy3 = isCopy3; });
-
-  // Coupe si 4 (ou plus) cartes consecutives en fin de pile partagent le meme
-  // rang effectif : que ce soit 4 vraies cartes posees d'un coup, un
-  // enchainement etale sur plusieurs tours, ou une suite de 3 identiques
-  // completee par UN SEUL 3-copie (regle : "you can only do it with one
-  // copy, you can't play more than one 3 that way").
-  let tail = 0, copy3Count = 0;
-  for(let i=state.pile.length-1; i>=0; i--){
-    if(state.pile[i].effectiveRank !== effectiveRank) break;
-    tail++;
-    if(state.pile[i].isCopy3) copy3Count++;
-  }
-  if(tail >= 4 && copy3Count <= 1){ return cutPile(state, who, true); }
 
   if(rank === '3'){
     if(!copyBelowRank) return { replay:false };
@@ -401,6 +515,13 @@ function checkWin(state, who){
   const pState = who==='player' ? state.player : state.ai;
   if(pState.hand.length===0 && pState.faceUp.length===0 && pState.faceDown.length===0){
     state.winner = who;
+    // Nettoie tout etat "en cours" (guerre, contrainte du 7) qui n'a plus
+    // lieu d'etre une fois la partie terminee : sinon la bannière
+    // "BATAILLE X" reste affichee PAR DESSUS l'ecran de victoire, ce qui
+    // donne l'impression que la partie continue/qu'on a perdu alors qu'on
+    // vient de gagner.
+    state.war = null;
+    state.forceMax = null;
     log(state, who==='player' ? 'logWinYou' : 'logWinAI');
     return true;
   }
@@ -436,6 +557,7 @@ function playGroup(state, who, chosenCards){
   }
 
   const result = resolvePlay(state, who, chosenCards);
+  state.turnCount++;
   if(checkWin(state, who)) return {ok:true, ended:true, fromZone, cards:chosenCards};
   if(zoneInfo.zone==='hand' || fromZone==='hand') drawUpTo3(state, who);
 
@@ -461,6 +583,7 @@ function forceTakePile(state, who, extraFaceUpCard){
   }
   const takenCount = state.pile.length + (extraFaceUpCard?1:0);
   takePile(state, who, extraFaceUpCard);
+  state.turnCount++;
   advanceTurn(state, who);
   return {ok:true, tookPile:true, takenCount, faceUpCardTaken: extraFaceUpCard || null};
 }
@@ -473,6 +596,7 @@ function tryFaceDownCard(state, who, card){
   pState.faceDown.splice(idx,1);
   if(playable){
     const result = resolvePlay(state, who, [card]);
+    state.turnCount++;
     if(checkWin(state, who)) return {ok:true, ended:true, fromZone:'faceDown', card};
     if(result.replay) return {ok:true, replay:true, fromZone:'faceDown', card};
     advanceTurn(state, who);
@@ -482,6 +606,7 @@ function tryFaceDownCard(state, who, card){
     state.skipNext = 0;
     const takenCount = state.pile.length + 1;
     takePile(state, who, card);
+    state.turnCount++;
     advanceTurn(state, who);
     return {ok:true, failed:true, tookPile:true, takenCount, fromZone:'faceDown', card};
   }
@@ -517,7 +642,7 @@ function aiTakeTurn(state){
   const zoneInfo = getActiveZoneCards(state.ai);
 
   if(zoneInfo.zone==='faceDown'){
-    const card = zoneInfo.cards[Math.floor(Math.random()*zoneInfo.cards.length)];
+    const card = zoneInfo.cards[Math.floor(secureRandom()*zoneInfo.cards.length)];
     return tryFaceDownCard(state, 'ai', card);
   }
   if(zoneInfo.zone==='done'){ return null; }
@@ -556,7 +681,7 @@ const CARD_W = 80, CARD_H = 110;
 const TABLE_Y_OFFSET = 90;
 const ZONES = {
   aiSlots: [ {x:576,y:80}, {x:640,y:80}, {x:704,y:80} ],       // face down/up de l'IA (miroir, plus petit)
-  playerSlots: [ {x:513,y:431}, {x:640,y:431}, {x:766,y:431} ], // face down/up du joueur
+  playerSlots: [ {x:513,y:400}, {x:640,y:400}, {x:766,y:400} ], // face down/up du joueur
   cut:  {x:288, y:248},
   pile: {x:638, y:248},
   deck: {x:924, y:250}
@@ -573,9 +698,13 @@ class MenuScene extends Phaser.Scene {
 
   create(){
     this.cameras.main.setBackgroundColor(0x2e4928);
-    this.fitCamera();
     this.render();
-    this.scale.on('resize', ()=>{ this.fitCamera(); });
+    const onResize = ()=>this.render();
+    this.scale.on('resize', onResize);
+    // Sans ca, cet ecouteur reste actif meme apres avoir quitte le menu (ex:
+    // en lancant une partie) : un redimensionnement/rotation d'ecran plus
+    // tard declenchait alors render() sur une scene eteinte -> crash.
+    this.events.once('shutdown', ()=>{ this.scale.off('resize', onResize); });
     // Meme filet de securite que MainScene : si Google Fonts finit de
     // charger APRES ce premier rendu, on redessine pour appliquer le bon
     // style partout (sinon ca reste fige sur la police de secours jusqu'au
@@ -585,19 +714,17 @@ class MenuScene extends Phaser.Scene {
     }
   }
 
-  // Le menu garde toujours le meme design 1280x900 (une simple carte de
-  // titre + boutons n'a pas besoin d'une mise en page distincte en
-  // portrait) : on zoome/centre juste la camera pour qu'il tienne dans
-  // n'importe quel ecran, feutre vert visible tout autour si ca deborde.
-  fitCamera(){
-    const W = this.scale.width, H = this.scale.height;
-    const Z = Math.min(W/1280, H/900);
-    this.cameras.main.setZoom(Z);
-    this.cameras.main.centerOn(640, 450);
-  }
-
   render(){
+    if(!this.scene.isActive() || !this.cameras || !this.cameras.main) return;
     this.children.removeAll();
+    // Plus de camera zoomee/centree sur un "canevas virtuel" : tout se
+    // calcule directement a partir de la vraie taille d'ecran. Le zoom de
+    // camera introduisait un bug de detection de clic assez connu avec
+    // Phaser (la zone cliquable des objets se desynchronise du rendu quand
+    // le zoom bouge), donc on l'evite completement plutot que d'essayer de
+    // le contourner.
+    const W = this.scale.width, H = this.scale.height;
+    const cx = W/2;
 
     // Toggle FR/EN, visible et fonctionnel des le menu (meme style qu'en jeu)
     const frColor = lang==='fr' ? '#ffd23f' : '#8a95a0';
@@ -607,16 +734,30 @@ class MenuScene extends Phaser.Scene {
     const enLbl = this.add.text(68, 18, 'EN', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:enColor}).setOrigin(0,0.5);
     enLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('en'));
 
-    // Titre
-    this.add.text(640, 210, 'Danisz', {fontFamily:'"Press Start 2P"', fontSize:'72px', color:'#e9ddc8'}).setOrigin(0.5);
+    // Titre : taille proportionnelle a la hauteur dispo, pour ne jamais
+    // deborder sur un petit ecran paysage (barre d'adresse mobile qui
+    // bouffe une bonne partie de la hauteur reelle).
+    const titleSize = Math.max(34, Math.min(72, Math.round(H*0.16)));
+    const titleY = Math.max(30, Math.min(210, H*0.18));
+    this.add.text(cx, titleY, 'Danisz', {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px', color:'#e9ddc8'}).setOrigin(0.5);
 
-    // Boutons, alignes verticalement au centre
-    this.menuButton(640, 450, 340, 74, t('menuVsAI'), true, ()=>this.scene.start('main'));
-    this.menuButton(640, 552, 340, 74, t('menuOnline'), false);
-    this.menuButton(640, 654, 340, 74, t('menuFFA'), false);
+    // Boutons en grille 2 colonnes (utilise la largeur dispo plutot que de
+    // tout empiler verticalement, precieux sur un ecran paysage bas) :
+    // 3 cases remplies, une 4eme reservee pour un futur mode.
+    const btnW = Math.min(320, W*0.4);
+    const btnH = 66;
+    const gapX = 26, gapY = 18;
+    const gridTop = titleY + titleSize*0.75 + 30;
+    const col0X = cx - btnW/2 - gapX/2;
+    const col1X = cx + btnW/2 + gapX/2;
+    const row0Y = gridTop + btnH/2;
+    const row1Y = row0Y + btnH + gapY;
+    this.menuButton(col0X, row0Y, btnW, btnH, t('menuVsAI'), true, ()=>this.scene.start('main'));
+    this.menuButton(col1X, row0Y, btnW, btnH, t('menuOnline'), false);
+    this.menuButton(col0X, row1Y, btnW, btnH, t('menuFFA'), false);
 
     // Marque, discrete en bas
-    this.add.text(640, 872, 'Hugin Corp™', {fontFamily:'"VT323"', fontSize:'18px', color:'#e9ddc8'}).setOrigin(0.5).setAlpha(0.25);
+    this.add.text(cx, H-28, 'Hugin Corp™', {fontFamily:'"VT323"', fontSize:'18px', color:'#e9ddc8'}).setOrigin(0.5).setAlpha(0.25);
   }
 
   setLang(newLang){
@@ -675,10 +816,25 @@ class MainScene extends Phaser.Scene {
     // declencher la selection. On exige un vrai deplacement avant de
     // considerer que c'est un glisser plutot qu'un clic.
     this.input.dragDistanceThreshold = 10;
+    // Sans ca, Phaser ne revalide "qu'est-ce qui est sous le curseur" que
+    // lors d'un vrai evenement souris natif (bouger, cliquer...). Or a
+    // chaque redraw (typiquement juste apres le tour de l'IA), tous les
+    // sprites sont detruits/recrees : si la souris ne bouge pas d'un pixel
+    // entre temps, Phaser garde une notion perimee de ce qui est cliquable,
+    // et ni le curseur "main" ni les clics ne fonctionnent tant qu'un
+    // mouvement (ou un resize, comme ouvrir l'inspecteur) ne force une
+    // reverification. setPollAlways() force cette reverification a chaque
+    // frame plutot que d'attendre un evenement.
+    this.input.setPollAlways();
     this.cameras.main.setBackgroundColor(0x2e4928);
     this.initLog();
     this.layoutAndDraw();
-    this.scale.on('resize', ()=>{ this.layoutAndDraw(); });
+    const onResize = ()=>this.layoutAndDraw();
+    this.scale.on('resize', onResize);
+    // Sans ca, cet ecouteur reste actif meme apres avoir quitte la scene :
+    // un redimensionnement/rotation d'ecran plus tard declenchait alors
+    // layoutAndDraw() sur une scene eteinte -> crash.
+    this.events.once('shutdown', ()=>{ this.scale.off('resize', onResize); });
     // Filet de securite : si les polices Google Fonts finissent de charger
     // APRES ce premier rendu, on redessine pour que le bon style s'applique
     // partout (sinon le canvas reste fige sur la police de secours).
@@ -688,18 +844,38 @@ class MainScene extends Phaser.Scene {
     if(gameState.turn==='ai') this.time.delayedCall(700, ()=>this.aiLoop());
   }
 
+  // ---- Relance une partie sans recharger la page : reinitialise l'etat de
+  // jeu ET tout l'etat de scene qui pourrait sinon persister d'une partie a
+  // l'autre (journal, selection, animation en cours...). ----
+  restartGame(){
+    gameState = createGame();
+    this.spriteByCardId = {};
+    this.dragReleasePos = {};
+    this.animating = false;
+    this.awaitingFaceUpChoice = false;
+    selected = [];
+    this.disarmWatchdog();
+    this.logHistory = [];
+    this.lastLogCount = 0;
+    this.logLines.forEach(entry=>{ this.tweens.killTweensOf(entry.obj); entry.obj.destroy(); });
+    this.logLines = [];
+    this.render();
+    if(gameState.turn==='ai') this.time.delayedCall(700, ()=>this.aiLoop());
+  }
+
   // ---- Choisit la largeur du canevas virtuel paysage selon le ratio reel
   // de l'ecran, et cale la camera dessus : sur un telephone large, le
   // canevas s'elargit pour que le feutre remplisse tout l'ecran au lieu de
   // laisser des bandes vertes mortes sur les cotes (uniquement sur les
   // ecrans PLUS larges que le design d'origine 1280x900 ; sur un ecran plus
-  // etroit/carre, on garde le comportement "fit" classique pour ne rien
-  // perdre a l'affichage). Le portrait n'est pas encore construit (chantier
-  // separe) : on reste en paysage pour l'instant, meme si l'ecran est plus
-  // haut que large, plutot que de planter sur une mise en page qui n'existe pas.
+  // etroit/carre, on garde le comportement "fit" classique). Le zoom de
+  // camera avait ete suspecte de casser la detection de clic apres le tour
+  // de l'IA, mais teste et confirme innocent : le vrai bug etait un
+  // probleme d'ordre dans afterAnimation() (voir plus bas), maintenant
+  // corrige. Le zoom peut donc revenir sans risque.
   layoutAndDraw(){
+    if(!this.scene.isActive() || !this.cameras || !this.cameras.main) return;
     const W = this.scale.width, H = this.scale.height;
-    this.isPortrait = false; // TODO chantier portrait separe
     const DH = 900;
     const baseAspect = 1280/900;
     const screenAspect = W/H;
@@ -725,22 +901,25 @@ class MainScene extends Phaser.Scene {
     this.drawAll();
   }
 
-  // ---- Journal persistant avec defilement anime (au lieu de tout
-  // redessiner d'un coup a chaque tour) : les objets Text du journal ne
-  // sont jamais detruits par drawAll(), seulement decales/fades en tween. ----
+  // ---- Journal persistant, reconstruit a chaque nouvelle entree (au lieu
+  // de faire glisser/tweener un historique plus long) : plus simple et
+  // beaucoup plus fiable, plus aucun risque qu'un ancien tween laisse une
+  // ligne a mi-chemin ou desynchronisee. Seules les 2 dernieres actions
+  // sont affichees. ----
   initLog(){
-    this.logMaxVisible = 6;
-    this.logLineH = 26;
+    this.logMaxVisible = 2;
+    this.logLineH = 30;
     this.logPanelMinW = 260;
     this.logPanelW = this.logPanelMinW;
     const panelH = this.logLineH*this.logMaxVisible + 16;
-    this.logPanelRight = 1270;
+    this.logPanelRight = 1270; // recale dynamiquement dans drawAll() selon la largeur reelle
     this.logPanelX = this.logPanelRight - this.logPanelW;
     this.logPanelY = 5;
     this.logPanelBg = this.add.graphics();
     this.logPanelBg.setDepth(4999);
     this.redrawLogPanelBg(panelH);
-    this.logLines = []; // {obj, key, params}
+    this.logLines = []; // {obj, key, params} -- toujours au plus logMaxVisible
+    this.logHistory = []; // {key, params} -- les entrees actuellement affichees
     this.lastLogCount = 0;
   }
 
@@ -763,63 +942,78 @@ class MainScene extends Phaser.Scene {
     this.lastLogCount = total;
   }
 
+  // Cles des messages lies au combo de 8 (tour(s) bonus) : mise en valeur
+  // particuliere, c'est une mecanique subtile qu'on veut faire remarquer.
+  isCombo8Key(key){
+    return key==='logBonus8You' || key==='logBonus8AI' ||
+           key==='logBonusReplayYou' || key==='logBonusReplayAI';
+  }
+
   pushLogLine(key, params){
-    const lineH = this.logLineH, maxVisible = this.logMaxVisible;
-    const text = t(key, params);
+    this.logHistory.push({ key, params });
+    if(this.logHistory.length > this.logMaxVisible) this.logHistory.shift();
 
-    // Nouvelle ligne : creee au slot du bas, invisible, pas encore dans le
-    // tableau (necessaire pour bien la reperer plus bas).
-    const bottomSlotY = this.logPanelY + 10 + (maxVisible-1)*lineH;
-    const obj = this.add.text(this.logPanelRight-10, bottomSlotY+12, text,
-      {fontFamily:'"VT323"', fontSize:this.scaledFontSize('21px'), color:'#a9b8c2', align:'right'}).setOrigin(1,0);
-    obj.setAlpha(0);
-    obj.setDepth(5001);
-    this.logLines.push({ obj, key, params });
+    // Reconstruit systematiquement les lignes affichees a partir de
+    // l'historique courant (au plus logMaxVisible), plutot que d'essayer de
+    // faire glisser/repositionner des objets existants : beaucoup plus
+    // simple, et ca elimine toute la classe de bugs "une ligne reste a
+    // mi-chemin / le panneau perd le fil" observee avec l'ancienne version.
+    this.logLines.forEach(entry => { this.tweens.killTweensOf(entry.obj); entry.obj.destroy(); });
+    this.logLines = [];
 
-    // Si le panneau est plein, la plus ancienne s'efface.
-    if(this.logLines.length > maxVisible){
-      const oldest = this.logLines.shift();
-      this.tweens.killTweensOf(oldest.obj);
-      this.tweens.add({
-        targets: oldest.obj, alpha:0, duration:220, ease:'Sine.easeIn',
-        onComplete: ()=>{ oldest.obj.destroy(); }
-      });
-    }
+    const maxW = (this.W || 1280) * 0.38;
+    const anchorX = this.logPanelRight - 10;
 
-    // Largeur du panneau recalculee sur les lignes reellement visibles (pas
-    // de largeur fixe qui debordait sur les phrases longues, mais pas non
-    // plus un recalcul brut a chaque frame : juste ici, a chaque ajout).
-    const neededW = Math.max(this.logPanelMinW, ...this.logLines.map(e=>e.obj.width + 26));
+    // Chaque ligne retrecit sa PROPRE police si besoin pour tenir dans la
+    // largeur max : plus jamais de texte qui deborde du panneau, meme une
+    // phrase tres longue en mode responsive a grande police.
+    const measured = this.logHistory.map(({key, params})=>{
+      const text = t(key, params);
+      let fontPx = Math.round(21 * (this.fontScale||1));
+      const probe = this.add.text(0, 0, text, {fontFamily:'"VT323"', fontSize:fontPx+'px'}).setVisible(true).setAlpha(0);
+      while(probe.width > maxW-20 && fontPx > 10){
+        fontPx -= 2;
+        probe.setFontSize(fontPx);
+      }
+      const w = probe.width;
+      probe.destroy();
+      return { key, params, text, fontPx, w };
+    });
+
+    // Le panneau lui-meme ne depasse JAMAIS maxW, meme si une ligne n'a pas
+    // reussi a rentrer dedans avant d'atteindre le plancher de police (cas
+    // limite rarissime) : le texte peut alors deborder tres legerement du
+    // cadre plutot que le cadre lui-meme ne debordant sur le reste de
+    // l'interface (ex: l'eventail de l'adversaire).
+    const neededW = Math.min(maxW, Math.max(this.logPanelMinW, ...measured.map(m=>m.w+26)));
     if(neededW !== this.logPanelW){
       this.logPanelW = neededW;
       this.logPanelX = this.logPanelRight - this.logPanelW;
-      this.redrawLogPanelBg(lineH*maxVisible + 16);
     }
-    const anchorX = this.logPanelRight - 10;
+    this.redrawLogPanelBg(this.logLineH*this.logMaxVisible + 16);
 
-    // Repositionne TOUTES les lignes visibles d'apres leur index final (et
-    // pas depuis leur position actuelle), en tuant tout tween en cours sur
-    // chacune avant d'en relancer un. Sans ca, deux appels rapproches de
-    // pushLogLine (ex: deux messages logges dans le meme tour) empilaient
-    // des animations concurrentes sur la meme ligne, qui finissait par se
-    // superposer a une autre au lieu de se placer au bon endroit.
-    const n = this.logLines.length;
-    this.logLines.forEach((entry, idx)=>{
-      entry.obj.x = anchorX;
-      const targetY = this.logPanelY + 10 + (maxVisible - n + idx) * lineH;
-      this.tweens.killTweensOf(entry.obj);
-      if(entry.obj === obj){
-        this.tweens.add({ targets: entry.obj, y: targetY, alpha:1, duration:280, ease:'Sine.easeOut' });
-      } else {
-        this.tweens.add({ targets: entry.obj, y: targetY, duration:260, ease:'Sine.easeInOut' });
+    measured.forEach((m, idx)=>{
+      const targetY = this.logPanelY + 10 + idx*this.logLineH;
+      const color = this.isCombo8Key(m.key) ? '#ffd23f' : '#a9b8c2';
+      const obj = this.add.text(anchorX, targetY, m.text,
+        {fontFamily:'"VT323"', fontSize:m.fontPx+'px', color, align:'right'}).setOrigin(1,0);
+      obj.setDepth(5001);
+      if(idx === measured.length-1){
+        // Seule la toute derniere ligne (la plus recente) entre en fondu ;
+        // les autres restent stables, pas de glissement a rejouer.
+        obj.alpha = 0;
+        this.tweens.add({ targets: obj, alpha:1, duration:260, ease:'Sine.easeOut' });
       }
+      this.logLines.push({ obj, key:m.key, params:m.params });
     });
   }
 
-  // Change de langue sans casser l'animation en cours : on retraduit juste
-  // le texte des lignes deja affichees, sans les recreer ni les redeplacer.
+  // Change de langue sans casser l'animation en cours : reconstruit le
+  // journal a partir de l'historique conserve, avec les textes retraduits.
   refreshLogText(){
-    this.logLines.forEach(entry=>{ entry.obj.setText(t(entry.key, entry.params)); });
+    const hist = this.logHistory.slice();
+    this.logHistory = [];
+    hist.forEach(({key, params})=>{ this.pushLogLine(key, params); });
   }
 
   // ---- Change de langue et persiste le choix pour la prochaine visite ----
@@ -833,15 +1027,37 @@ class MainScene extends Phaser.Scene {
 
   // ---- Continuation apres n'importe quelle action + son animation ----
   afterAnimation(){
-    this.render();
+    this.disarmWatchdog();
     this.animating = false;
+    this.render();
     if(gameState.winner) return;
     if(gameState.turn==='ai') this.time.delayedCall(500, ()=>this.aiLoop());
   }
 
+  // ---- Marque une action comme "en cours d'animation" + arme un
+  // chien de garde : si jamais l'animation ne se termine pas normalement
+  // (tween qui echoue a declencher son onComplete, focus de la fenetre qui
+  // perturbe le timing, etc.), le jeu se debloque tout seul au bout de
+  // quelques secondes plutot que de rester fige indefiniment. ----
+  armAnimating(){
+    this.animating = true;
+    this.disarmWatchdog();
+    this._animWatchdog = this.time.delayedCall(4000, ()=>{
+      if(this.animating){
+        this.animating = false;
+        this.render();
+        if(!gameState.winner && gameState.turn==='ai') this.time.delayedCall(300, ()=>this.aiLoop());
+      }
+    });
+  }
+
+  disarmWatchdog(){
+    if(this._animWatchdog){ this._animWatchdog.remove(); this._animWatchdog = null; }
+  }
+
   aiLoop(){
     if(gameState.winner || this.animating) return;
-    this.animating = true;
+    this.armAnimating();
     const pileTopBefore = pileTop(gameState);
     const pileSnapshotBefore = [...gameState.pile];
     const res = aiTakeTurn(gameState);
@@ -1207,23 +1423,34 @@ class MainScene extends Phaser.Scene {
     return this.label(x, y, str, textOpts);
   }
 
-  // ---- Bouton rond style GBA (A/B) : cercle + lettre + legende en dessous ----
   // ---- Bouton rond (place "comme" A/B GBA, mais avec le mot ecrit dedans) :
-  // la taille de police s'ajuste automatiquement pour tenir dans le cercle ----
-  roundButton(x, y, radius, fillColor, strokeColor, word, onClick){
+  // la taille de police s'ajuste automatiquement pour tenir dans le cercle.
+  // opts.dim = grise et desactive (ex: "Jouer" quand rien n'est jouable) ;
+  // opts.highlight = anneau lumineux autour (ex: "Prendre" quand c'est la
+  // seule option evidente), pour ne jamais laisser le joueur sans indice
+  // clair sur quoi faire. ----
+  roundButton(x, y, radius, fillColor, strokeColor, word, onClick, opts={}){
+    if(opts.highlight){
+      const glow = this.add.graphics();
+      glow.lineStyle(5, 0xffe27a, 0.85);
+      glow.strokeCircle(x, y, radius+6);
+    }
+    const alpha = opts.dim ? 0.35 : 1;
     const g = this.add.graphics();
-    g.fillStyle(fillColor, 1);
+    g.fillStyle(fillColor, alpha);
     g.fillCircle(x, y, radius);
-    g.lineStyle(3, strokeColor, 1);
+    g.lineStyle(3, strokeColor, alpha);
     g.strokeCircle(x, y, radius);
     let fontSize = Math.round(16 * (this.fontScale||1));
-    let t = this.add.text(x, y, word, {fontFamily:'"Press Start 2P"', fontSize:fontSize+'px', color:'#1a1008'}).setOrigin(0.5);
-    while(t.width > radius*1.7 && fontSize > 7){
+    let txt = this.add.text(x, y, word, {fontFamily:'"Press Start 2P"', fontSize:fontSize+'px', color:'#1a1008'}).setOrigin(0.5).setAlpha(opts.dim ? 0.55 : 1);
+    while(txt.width > radius*1.7 && fontSize > 7){
       fontSize--;
-      t.setFontSize(fontSize);
+      txt.setFontSize(fontSize);
     }
-    const hit = this.add.circle(x, y, radius, 0x000000, 0).setInteractive({useHandCursor:true});
-    hit.on('pointerdown', onClick);
+    if(!opts.dim){
+      const hit = this.add.circle(x, y, radius, 0x000000, 0).setInteractive({useHandCursor:true});
+      hit.on('pointerdown', onClick);
+    }
   }
 
   drawAll(){
@@ -1288,15 +1515,17 @@ class MainScene extends Phaser.Scene {
     const enLbl = this.label(68, 18, 'EN', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:enColor, originY:0.5});
     enLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('en'));
 
-    // ---- Bandeau IA (au dessus de la table) : main de l'IA, cachee ----
+    // ---- Compteur de tours, discret, juste sous le toggle FR/EN ----
+    this.label(20, 45, t('turnCounter', {n: gameState.turnCount}),
+      {fontSize:'15px', color:'#8a95a0', originY:0.5});
+
+    // ---- Bandeau adversaire (au dessus de la table) : main cachee ----
     const aiHandCount = gameState.ai.hand.length;
-    this.autoLabel(W/2, 18, t('mainAI', {n: aiHandCount}),
-      {fontFamily:'"Press Start 2P"', fontSize:'10px', color:'#e9ddc8', originX:0.5, originY:0.5},
-      {alpha:0.5});
     const fanCount = Math.min(aiHandCount, 7);
     // Meme principe d'arc + rotation que la main du joueur (mais mirroir :
     // les cartes du centre plongent LEGEREMENT vers la table plutot que de
-    // remonter), pour que l'eventail de l'IA ait aussi un cote "tenu en main".
+    // remonter), pour que l'eventail de l'adversaire ait aussi un cote
+    // "tenu en main".
     const aiArcHeight = 0.25 * CARD_H * 0.38;
     const aiMaxAngle = 10;
     const aiHalfSpan = (fanCount-1)/2 || 1;
@@ -1306,6 +1535,12 @@ class MainScene extends Phaser.Scene {
       const angle = aiMaxAngle*u;
       this.addCardSprite(W/2 - (fanCount-1)*12 + i*24, y, 'card_back', 0.38, null, false, angle);
     }
+    // Juste le nombre reel de cartes (pas de texte "MAIN ADVERSAIRE :"),
+    // colle a GAUCHE de l'eventail visuel (le journal, en haut a droite,
+    // peut deborder assez loin a gauche avec une phrase longue -- a droite
+    // le chiffre se faisait donc parfois recouvrir).
+    this.label(W/2 - (fanCount-1)*12 - 24 - 14, 50, `${aiHandCount}`,
+      {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#e9ddc8', originX:1, originY:0.5});
 
     // ---- Zones face cachee / face visible de l'IA (miroir, plus petites) ----
     for(let i=0;i<3;i++){
@@ -1328,6 +1563,21 @@ class MainScene extends Phaser.Scene {
     const FAN_SCALE = 1.15;
     const pivotX = this.pileX - (CARD_W*TOP_SCALE)/2;
     const pivotY = this.pileY + (CARD_H*TOP_SCALE)/2;
+
+    // Sous l'eventail, chaque carte au-dela des 3 affichees (dessus + 2 du
+    // fan) ajoute une fine tranche a peine decalee derriere la plus ancienne
+    // du fan : pas lisible individuellement, juste pour sentir le tas
+    // s'epaissir au fil de la partie. Decalage minuscule et DETERMINISTE
+    // (pas de Math.random) pour ne pas trembloter d'un redraw a l'autre.
+    // Plafonne (perf + au-dela ca ne se voit plus de toute facon).
+    const extraCount = Math.min(24, Math.max(0, gameState.pile.length - 3));
+    for(let i=extraCount; i>=1; i--){
+      const spr = this.add.image(pivotX + i*1.8, pivotY + i*1.1, 'card_back');
+      spr.setOrigin(0,1);
+      spr.setScale(FAN_SCALE);
+      spr.setAngle(-32 + i*0.8);
+    }
+
     const previous2 = gameState.pile.slice(-3,-1); // ordre : plus ancien -> plus recent
     previous2.forEach((c, idx)=>{
       const depthFromTop = previous2.length - idx; // ancien=2, recent=1
@@ -1341,8 +1591,10 @@ class MainScene extends Phaser.Scene {
       const sprTop = this.addCardSprite(this.pileX, this.pileY, RANK_TO_TEXTURE[top.rank], 1.25);
       this.spriteByCardId[top.id] = sprTop;
     }
-    this.autoLabel(this.pileX, this.pileY+95, t('pileCount', {n: gameState.pile.length}),
-      {fontSize:'17px', originX:0.5, originY:0.5}, {alpha:0.45});
+    // Numero a DROITE de la pile (a gauche il se faisait recouvrir par
+    // l'eventail, qui deborde de ce cote-la).
+    this.label(this.pileX+78, this.pileY, `${gameState.pile.length}`,
+      {fontFamily:'"Press Start 2P"', fontSize:'16px', color:'#c9d6e3', originX:0.5, originY:0.5});
 
     // ---- Deck (pioche) : tranches derriere qui disparaissent au fil des dernieres cartes ----
     const deckX = sx(ZONES.deck.x), deckY = ty(ZONES.deck.y);
@@ -1364,40 +1616,50 @@ class MainScene extends Phaser.Scene {
     this.autoLabel(cutX, cutY+70, t('cutCount', {n: gameState.discardOut.length}),
       {fontSize:'17px', originX:0.5, originY:0.5}, {alpha:0.45});
 
-    // ---- Contraintes / guerre ----
+    // ---- Contraintes / guerre : colonne de gauche, sous le message de
+    // statut (zone deja verifiee degagee, aucun lien horizontal avec la
+    // pile/l'eventail donc plus aucun risque de collision, contrairement a
+    // l'espace juste au-dessus de la pile qui s'est revele trop etroit
+    // entre la zone adversaire et le sommet de l'eventail). ----
     if(gameState.forceMax!==null){
-      this.autoLabel(this.pileX, this.pileY-85, t('forceConstraint'),
-        {fontFamily:'"Press Start 2P"', fontSize:'9px', color:'#f0a840', originX:0.5, originY:0.5},
+      this.autoLabel(20, 145, t('forceConstraint'),
+        {fontFamily:'"Press Start 2P"', fontSize:'9px', color:'#f0a840', originY:0.5},
         {alpha:0.6});
     }
     if(gameState.war){
       const round = gameState.war.round || 1;
       const turnWord = gameState.turn==='player' ? t('turnYou') : t('turnAI');
-      this.autoLabel(this.pileX, this.pileY-110,
+      this.autoLabel(20, 175,
         t('battle', {n: round, turn: turnWord}),
-        {fontFamily:'"Press Start 2P"', fontSize:'9px', color:'#ff5f5f', originX:0.5, originY:0.5},
+        {fontFamily:'"Press Start 2P"', fontSize:'9px', color:'#ff5f5f', originY:0.5},
         {alpha:0.65});
     }
 
     // ---- Zones face cachee / face visible du joueur ----
     const pZoneInfo = getActiveZoneCards(gameState.player);
+    // Garde-fou centrale : les cartes du joueur (main + face visible/cachee)
+    // ne doivent JAMAIS etre cliquables/glissables en dehors de son propre
+    // tour (turn/winner/animating), sinon on peut interagir pendant que
+    // l'IA joue (coupe, rejoue...) et provoquer un vrai crash en pleine
+    // mutation de gameState pendant un drag.
+    const isPlayerTurn = gameState.turn==='player' && !gameState.winner && !this.animating;
     for(let i=0;i<3;i++){
       const z = ZONES.playerSlots[i];
       const fd = gameState.player.faceDown.find(c=>c.slot===i);
       const fu = gameState.player.faceUp.find(c=>c.slot===i);
-      const canClickUp = pZoneInfo.zone==='faceUp';
-      const canClickDown = pZoneInfo.zone==='faceDown';
+      const canClickUp = isPlayerTurn && pZoneInfo.zone==='faceUp';
+      const canClickDown = isPlayerTurn && pZoneInfo.zone==='faceDown';
       this.drawStackedZone(cx(z.x), ty(z.y), fd, fu, 1.05, canClickUp, canClickDown);
     }
 
     // ---- Main du joueur (sous la table) ----
-    // handY = position des cartes aux EXTREMITES de l'eventail (le bas de
-    // l'arc) ; les cartes du centre remontent grace a arcHeight, comme une
-    // main de cartes tenue dans la vraie vie. Occupe ~80% de l'espace entre
-    // le bas des decouvertes et le bas de l'ecran.
-    const handY = 796;
-    const isHandActive = pZoneInfo.zone==='hand';
-    const hand = sortHand(gameState.player.hand);
+    // Rangee A PLAT (plus d'arc) et remontee : sur un vrai telephone, la
+    // barre d'adresse + la zone de geste Android bouffent une bonne partie
+    // de la hauteur reelle, donc chaque pixel de marge en bas compte pour
+    // eviter de declencher le bouton/geste "accueil" du telephone en jouant.
+    const handY = 720;
+    const isHandActive = isPlayerTurn && pZoneInfo.zone==='hand';
+    const hand = sortHandDisplay(gameState.player.hand);
     // La main se resserre (spacing) puis retrecit (scale) automatiquement
     // pour toujours tenir dans l'espace dispo, meme apres avoir ramasse
     // un gros tas. L'espace dispo suit la largeur reelle de l'ecran.
@@ -1421,12 +1683,6 @@ class MainScene extends Phaser.Scene {
       }
     }
     const startX = W/2 - (N-1)*spacing/2;
-    // Arc + legere rotation par carte, comme un eventail tenu a une main.
-    // Les deux suivent l'echelle REELLE (handScale, qui peut avoir retreci
-    // pour une grosse main) pour rester coherents et lisibles a toute taille.
-    const arcHeight = 0.25 * CARD_H * handScale;
-    const maxFanAngle = 12; // degres, aux deux extremites
-    const halfSpan = (N-1)/2 || 1;
     hand.forEach((c,i)=>{
       const isSel = selected.some(s=>s.id===c.id);
       // Une carte non jouable par rapport a l'etat actuel de la pile est
@@ -1435,11 +1691,8 @@ class MainScene extends Phaser.Scene {
       const playable = isHandActive ? canPlayGroup(gameState, c.rank) : true;
       const interactive = isHandActive && (playable || isSel);
       const dragCfg = (isHandActive && playable) ? { onDrop: (pointer)=>this.onCardDropped(c, pointer), card: c } : null;
-      const u = N>1 ? (i - (N-1)/2) / halfSpan : 0; // -1 (gauche) .. 0 (centre) .. 1 (droite)
-      const cardY = handY - arcHeight*(1-u*u);
-      const cardAngle = maxFanAngle*u;
-      const spr = this.addCardSprite(startX + i*spacing, cardY, RANK_TO_TEXTURE[c.rank], handScale,
-        interactive ? ()=>this.onPlayerCardClick(c) : null, isSel, cardAngle, dragCfg);
+      const spr = this.addCardSprite(startX + i*spacing, handY, RANK_TO_TEXTURE[c.rank], handScale,
+        interactive ? ()=>this.onPlayerCardClick(c) : null, isSel, 0, dragCfg);
       if(isHandActive && !playable){
         spr.setAlpha(0.42);
         spr.setTint(0x777777);
@@ -1461,13 +1714,12 @@ class MainScene extends Phaser.Scene {
     } else {
       statusMsg = selected.length ? t('statusSelected', {n: selected.length}) : t('statusChoose');
     }
-    this.autoLabel(20, 900-30, statusMsg,
+    // Sous le compteur de tours, en haut a gauche : assez bas pour ne plus
+    // passer sous le bouton plein ecran (bouton HTML par dessus le canevas,
+    // qui ne bouge plus de son coin pour l'instant).
+    this.autoLabel(20, 110, statusMsg,
       {fontFamily:'"Press Start 2P"', fontSize:'11px', color:statusColor, originY:0.5},
       {padX:15, padY:9, alpha:0.55});
-    if(gameState.winner){
-      this.autoLabel(20, 900-58, t('refreshToReplay'),
-        {fontSize:'16px', color:'#9aa8b0', originY:0.5}, {padX:14, padY:6, alpha:0.45});
-    }
 
     // ---- Boutons ronds : colonne libre a droite (sous le journal, a cote
     // du deck sans le toucher), avec un rayon qui grossit avec l'ecran
@@ -1477,11 +1729,27 @@ class MainScene extends Phaser.Scene {
     if(gameState.turn==='player' && !gameState.winner){
       const btnX = W - 100;
       const btnScale = this.fontScale;
+      // Si aucune carte de la zone active n'est jouable, "Prendre" est la
+      // seule option sensee : plutot que de laisser le joueur sans indice
+      // (certains s'attendent a ce que ca se ramasse tout seul), on grise
+      // "Jouer" et on met "Prendre" en surbrillance.
+      const noPlayableMove = !this.awaitingFaceUpChoice && gameState.pile.length>0 && (
+        (pZoneInfo.zone==='hand' && !hand.some(c=>canPlayGroup(gameState, c.rank))) ||
+        (pZoneInfo.zone==='faceUp' && !gameState.player.faceUp.some(c=>canPlayGroup(gameState, c.rank)))
+      );
       if(!this.awaitingFaceUpChoice){
-        this.roundButton(btnX, 420, 42*btnScale, 0x2f8f4e, 0x5fdc7a, t('btnPlay'), ()=>this.onPlayClick());
+        this.roundButton(btnX, 420, 42*btnScale, 0x2f8f4e, 0x5fdc7a, t('btnPlay'), ()=>this.onPlayClick(),
+          { dim: noPlayableMove });
       }
-      const takeWord = this.awaitingFaceUpChoice ? t('btnCancel') : t('btnTake');
-      this.roundButton(btnX, 540, 34*btnScale, 0x9a2f2f, 0xff5f5f, takeWord, ()=>this.onTakeClick());
+      // "Prendre le tas" n'a aucun sens si la pile est vide (tout est
+      // jouable dans ce cas) : on masque carrement le bouton plutot que de
+      // laisser un bouton cliquable qui ne fait rien, pour que ce soit
+      // evident qu'il faut jouer une carte.
+      if(gameState.pile.length>0 || this.awaitingFaceUpChoice){
+        const takeWord = this.awaitingFaceUpChoice ? t('btnCancel') : t('btnTake');
+        this.roundButton(btnX, 540, 34*btnScale, 0x9a2f2f, 0xff5f5f, takeWord, ()=>this.onTakeClick(),
+          { highlight: noPlayableMove });
+      }
     }
 
     // ---- Log (panneau persistant + defilement anime, voir syncLog) ----
@@ -1499,12 +1767,21 @@ class MainScene extends Phaser.Scene {
         {fontFamily:'"Press Start 2P"', fontSize:'40px', color:'#1a1008'}).setOrigin(0.5);
       this.add.text(W/2, 500, bigWord,
         {fontFamily:'"Press Start 2P"', fontSize:'40px', color:wordColor}).setOrigin(0.5);
+      // Sous-titre : nombre de tours, meme couleur/police que le mot
+      // au-dessus, juste plus petit.
+      const turnsSub = t('turnsSubtitle', {n: gameState.turnCount});
+      this.add.text(W/2+1, 549, turnsSub,
+        {fontFamily:'"Press Start 2P"', fontSize:'16px', color:'#1a1008'}).setOrigin(0.5);
+      this.add.text(W/2, 548, turnsSub,
+        {fontFamily:'"Press Start 2P"', fontSize:'16px', color:wordColor}).setOrigin(0.5);
+      // Vrai bouton pour rejouer, plus besoin de rafraichir la page.
+      this.roundButton(W/2, 630, 44*(this.fontScale||1), 0x2f8f4e, 0x5fdc7a, t('btnReplay'), ()=>this.restartGame());
     }
   }
 
   onPlayerFaceDownClick(card){
     if(gameState.turn!=='player' || gameState.winner || this.animating) return;
-    this.animating = true;
+    this.armAnimating();
     const pileTopBefore = pileTop(gameState);
     const pileSnapshotBefore = [...gameState.pile];
     const res = tryFaceDownCard(gameState, 'player', card);
@@ -1562,23 +1839,28 @@ class MainScene extends Phaser.Scene {
 
   onPlayClick(){
     if(selected.length===0 || this.animating || this.awaitingFaceUpChoice) return;
-    this.animating = true;
+    this.armAnimating();
     const pileTopBefore = pileTop(gameState);
     const pileSnapshotBefore = [...gameState.pile];
     const res = playGroup(gameState, 'player', [...selected]);
     selected = [];
-    if(!res.ok){ this.animating = false; this.render(); return; }
+    if(!res.ok){ this.disarmWatchdog(); this.animating = false; this.render(); return; }
     this.animateResult('player', res, pileTopBefore, pileSnapshotBefore);
   }
 
   onTakeClick(){
     if(this.animating) return;
     // Annuler le choix en cours (re-clic sur le bouton pendant la selection)
+    // reste toujours possible, meme si la pile est vide entre temps.
     if(this.awaitingFaceUpChoice){
       this.awaitingFaceUpChoice = false;
       this.render();
       return;
     }
+    // Pile vide = n'importe quelle carte est jouable (deja la regle en
+    // vigueur), donc "prendre le tas" n'a jamais de sens dans ce cas et ne
+    // doit pas pouvoir sauter le tour gratuitement.
+    if(gameState.pile.length===0) return;
     const pZoneInfo = getActiveZoneCards(gameState.player);
     // Phase "decouverte" (face visible) : on doit choisir une carte a
     // recuperer avec le tas avant de valider.
@@ -1588,7 +1870,7 @@ class MainScene extends Phaser.Scene {
       this.render();
       return;
     }
-    this.animating = true;
+    this.armAnimating();
     const pileTopBefore = pileTop(gameState);
     const pileSnapshotBefore = [...gameState.pile];
     const res = forceTakePile(gameState, 'player');
@@ -1599,7 +1881,7 @@ class MainScene extends Phaser.Scene {
   confirmTakePileWithFaceUp(card){
     if(this.animating) return;
     this.awaitingFaceUpChoice = false;
-    this.animating = true;
+    this.armAnimating();
     const pileTopBefore = pileTop(gameState);
     const pileSnapshotBefore = [...gameState.pile];
     const res = forceTakePile(gameState, 'player', card);
@@ -1615,6 +1897,11 @@ const config = {
   height: window.innerHeight,
   backgroundColor: '#12181f',
   scale: { mode: Phaser.Scale.RESIZE },
+  // Par defaut, Phaser met le jeu en pause quand la fenetre/l'onglet perd le
+  // focus, et ne reprend qu'au retour du focus. On desactive cette pause
+  // automatique : le jeu doit continuer a tourner (animations, tour de l'IA)
+  // meme si le focus de la fenetre bouge un peu.
+  disableVisibilityChange: true,
   scene: [MenuScene, MainScene]
 };
 game = new Phaser.Game(config);
