@@ -68,11 +68,15 @@
     return !!(document.fullscreenElement || document.webkitFullscreenElement);
   }
   function updateIcon(){ btn.textContent = isFs() ? '⤢' : '⛶'; }
-  // Le jeu zoome son canevas logique (900 de haut) pour remplir l'ecran
-  // reel : sur un petit ecran, tout (dont le toggle FR/EN) s'affiche donc
-  // plus petit/plus proche du bord. On approxime ce meme zoom ici pour que
-  // le bouton reste visuellement colle au toggle, peu importe la taille
-  // d'ecran, plutot qu'une position fixe qui ne marche que sur un format.
+  // Le jeu zoome son canevas logique pour remplir l'ecran reel : sur un
+  // petit ecran, tout (dont le toggle FR/EN) s'affiche donc plus petit/plus
+  // proche du bord. Le MENU et l'ECRAN DE DIFFICULTE, eux, ne zoomment PAS
+  // (ils dessinent en pixels ecran reels directement) -- utiliser la MEME
+  // formule de zoom que le jeu pour positionner ce bouton la-bas faisait
+  // deriver le bouton pile sur "EN" des que l'ecran etait court. Chaque
+  // scene expose donc son propre facteur via window.__uiZoom (1 pour
+  // Menu/Difficulte, le vrai zoom de la camera pour la partie), et ce
+  // bouton s'y cale plutot que de le recalculer lui-meme a l'aveugle.
   function repositionButton(){
     const isPortrait = window.innerHeight > window.innerWidth;
     if(isPortrait){
@@ -82,17 +86,16 @@
       btn.style.right = '8px';
       btn.style.top = '8px';
     } else {
-      // En paysage, reste colle au toggle FR/EN : le jeu zoome son canevas
-      // logique (900 de haut) pour remplir l'ecran reel, donc tout (dont ce
-      // toggle) s'affiche plus petit/plus proche du bord sur un petit
-      // ecran. On approxime ce meme zoom ici pour rester visuellement
-      // colle au toggle, peu importe la taille d'ecran.
-      const zoom = Math.min(1, window.innerHeight / 900);
+      const zoom = window.__uiZoom || 1;
       btn.style.right = '';
       btn.style.left = Math.round(140 * zoom) + 'px';
       btn.style.top = Math.round(6 * zoom + 4) + 'px';
     }
   }
+  // Expose pour que chaque scene puisse redemander un repositionnement des
+  // qu'elle change window.__uiZoom (ex: en passant du menu -- zoom 1 -- a
+  // la partie -- zoom variable), pas seulement au resize de la fenetre.
+  window.__repositionFsButton = repositionButton;
   repositionButton();
   window.addEventListener('resize', repositionButton);
   btn.addEventListener('click', ()=>{
@@ -904,6 +907,11 @@ class MenuScene extends Phaser.Scene {
     // Phaser (la zone cliquable des objets se desynchronise du rendu quand
     // le zoom bouge), donc on l'evite completement plutot que d'essayer de
     // le contourner.
+    // Ce menu ne zoome donc PAS : le bouton plein ecran (DOM, hors Phaser)
+    // doit le savoir pour se positionner en pixels reels lui aussi, pas
+    // selon le zoom (variable) utilise pendant la partie.
+    window.__uiZoom = 1;
+    if(window.__repositionFsButton) window.__repositionFsButton();
     const W = this.scale.width, H = this.scale.height;
     const cx = W/2;
 
@@ -1032,8 +1040,13 @@ class DifficultyScene extends Phaser.Scene {
   render(){
     if(!this.scene.isActive() || !this.cameras || !this.cameras.main) return;
     this.children.removeAll();
+    // Comme le menu principal, cet ecran ne zoome pas non plus (pixels
+    // ecran reels directement) : le bouton plein ecran (DOM) doit le savoir.
+    window.__uiZoom = 1;
+    if(window.__repositionFsButton) window.__repositionFsButton();
     const W = this.scale.width, H = this.scale.height;
     const cx = W/2;
+    const isPortraitDiff = H > W;
 
     const frColor = lang==='fr' ? '#ffd23f' : '#8a95a0';
     const enColor = lang==='en' ? '#ffd23f' : '#8a95a0';
@@ -1042,26 +1055,50 @@ class DifficultyScene extends Phaser.Scene {
     const enLbl = this.add.text(68, 18, 'EN', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:enColor}).setOrigin(0,0.5);
     enLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('en'));
 
-    const titleSize = Math.max(22, Math.min(34, Math.round(W*0.05)));
-    const titleY = Math.max(60, Math.min(150, H*0.14));
+    const titleSize = isPortraitDiff
+      ? Math.max(22, Math.min(34, Math.round(W*0.05)))
+      : Math.max(20, Math.min(30, Math.round(H*0.06)));
+    const titleY = isPortraitDiff
+      ? Math.max(60, Math.min(150, H*0.14))
+      : Math.max(36, Math.min(90, H*0.12));
     this.add.text(cx, titleY, t('diffTitle'), {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px', color:'#e9ddc8'}).setOrigin(0.5);
 
-    // Toujours empiles en 1 colonne verticale (demande explicitement),
-    // peu importe l'orientation.
-    const btnW = Math.min(380, W*0.86);
-    const btnH = 66;
-    const step = 84;
-    let y = titleY + titleSize*0.9 + 46;
     const modes = [
       { key:'easy', label: t('diffEasy'), sub: t('diffEasySub') },
       { key:'normal', label: t('diffNormal'), sub: t('diffNormalSub') },
       { key:'hard', label: t('diffHard'), sub: t('diffHardSub') },
       { key:'nightmare', label: t('diffNightmare'), sub: t('diffNightmareSub') },
     ];
-    modes.forEach(m=>{
-      this.diffButton(cx, y, btnW, btnH, m.label, m.sub, ()=>{ difficulty = m.key; this.scene.start('main'); });
-      y += step;
-    });
+
+    if(isPortraitDiff){
+      // Empile en 1 colonne verticale.
+      const btnW = Math.min(380, W*0.86);
+      const btnH = 66;
+      const step = 84;
+      let y = titleY + titleSize*0.9 + 46;
+      modes.forEach(m=>{
+        this.diffButton(cx, y, btnW, btnH, m.label, m.sub, ()=>{ difficulty = m.key; this.scene.start('main'); });
+        y += step;
+      });
+    } else {
+      // Grille 2x2 : sur un ecran paysage bas (telephone), une seule colonne
+      // de 4 boutons+sous-titres deborde carrement de l'ecran (c'etait le
+      // blocage rapporte -- le dernier bouton devenait inaccessible). La
+      // grille tient dans beaucoup moins de hauteur.
+      const btnW = Math.min(340, W*0.42);
+      const btnH = 60;
+      const gapX = 30, gapY = 34;
+      const gridTop = titleY + titleSize*0.9 + 26;
+      const col0X = cx - btnW/2 - gapX/2;
+      const col1X = cx + btnW/2 + gapX/2;
+      const row0Y = gridTop + btnH/2;
+      const row1Y = row0Y + btnH + gapY;
+      const positions = [[col0X,row0Y],[col1X,row0Y],[col0X,row1Y],[col1X,row1Y]];
+      modes.forEach((m,i)=>{
+        const [x,y] = positions[i];
+        this.diffButton(x, y, btnW, btnH, m.label, m.sub, ()=>{ difficulty = m.key; this.scene.start('main'); });
+      });
+    }
 
     this.add.text(cx, H-24, 'Hugin Corp™', {fontFamily:'"VT323"', fontSize:'18px', color:'#e9ddc8'}).setOrigin(0.5).setAlpha(0.25);
   }
@@ -1179,6 +1216,14 @@ class MainScene extends Phaser.Scene {
   layoutAndDraw(){
     if(!this.scene.isActive() || !this.cameras || !this.cameras.main) return;
     const W = this.scale.width, H = this.scale.height;
+    // Resynchronise explicitement le viewport de la camera sur la taille
+    // reelle du canevas a CHAQUE redimensionnement (rotation d'ecran, resize
+    // navigateur...). Sans ca, en combinaison avec le zoom manuel utilise
+    // plus bas, Phaser pouvait garder un viewport perime apres une rotation
+    // -- le rendu semblait correct mais la conversion clic-ecran -> position
+    // dans le jeu restait basee sur l'ancienne taille, rendant tout
+    // ecran suivant sans effet jusqu'a un F5.
+    this.cameras.main.setViewport(0, 0, W, H);
     this.isPortrait = H > W;
     if(this.isPortrait){
       const basePW = 720, basePH = 1280;
@@ -1200,6 +1245,7 @@ class MainScene extends Phaser.Scene {
       this.H = PH;
       this.cameras.main.setZoom(Z);
       this.cameras.main.centerOn(PW/2, PH/2);
+      window.__uiZoom = Z;
     } else {
       const DH = 900;
       const baseAspect = 1280/900;
@@ -1216,7 +1262,9 @@ class MainScene extends Phaser.Scene {
       this.H = DH;
       this.cameras.main.setZoom(Z);
       this.cameras.main.centerOn(DW/2, DH/2);
+      window.__uiZoom = Z;
     }
+    if(window.__repositionFsButton) window.__repositionFsButton();
     this.drawAll();
   }
 
@@ -1659,24 +1707,37 @@ class MainScene extends Phaser.Scene {
       this.input.setDraggable(spr);
       let dragged = false;
       let groupSprites = [];
-      spr.on('dragstart', ()=>{
+      spr.on('dragstart', (pointer, dragX, dragY)=>{
         dragged = true;
         spr.setDepth(3000);
         groupSprites = [];
-        // Si cette carte fait partie d'une selection multiple, on entraine
-        // visuellement les autres cartes du groupe avec elle (portees ensemble).
+        // Si cette carte fait partie d'une selection multiple, les autres
+        // cartes du groupe se REGROUPENT en petit paquet compact pres du
+        // curseur (plutot que de garder leur espacement d'origine en main) :
+        // plus facile a suivre d'un coup d'oeil et a viser au lachage.
         if(dragConfig.card && selected.length>1 && selected.some(s=>s.id===dragConfig.card.id)){
+          let i = 0;
           for(const s of selected){
             if(s.id===dragConfig.card.id) continue;
             const gs = this.spriteByCardId[s.id];
-            if(gs){ gs.setDepth(2999); groupSprites.push(gs); }
+            if(gs){
+              i++;
+              gs.setDepth(2999-i);
+              gs.clusterOffsetX = i*9;
+              gs.clusterOffsetY = i*6;
+              gs.x = dragX + gs.clusterOffsetX;
+              gs.y = dragY + gs.clusterOffsetY;
+              groupSprites.push(gs);
+            }
           }
         }
       });
       spr.on('drag', (pointer, dragX, dragY)=>{
-        const dx = dragX - spr.restX, dy = dragY - spr.restY;
         spr.x = dragX; spr.y = dragY;
-        groupSprites.forEach(gs=>{ gs.x = gs.restX + dx; gs.y = gs.restY + dy; });
+        groupSprites.forEach(gs=>{
+          gs.x = dragX + gs.clusterOffsetX;
+          gs.y = dragY + gs.clusterOffsetY;
+        });
       });
       spr.on('dragend', (pointer)=>{ dragConfig.onDrop(pointer); dragged = false; });
       spr.on('pointerup', ()=>{ if(!dragged && onClick) onClick(); });
@@ -1902,17 +1963,26 @@ class MainScene extends Phaser.Scene {
     const pivotY = this.pileY + (CARD_H*TOP_SCALE)/2;
 
     // Sous l'eventail, chaque carte au-dela des 3 affichees (dessus + 2 du
-    // fan) ajoute une fine tranche a peine decalee derriere la plus ancienne
-    // du fan : pas lisible individuellement, juste pour sentir le tas
-    // s'epaissir au fil de la partie. Decalage minuscule et DETERMINISTE
-    // (pas de Math.random) pour ne pas trembloter d'un redraw a l'autre.
-    // Plafonne (perf + au-dela ca ne se voit plus de toute facon).
-    const extraCount = Math.min(24, Math.max(0, gameState.pile.length - 3));
-    for(let i=extraCount; i>=1; i--){
-      const spr = this.add.image(pivotX + i*1.8, pivotY + i*1.1, 'card_back');
+    // fan) continue le meme mouvement que les 2 cartes du fan (previous2
+    // juste en dessous) : MEME pivot, la rotation continue au-dela de -32°.
+    // L'angle est calcule d'apres la VRAIE position de la carte dans la
+    // pile (pas une fraction du nombre total recalculee a chaque fois) :
+    // chaque carte garde donc un angle stable au fil de la partie, et une
+    // nouvelle carte prend simplement la place juste derriere le fan
+    // (angle le plus proche de -32°) en poussant toutes les autres un peu
+    // plus loin -- plutot que de s'inserer entre la plus ancienne et le
+    // fan, ou de faire bouger les cartes deja en place (ce qui donnait un
+    // ordre d'apparition bizarre). Pas de Math.random (deterministe).
+    // Plafonne aux 24 plus RECENTES des cartes "en trop" (les plus proches
+    // du fan, donc les plus pertinentes a montrer).
+    const hiddenCount = Math.max(0, gameState.pile.length - 3);
+    const shownExtras = Math.min(24, hiddenCount);
+    const anglePerCard = 4;
+    for(let depth=shownExtras; depth>=1; depth--){
+      const spr = this.add.image(pivotX, pivotY, 'card_back');
       spr.setOrigin(0,1);
       spr.setScale(FAN_SCALE);
-      spr.setAngle(-32 + i*0.8);
+      spr.setAngle(-32 - depth*anglePerCard);
     }
 
     const previous2 = gameState.pile.slice(-3,-1); // ordre : plus ancien -> plus recent
@@ -2234,12 +2304,14 @@ class MainScene extends Phaser.Scene {
     const pivotX = this.pileX - (CARD_W*TOP_SCALE)/2;
     const pivotY = this.pileY + (CARD_H*TOP_SCALE)/2;
 
-    const extraCount = Math.min(24, Math.max(0, gameState.pile.length-3));
-    for(let i=extraCount; i>=1; i--){
-      const spr = this.add.image(pivotX + i*1.4, pivotY + i*0.9, 'card_back');
+    const hiddenCount = Math.max(0, gameState.pile.length-3);
+    const shownExtras = Math.min(24, hiddenCount);
+    const anglePerCard = 4;
+    for(let depth=shownExtras; depth>=1; depth--){
+      const spr = this.add.image(pivotX, pivotY, 'card_back');
       spr.setOrigin(0,1);
       spr.setScale(FAN_SCALE);
-      spr.setAngle(-32 + i*0.8);
+      spr.setAngle(-32 - depth*anglePerCard);
     }
     const previous2 = gameState.pile.slice(-3,-1);
     previous2.forEach((c, idx)=>{
@@ -2454,18 +2526,25 @@ class MainScene extends Phaser.Scene {
   // ---- Reordonne la main a la main (Normal/Difficile/Cauchemar) : calcule
   // l'index cible d'apres la position X ou la carte a ete lachee, relative a
   // l'espacement actuel de la main (this.handStartX/handSpacing, calcules a
-  // chaque rendu). Ne fait rien en mode Facile (main toujours auto-triee). ----
+  // chaque rendu). Ne fait rien en mode Facile (main toujours auto-triee).
+  // Si la carte glissee fait partie d'un GROUPE selectionne, tout le groupe
+  // se deplace ensemble (dans son ordre relatif d'origine) plutot que de
+  // laisser les autres cartes du groupe sur place -- avant ce fix, seule la
+  // carte glissee bougeait, ce qui donnait un affichage/resultat incoherent
+  // des qu'on avait plusieurs cartes selectionnees. ----
   reorderHand(card, pointer){
     if(!this.handSpacing) return;
     const hand = gameState.player.hand;
-    const idx = hand.findIndex(c=>c.id===card.id);
-    if(idx===-1) return;
+    const group = (selected.length>0 && selected.some(s=>s.id===card.id)) ? [...selected] : [card];
+    const groupIds = new Set(group.map(c=>c.id));
+    // Le groupe garde son ordre relatif d'origine (pas l'ordre de selection).
+    const groupInOrder = hand.filter(c=>groupIds.has(c.id));
+    const rest = hand.filter(c=>!groupIds.has(c.id));
     const relativeX = pointer.worldX - this.handStartX;
     let targetIdx = Math.round(relativeX / this.handSpacing);
-    targetIdx = Math.max(0, Math.min(hand.length-1, targetIdx));
-    if(targetIdx === idx) return;
-    const [moved] = hand.splice(idx, 1);
-    hand.splice(targetIdx, 0, moved);
+    targetIdx = Math.max(0, Math.min(rest.length, targetIdx));
+    rest.splice(targetIdx, 0, ...groupInOrder);
+    gameState.player.hand = rest;
   }
 
   onCardDropped(card, pointer){
