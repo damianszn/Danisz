@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+<script src="js/account.js"></script>
 <style>
   html,body{margin:0;padding:0;background:#2e4928;overflow:hidden;font-family:'VT323',monospace;}
   #game-container{width:100vw;height:100vh;}
@@ -53,6 +54,87 @@
   #lang-popup button.active{ color:#ffd23f; }
   #lang-popup button:hover{ background:rgba(255,255,255,0.08); }
 
+  /* Compte joueur (pseudo + high scores Supabase) : meme famille visuelle
+     que le popup de langue ci-dessus, mais en haut-DROITE pour ne jamais
+     chevaucher l'icone reglages. Reste un simple overlay HTML/CSS, ind
+     ependant de Phaser, comme tout ce groupe. */
+  #account-bar{ position:fixed; top:6px; right:6px; z-index:10000; }
+  #account-bar button{
+    display:inline-flex; align-items:center; gap:6px;
+    min-width:30px; height:30px; padding:0 10px; margin:0;
+    background:transparent; border:none;
+    color:#e9ddc8; font-size:15px; line-height:30px; text-align:center;
+    cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;
+    opacity:0.85; font-family:'VT323',monospace; white-space:nowrap;
+  }
+  #account-bar button:active{ opacity:1; }
+  /* Icone en SVG (fill="currentColor") plutot que l'emoji unicode
+     precedent : un emoji comme le bonhomme est toujours rendu en couleur
+     fixe par le systeme, la propriete CSS color n'a aucune prise dessus --
+     un SVG currentColor, lui, prend exactement la meme couleur que le
+     texte du bouton (donc que ⚙/⛶ a cote). */
+  #account-icon{ flex:none; }
+  #account-panel{
+    display:none;
+    position:fixed; top:40px; right:6px; z-index:10001;
+    background:rgba(12,20,16,0.92); border:1px solid rgba(215,164,92,0.5);
+    border-radius:6px; padding:12px; width:220px; box-sizing:border-box;
+    font-family:'VT323',monospace; color:#e9ddc8;
+  }
+  #account-panel.open{ display:block; }
+  #account-panel .account-label{ font-size:16px; margin-bottom:8px; }
+  #account-panel input{
+    width:100%; box-sizing:border-box; padding:6px; margin-bottom:8px;
+    background:#0c1410; border:1px solid rgba(215,164,92,0.5); border-radius:4px;
+    color:#e9ddc8; font-family:'VT323',monospace; font-size:16px;
+  }
+  #account-panel button.primary{
+    width:100%; padding:8px; background:#2f8f4e; border:1px solid #5fdc7a;
+    border-radius:4px; color:#1a1008; font-family:'Press Start 2P', monospace;
+    font-size:11px; cursor:pointer;
+  }
+  #account-panel button.primary:disabled{ opacity:0.6; cursor:default; }
+  #account-panel button.secondary{
+    width:100%; margin-top:8px; padding:6px; background:transparent;
+    border:1px solid rgba(215,164,92,0.5); border-radius:4px; color:#e9ddc8;
+    font-family:'VT323',monospace; font-size:15px; cursor:pointer;
+  }
+  #account-tabs{ display:flex; gap:4px; margin-bottom:10px; }
+  .account-tab{
+    flex:1; padding:6px 0; background:transparent;
+    border:1px solid rgba(215,164,92,0.4); border-radius:4px;
+    color:#9aa8b0; font-family:'VT323',monospace; font-size:14px; cursor:pointer;
+  }
+  .account-tab.active{ color:#ffd23f; border-color:#ffd23f; }
+  #account-pseudo-display{ font-family:'Press Start 2P',monospace; font-size:13px; color:#ffd23f; margin-bottom:6px; }
+  #account-error{ color:#ff5f5f; font-size:14px; margin-top:6px; min-height:1em; }
+  #account-stats{ font-size:15px; color:#9aa8b0; margin:6px 0 10px; }
+
+  #leaderboard-overlay{
+    display:none;
+    position:fixed; inset:0; z-index:20001;
+    background:rgba(0,0,0,0.6);
+    align-items:center; justify-content:center;
+  }
+  #leaderboard-overlay.open{ display:flex; }
+  #leaderboard-modal{
+    background:#152018; border:1px solid rgba(215,164,92,0.5); border-radius:8px;
+    padding:20px; width:min(360px, 88vw); max-height:70vh; overflow-y:auto;
+    color:#e9ddc8; font-family:'VT323',monospace; position:relative;
+  }
+  #leaderboard-title{
+    font-family:'Press Start 2P', monospace; font-size:15px; margin-bottom:14px;
+    color:#ffd23f; padding-right:24px;
+  }
+  #leaderboard-close-btn{
+    position:absolute; top:14px; right:14px; background:transparent; border:none;
+    color:#e9ddc8; font-size:20px; cursor:pointer; line-height:1;
+  }
+  #leaderboard-table{ width:100%; border-collapse:collapse; font-size:15px; }
+  #leaderboard-table th{ text-align:left; color:#9aa8b0; font-weight:normal; padding:4px 6px; border-bottom:1px solid rgba(215,164,92,0.3); }
+  #leaderboard-table td{ padding:4px 6px; border-bottom:1px solid rgba(255,255,255,0.05); }
+  #leaderboard-table td.num, #leaderboard-table th.num{ text-align:right; }
+
   /* Ecran "tourne ton telephone" : trop de cartes/elements pour bien tenir
      verticalement, donc plutot que de forcer un mode portrait compresse,
      on demande de passer en paysage sur mobile. Cible specifiquement les
@@ -76,7 +158,7 @@
   }
   @media (orientation:portrait) and (pointer:coarse){
     #rotate-overlay{ display:flex; }
-    #game-container, #ui-bar, #lang-popup{ display:none; }
+    #game-container, #ui-bar, #lang-popup, #account-bar, #account-panel{ display:none; }
   }
 </style>
 </head>
@@ -87,10 +169,56 @@
   <button id="fullscreen-btn" title="Plein ecran">⛶</button>
 </div>
 <div id="lang-popup">
-  <button id="lang-fr" data-lang="fr">FR</button>
-  <button id="lang-en" data-lang="en">EN</button>
-  <button id="lang-nl" data-lang="nl">NL</button>
-  <button id="lang-pl" data-lang="pl">PL</button>
+  <button id="lang-fr" data-lang="fr" title="Francais">🇫🇷</button>
+  <button id="lang-en" data-lang="en" title="English">🇬🇧</button>
+  <button id="lang-nl" data-lang="nl" title="Nederlands">🇳🇱</button>
+  <button id="lang-pl" data-lang="pl" title="Polski">🇵🇱</button>
+</div>
+<div id="account-bar">
+  <button id="account-btn">
+    <svg id="account-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+      <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z"/>
+    </svg>
+    <span id="account-btn-label"></span>
+  </button>
+</div>
+<div id="account-panel">
+  <div id="account-guest">
+    <div class="account-label" id="account-guest-label"></div>
+    <div id="account-tabs">
+      <button id="account-tab-signup" class="account-tab"></button>
+      <button id="account-tab-signin" class="account-tab"></button>
+    </div>
+    <div id="account-signup-fields">
+      <input id="account-pseudo-input" maxlength="20" autocomplete="username">
+      <input id="account-email-input" type="email" autocomplete="email">
+      <input id="account-password-input" type="password" autocomplete="new-password">
+      <button id="account-signup-btn" class="primary"></button>
+    </div>
+    <div id="account-signin-fields" style="display:none">
+      <input id="account-signin-email-input" type="email" autocomplete="email">
+      <input id="account-signin-password-input" type="password" autocomplete="current-password">
+      <button id="account-signin-btn" class="primary"></button>
+    </div>
+    <div id="account-needspseudo-fields" style="display:none">
+      <input id="account-needspseudo-input" maxlength="20" autocomplete="username">
+      <button id="account-needspseudo-btn" class="primary"></button>
+    </div>
+    <div id="account-error"></div>
+  </div>
+  <div id="account-logged" style="display:none">
+    <div id="account-pseudo-display"></div>
+    <div id="account-stats"></div>
+    <button id="account-leaderboard-btn" class="secondary"></button>
+    <button id="account-signout-btn" class="secondary"></button>
+  </div>
+</div>
+<div id="leaderboard-overlay">
+  <div id="leaderboard-modal">
+    <button id="leaderboard-close-btn">&times;</button>
+    <div id="leaderboard-title"></div>
+    <div id="leaderboard-body"></div>
+  </div>
 </div>
 <div id="rotate-overlay">
   <div class="icon">📱</div>
@@ -237,7 +365,45 @@ const I18N = {
     diffHard: "Difficile",
     diffHardSub: "+ strategies avancees",
     diffNightmare: "Cauchemar",
-    diffNightmareSub: "Impossible de prendre si tu peux jouer"
+    diffNightmareSub: "Impossible de prendre si tu peux jouer",
+
+    accountBtnTitle: "Compte",
+    accountMenuLabel: "Profil",
+    accountGuestTitle: "Sauvegarder mes scores",
+    accountNeedsPseudoLabel: "Choisis un pseudo pour finir",
+    accountTabSignup: "Inscription",
+    accountTabSignin: "Connexion",
+    accountPseudoPlaceholder: "Pseudo (3-20 caracteres)",
+    accountEmailPlaceholder: "Email",
+    accountPasswordPlaceholder: "Mot de passe (6+ caracteres)",
+    accountSignupBtn: "Creer un compte",
+    accountSigninBtn: "Se connecter",
+    accountSignoutBtn: "Se deconnecter",
+    accountWorking: "Un instant...",
+    accountErrorLength: "Le pseudo doit faire entre 3 et 20 caracteres.",
+    accountErrorPseudoTaken: "Ce pseudo est deja pris.",
+    accountErrorEmailTaken: "Un compte existe deja avec cet email.",
+    accountErrorWeakPassword: "Le mot de passe doit faire au moins 6 caracteres.",
+    accountErrorInvalidEmail: "Adresse email invalide.",
+    accountErrorInvalidCredentials: "Email ou mot de passe incorrect.",
+    accountErrorConfirmEmail: "Verifie tes mails pour confirmer ton compte, puis connecte-toi.",
+    accountErrorUnknown: "Une erreur est survenue, reessaie.",
+    accountStats: "{wins} victoire(s) sur {games} partie(s)",
+    accountLeaderboardBtn: "Classement",
+    leaderboardTitle: "Classement",
+    leaderboardLoading: "Chargement...",
+    leaderboardEmpty: "Pas encore de scores enregistres.",
+    leaderboardColPseudo: "Joueur",
+    leaderboardColWins: "Victoires",
+    leaderboardColGames: "Parties",
+    leaderboardColTurns: "Tours",
+    confirmLeaderboardTitle: "Leaderboard",
+    confirmRulesTitle: "Regles",
+    confirmDealBtn: "Distribuer les cartes",
+    diffEasyRules: "🗂️ Main triee automatiquement par rang\n🔒 Cartes injouables grisees\n🤖 IA basique",
+    diffNormalRules: "✋ Main libre, glisse pour reordonner\n🤖 IA basique",
+    diffHardRules: "✋ Main libre, glisse pour reordonner\n🧠 IA avancee, anticipe mieux",
+    diffNightmareRules: "✋ Main libre, glisse pour reordonner\n🧠 IA avancee, anticipe mieux\n🙈 Compteurs masques (main adverse + pile)\n🚫 \"Prendre\" impossible si tu as un coup jouable"
   },
   nl: {
     logStarterYou: "Jij begint, met de laagste kaart.",
@@ -303,7 +469,45 @@ const I18N = {
     diffHard: "Moeilijk",
     diffHardSub: "+ geavanceerde strategieen",
     diffNightmare: "Nachtmerrie",
-    diffNightmareSub: "Kan niet pakken als je kan spelen"
+    diffNightmareSub: "Kan niet pakken als je kan spelen",
+
+    accountBtnTitle: "Account",
+    accountMenuLabel: "Profiel",
+    accountGuestTitle: "Sla mijn scores op",
+    accountNeedsPseudoLabel: "Kies een bijnaam om af te ronden",
+    accountTabSignup: "Registreren",
+    accountTabSignin: "Inloggen",
+    accountPseudoPlaceholder: "Bijnaam (3-20 tekens)",
+    accountEmailPlaceholder: "E-mail",
+    accountPasswordPlaceholder: "Wachtwoord (6+ tekens)",
+    accountSignupBtn: "Account aanmaken",
+    accountSigninBtn: "Inloggen",
+    accountSignoutBtn: "Uitloggen",
+    accountWorking: "Een moment...",
+    accountErrorLength: "De bijnaam moet 3 tot 20 tekens lang zijn.",
+    accountErrorPseudoTaken: "Deze bijnaam is al bezet.",
+    accountErrorEmailTaken: "Er bestaat al een account met dit e-mailadres.",
+    accountErrorWeakPassword: "Het wachtwoord moet minstens 6 tekens lang zijn.",
+    accountErrorInvalidEmail: "Ongeldig e-mailadres.",
+    accountErrorInvalidCredentials: "E-mail of wachtwoord onjuist.",
+    accountErrorConfirmEmail: "Bevestig je account via de e-mail die je hebt ontvangen en log dan in.",
+    accountErrorUnknown: "Er is een fout opgetreden, probeer opnieuw.",
+    accountStats: "{wins} overwinning(en) op {games} partij(en)",
+    accountLeaderboardBtn: "Klassement",
+    leaderboardTitle: "Klassement",
+    leaderboardLoading: "Laden...",
+    leaderboardEmpty: "Nog geen scores geregistreerd.",
+    leaderboardColPseudo: "Speler",
+    leaderboardColWins: "Overwinningen",
+    leaderboardColGames: "Partijen",
+    leaderboardColTurns: "Beurten",
+    confirmLeaderboardTitle: "Leaderboard",
+    confirmRulesTitle: "Regels",
+    confirmDealBtn: "Kaarten uitdelen",
+    diffEasyRules: "🗂️ Hand automatisch gesorteerd op rang\n🔒 Onspeelbare kaarten grijs\n🤖 Basis-AI",
+    diffNormalRules: "✋ Vrije handvolgorde, sleep om te herschikken\n🤖 Basis-AI",
+    diffHardRules: "✋ Vrije handvolgorde, sleep om te herschikken\n🧠 Geavanceerde AI, denkt vooruit",
+    diffNightmareRules: "✋ Vrije handvolgorde, sleep om te herschikken\n🧠 Geavanceerde AI, denkt vooruit\n🙈 Tellers verborgen (hand tegenstander + stapel)\n🚫 \"Pakken\" onmogelijk als je kan spelen"
   },
   pl: {
     logStarterYou: "Zaczynasz, z najnizsza karta.",
@@ -369,7 +573,45 @@ const I18N = {
     diffHard: "Trudny",
     diffHardSub: "+ zaawansowane strategie",
     diffNightmare: "Koszmar",
-    diffNightmareSub: "Nie mozesz wziac, jesli mozesz zagrac"
+    diffNightmareSub: "Nie mozesz wziac, jesli mozesz zagrac",
+
+    accountBtnTitle: "Konto",
+    accountMenuLabel: "Profil",
+    accountGuestTitle: "Zapisz moje wyniki",
+    accountNeedsPseudoLabel: "Wybierz pseudonim, aby zakonczyc",
+    accountTabSignup: "Rejestracja",
+    accountTabSignin: "Logowanie",
+    accountPseudoPlaceholder: "Pseudonim (3-20 znakow)",
+    accountEmailPlaceholder: "Email",
+    accountPasswordPlaceholder: "Haslo (min. 6 znakow)",
+    accountSignupBtn: "Utworz konto",
+    accountSigninBtn: "Zaloguj sie",
+    accountSignoutBtn: "Wyloguj sie",
+    accountWorking: "Chwileczke...",
+    accountErrorLength: "Pseudonim musi miec od 3 do 20 znakow.",
+    accountErrorPseudoTaken: "Ten pseudonim jest juz zajety.",
+    accountErrorEmailTaken: "Konto z tym adresem email juz istnieje.",
+    accountErrorWeakPassword: "Haslo musi miec co najmniej 6 znakow.",
+    accountErrorInvalidEmail: "Nieprawidlowy adres email.",
+    accountErrorInvalidCredentials: "Nieprawidlowy email lub haslo.",
+    accountErrorConfirmEmail: "Sprawdz maila, aby potwierdzic konto, a nastepnie sie zaloguj.",
+    accountErrorUnknown: "Wystapil blad, sprobuj ponownie.",
+    accountStats: "{wins} zwyciestw(o) na {games} gier",
+    accountLeaderboardBtn: "Ranking",
+    leaderboardTitle: "Ranking",
+    leaderboardLoading: "Ladowanie...",
+    leaderboardEmpty: "Brak zapisanych wynikow.",
+    leaderboardColPseudo: "Gracz",
+    leaderboardColWins: "Zwyciestwa",
+    leaderboardColGames: "Gry",
+    leaderboardColTurns: "Tury",
+    confirmLeaderboardTitle: "Leaderboard",
+    confirmRulesTitle: "Zasady",
+    confirmDealBtn: "Rozdaj karty",
+    diffEasyRules: "🗂️ Reka automatycznie posortowana wedlug rangi\n🔒 Niegrywalne karty wyszarzone\n🤖 Podstawowe AI",
+    diffNormalRules: "✋ Wolny uklad reki, przeciagnij by zmienic\n🤖 Podstawowe AI",
+    diffHardRules: "✋ Wolny uklad reki, przeciagnij by zmienic\n🧠 Zaawansowane AI, planuje z wyprzedzeniem",
+    diffNightmareRules: "✋ Wolny uklad reki, przeciagnij by zmienic\n🧠 Zaawansowane AI, planuje z wyprzedzeniem\n🙈 Liczniki ukryte (reka przeciwnika + stos)\n🚫 Nie mozna \"Wziac\", jesli masz mozliwy ruch"
   },
   en: {
     logStarterYou: "You go first, with the lowest card.",
@@ -435,7 +677,45 @@ const I18N = {
     diffHard: "Hard",
     diffHardSub: "+ advanced strategies",
     diffNightmare: "Nightmare",
-    diffNightmareSub: "Can't take if you can play"
+    diffNightmareSub: "Can't take if you can play",
+
+    accountBtnTitle: "Account",
+    accountMenuLabel: "Profile",
+    accountGuestTitle: "Save my scores",
+    accountNeedsPseudoLabel: "Choose a nickname to finish",
+    accountTabSignup: "Sign up",
+    accountTabSignin: "Log in",
+    accountPseudoPlaceholder: "Nickname (3-20 characters)",
+    accountEmailPlaceholder: "Email",
+    accountPasswordPlaceholder: "Password (6+ characters)",
+    accountSignupBtn: "Create account",
+    accountSigninBtn: "Log in",
+    accountSignoutBtn: "Log out",
+    accountWorking: "One moment...",
+    accountErrorLength: "The nickname must be 3 to 20 characters long.",
+    accountErrorPseudoTaken: "This nickname is already taken.",
+    accountErrorEmailTaken: "An account already exists with this email.",
+    accountErrorWeakPassword: "The password must be at least 6 characters long.",
+    accountErrorInvalidEmail: "Invalid email address.",
+    accountErrorInvalidCredentials: "Incorrect email or password.",
+    accountErrorConfirmEmail: "Check your email to confirm your account, then log in.",
+    accountErrorUnknown: "Something went wrong, try again.",
+    accountStats: "{wins} win(s) out of {games} game(s)",
+    accountLeaderboardBtn: "Leaderboard",
+    leaderboardTitle: "Leaderboard",
+    leaderboardLoading: "Loading...",
+    leaderboardEmpty: "No scores recorded yet.",
+    leaderboardColPseudo: "Player",
+    leaderboardColWins: "Wins",
+    leaderboardColGames: "Games",
+    leaderboardColTurns: "Turns",
+    confirmLeaderboardTitle: "Leaderboard",
+    confirmRulesTitle: "Rules",
+    confirmDealBtn: "Deal the cards",
+    diffEasyRules: "🗂️ Hand auto-sorted by rank\n🔒 Unplayable cards greyed out\n🤖 Basic AI",
+    diffNormalRules: "✋ Free hand order, drag to reorder\n🤖 Basic AI",
+    diffHardRules: "✋ Free hand order, drag to reorder\n🧠 Advanced AI, plans ahead",
+    diffNightmareRules: "✋ Free hand order, drag to reorder\n🧠 Advanced AI, plans ahead\n🙈 Counters hidden (opponent's hand + pile)\n🚫 Can't \"Take\" if you have a playable move"
   }
 };
 
@@ -507,6 +787,7 @@ function createGame(){
     bonusTurnsPlayer: null,
     bonusTurns: 0,
     winner: null,
+    resultSubmitted: false,
     turnCount: 0,
     log: []
   };
@@ -735,7 +1016,11 @@ function applyRankEffect(state, who, rank, count){
 function cutPile(state, who, fromQuad){
   // Angle aleatoire fige au moment de la coupe (pas recalcule a chaque
   // rendu), pour un empilement chaotique qui grandit au fil de la partie.
-  const angle = Math.round(90 + (Math.random()*50 - 25));
+  // Etale volontairement peu (+/-14 plutot que +/-25) : a plat (90 deg) une
+  // carte tournee deborde nettement moins que proche de l'horizontale, et
+  // cette pile est juste au-dessus des 3 cartes face visible/cachee du
+  // joueur -- un angle trop extreme finissait par les recouvrir.
+  const angle = Math.round(90 + (Math.random()*28 - 14));
   state.cutBatches.push({ count: state.pile.length, angle });
   state.discardOut.push(...state.pile);
   state.pile = [];
@@ -1023,6 +1308,7 @@ function aiTakeTurn(state){
    RENDU PHASER (assets pixel art)
    ========================================================= */
 const CARD_W = 80, CARD_H = 110;
+const CUT_FAN_MAX = 14; // nombre max de cartes dessinees dans l'eventail de coupe (voir drawAll*)
 // Zones detectees sur table.png (coords natives 1280x720), decalees de +TABLE_Y_OFFSET en y
 const TABLE_Y_OFFSET = 90;
 const ZONES = {
@@ -1035,10 +1321,28 @@ const ZONES = {
 function ty(y){ return y + TABLE_Y_OFFSET; }
 
 let game, gameState, selected = [];
+// Carte qui pilote le cycle de (re)selection en cours pour les rangs non
+// speciaux (voir onPlayerCardClick) : distingue un re-clic sur LA MEME
+// carte (retrecit le groupe) d'un clic sur une carte differente (nouveau
+// groupe). Auto-corrige des que selected ne contient plus cette carte
+// (Annuler, jeu reussi, etc.), pas besoin de la reinitialiser partout.
+let groupClickCardId = null;
 // 'easy' | 'normal' | 'hard' | 'nightmare' -- choisi sur l'ecran de
 // difficulte, avant de lancer une partie. Les regles precises de chaque
 // mode sont documentees a chaque endroit ou "difficulty" est lue.
 let difficulty = 'normal';
+// Remonte le resultat d'une partie offline vs IA vers Supabase, une seule
+// fois par partie (garde via gameState.resultSubmitted, remis a false par
+// createGame()). No-op silencieux tant qu'aucun profil n'existe : le mode
+// offline ne depend jamais de ca pour fonctionner (voir js/account.js).
+function maybeReportMatchResult(){
+  if(!gameState.winner || gameState.resultSubmitted) return;
+  gameState.resultSubmitted = true;
+  if(window.DaniszAccount && window.DaniszAccount.hasAccount()){
+    window.DaniszAccount.reportAiMatch(difficulty, gameState.winner==='player', gameState.turnCount)
+      .catch(e=>console.warn('[Danisz] score report failed', e));
+  }
+}
 // Date de derniere mise a jour du jeu, affichee en bulle sur l'ecran de
 // demarrage. A mettre a jour a chaque nouvelle session de modifications.
 const LAST_UPDATE = "16 aout 2026";
@@ -1072,6 +1376,7 @@ class MenuScene extends Phaser.Scene {
   }
 
   create(){
+    if(window.__onSceneChange) window.__onSceneChange('menu');
     this.cameras.main.setBackgroundColor(0x2e4928);
     this.render();
     const onResize = ()=>this.render();
@@ -1219,6 +1524,7 @@ class DifficultyScene extends Phaser.Scene {
   }
 
   create(){
+    if(window.__onSceneChange) window.__onSceneChange('difficulty');
     this.cameras.main.setBackgroundColor(0x2e4928);
     this.render();
     const onResize = ()=>this.render();
@@ -1262,7 +1568,7 @@ class DifficultyScene extends Phaser.Scene {
       const step = 84;
       let y = titleY + titleSize*0.9 + 46;
       modes.forEach(m=>{
-        this.diffButton(cx, y, btnW, btnH, m.label, m.sub, ()=>{ difficulty = m.key; this.scene.start('main'); });
+        this.diffButton(cx, y, btnW, btnH, m.label, m.sub, ()=>{ difficulty = m.key; this.scene.start('confirm'); });
         y += step;
       });
     } else {
@@ -1281,11 +1587,9 @@ class DifficultyScene extends Phaser.Scene {
       const positions = [[col0X,row0Y],[col1X,row0Y],[col0X,row1Y],[col1X,row1Y]];
       modes.forEach((m,i)=>{
         const [x,y] = positions[i];
-        this.diffButton(x, y, btnW, btnH, m.label, m.sub, ()=>{ difficulty = m.key; this.scene.start('main'); });
+        this.diffButton(x, y, btnW, btnH, m.label, m.sub, ()=>{ difficulty = m.key; this.scene.start('confirm'); });
       });
     }
-
-    this.add.text(cx, H-24, 'Hugin Corp™', {fontFamily:'"VT323"', fontSize:'18px', color:'#e9ddc8'}).setOrigin(0.5).setAlpha(0.25);
   }
 
   diffButton(x, y, w, h, label, sub, onClick){
@@ -1298,6 +1602,180 @@ class DifficultyScene extends Phaser.Scene {
     this.add.text(x, y+16, sub, {fontFamily:'"VT323"', fontSize:'14px', color:'#c9d6c0'}).setOrigin(0.5);
     const hit = this.safeInteractive(this.add.rectangle(x, y, w, h, 0x000000, 0));
     hit.on('pointerdown', onClick);
+  }
+}
+
+// ---- Ecran de confirmation entre le choix de difficulte et la partie :
+// classement (10 meilleurs, moins de tours pour gagner, pour CE mode et
+// CETTE difficulte precisement) a gauche, regles de la difficulte choisie
+// + bouton pour lancer la partie a droite (empiles verticalement en
+// portrait). Duplique volontairement safeInteractive/le style des panneaux
+// plutot que d'aller le chercher sur MainScene : meme convention que
+// Menu/DifficultyScene, qui ne partagent pas de classe de base commune. ----
+class ConfirmScene extends Phaser.Scene {
+  constructor(){ super('confirm'); }
+
+  safeInteractive(obj, useHandCursor=true){
+    obj.setInteractive(useHandCursor ? {useHandCursor:true} : undefined);
+    if(!obj.input || typeof obj.input.hitAreaCallback !== 'function'){
+      const w = Math.max(20, obj.width || 20);
+      const h = Math.max(20, obj.height || 20);
+      obj.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
+      if(obj.input && useHandCursor) obj.input.cursor = 'pointer';
+    }
+    return obj;
+  }
+
+  create(){
+    if(window.__onSceneChange) window.__onSceneChange('confirm');
+    this.cameras.main.setBackgroundColor(0x2e4928);
+    // null = chargement, [] = vide/erreur, tableau = donnees recues.
+    this.leaderboardRows = null;
+    this.render();
+    const onResize = ()=>this.render();
+    this.scale.on('resize', onResize);
+    this.events.once('shutdown', ()=>{ this.scale.off('resize', onResize); });
+    if(document.fonts && document.fonts.ready){
+      document.fonts.ready.then(()=>{ this.render(); });
+    }
+    // Capture la difficulte au moment du fetch : si le joueur revient en
+    // arriere et repart sur une autre avant que la reponse arrive, on jette
+    // ce resultat perime plutot que d'afficher le classement du mauvais mode.
+    const modeAtFetch = difficulty;
+    if(window.DaniszAccount){
+      window.DaniszAccount.fetchModeLeaderboard(modeAtFetch, 10).then(rows=>{
+        if(modeAtFetch!==difficulty || !this.scene.isActive()) return;
+        this.leaderboardRows = rows;
+        this.render();
+      });
+    } else {
+      this.leaderboardRows = [];
+    }
+  }
+
+  panelBg(x, y, w, h, originX=0.5, originY=0.5, alpha=0.55){
+    const px = x - w*originX, py = y - h*originY;
+    const g = this.add.graphics();
+    g.fillStyle(0x0c1410, alpha);
+    g.fillRoundedRect(px, py, w, h, 6);
+    g.lineStyle(1, 0xd7a45c, 0.5);
+    g.strokeRoundedRect(px, py, w, h, 6);
+    return g;
+  }
+
+  dealButton(x, y, w, h, label, onClick){
+    const g = this.add.graphics();
+    g.fillStyle(0x3f6b3f, 1);
+    g.fillRoundedRect(x-w/2, y-h/2, w, h, 10);
+    g.lineStyle(3, 0x8fd18f, 1);
+    g.strokeRoundedRect(x-w/2, y-h/2, w, h, 10);
+    this.add.text(x, y, label, {
+      fontFamily:'"Press Start 2P"', fontSize:'20px', color:'#f2ead9',
+      align:'center', wordWrap:{width:w-30}
+    }).setOrigin(0.5);
+    const hit = this.safeInteractive(this.add.rectangle(x, y, w, h, 0x000000, 0));
+    hit.on('pointerdown', onClick);
+  }
+
+  drawLeaderboard(x, y, w, h){
+    this.panelBg(x, y, w, h, 0, 0, 0.55);
+    const cx = x + w/2;
+    const titleY = y + 30;
+    this.add.text(cx, titleY, `🏆 ${t('confirmLeaderboardTitle')} 🏆`,
+      {fontFamily:'"Press Start 2P"', fontSize:'20px', color:'#ffd23f'}).setOrigin(0.5);
+
+    const listTop = titleY + 36;
+    if(this.leaderboardRows===null){
+      this.add.text(cx, listTop+20, t('leaderboardLoading'),
+        {fontFamily:'"VT323"', fontSize:'18px', color:'#c9d6c0'}).setOrigin(0.5);
+      return;
+    }
+    if(this.leaderboardRows.length===0){
+      this.add.text(cx, listTop+20, t('leaderboardEmpty'),
+        {fontFamily:'"VT323"', fontSize:'18px', color:'#c9d6c0', align:'center', wordWrap:{width:w-40}}).setOrigin(0.5);
+      return;
+    }
+
+    const colRankX = x+28, colPseudoX = x+64, colTurnsX = x+w-26;
+    this.add.text(colPseudoX, listTop, t('leaderboardColPseudo'),
+      {fontFamily:'"VT323"', fontSize:'16px', color:'#9aa8b0'});
+    this.add.text(colTurnsX, listTop, t('leaderboardColTurns'),
+      {fontFamily:'"VT323"', fontSize:'16px', color:'#9aa8b0'}).setOrigin(1,0);
+
+    const rowStep = Math.max(24, Math.min(34, (h - (listTop-y) - 30) / 10));
+    this.leaderboardRows.forEach((row, i)=>{
+      const ry = listTop + 28 + i*rowStep;
+      const rankColor = i===0 ? '#ffd23f' : i<3 ? '#e9ddc8' : '#9aa8b0';
+      this.add.text(colRankX, ry, `${i+1}`,
+        {fontFamily:'"VT323"', fontSize:'19px', color:rankColor}).setOrigin(0.5,0);
+      this.add.text(colPseudoX, ry, row.pseudo,
+        {fontFamily:'"VT323"', fontSize:'19px', color:'#e9ddc8'});
+      this.add.text(colTurnsX, ry, `${row.tours}`,
+        {fontFamily:'"VT323"', fontSize:'19px', color:'#e9ddc8'}).setOrigin(1,0);
+    });
+  }
+
+  drawRules(x, y, w, h){
+    this.panelBg(x, y, w, h, 0, 0, 0.55);
+    const titleY = y + 28;
+    this.add.text(x+w/2, titleY, t('confirmRulesTitle'),
+      {fontFamily:'"Press Start 2P"', fontSize:'18px', color:'#ffd23f'}).setOrigin(0.5);
+
+    const rulesKey = { easy:'diffEasyRules', normal:'diffNormalRules', hard:'diffHardRules', nightmare:'diffNightmareRules' }[difficulty];
+    const bullets = t(rulesKey).split('\n');
+    let by = titleY + 40;
+    bullets.forEach(line=>{
+      // Hauteur mesuree plutot qu'un pas fixe : a cette taille de police, une
+      // regle un peu longue (Cauchemar) peut se retrouver sur 2 lignes, un
+      // pas fixe l'aurait fait chevaucher la suivante.
+      const txt = this.add.text(x+22, by, line,
+        {fontFamily:'"VT323"', fontSize:'24px', color:'#e9ddc8', wordWrap:{width:w-44}});
+      by += txt.height + 12;
+    });
+  }
+
+  render(){
+    if(!this.scene.isActive() || !this.cameras || !this.cameras.main) return;
+    const Wcheck = this.scale.width, Hcheck = this.scale.height;
+    if(!Wcheck || !Hcheck || Wcheck<10 || Hcheck<10) return;
+    this.children.removeAll();
+    const W = this.scale.width, H = this.scale.height;
+    const cx = W/2;
+    const isPortraitConfirm = H > W;
+
+    const modeLabelKey = { easy:'diffEasy', normal:'diffNormal', hard:'diffHard', nightmare:'diffNightmare' }[difficulty];
+    const bannerSize = isPortraitConfirm
+      ? Math.max(16, Math.min(24, Math.round(W*0.045)))
+      : Math.max(16, Math.min(22, Math.round(H*0.045)));
+    this.add.text(cx, isPortraitConfirm ? 32 : 28, t(modeLabelKey),
+      {fontFamily:'"Press Start 2P"', fontSize:bannerSize+'px', color:'#c9d6c0'}).setOrigin(0.5);
+
+    if(isPortraitConfirm){
+      const margin = 20;
+      const contentTop = 62;
+      const btnH = 64;
+      const gapY = 18;
+      const availH = H - contentTop - btnH - gapY*2 - margin;
+      const lbH = Math.round(availH*0.5);
+      const rulesH = availH - lbH;
+      this.drawLeaderboard(margin, contentTop, W-margin*2, lbH);
+      this.drawRules(margin, contentTop+lbH+gapY, W-margin*2, rulesH);
+      this.dealButton(cx, H-margin-btnH/2, W-margin*2, btnH, t('confirmDealBtn'), ()=>this.scene.start('main'));
+    } else {
+      const margin = 24;
+      const contentTop = 58;
+      const contentBottom = H - 20;
+      const availH = contentBottom - contentTop;
+      const gapX = 24;
+      const leftW = Math.round((W - margin*2 - gapX) * 0.5);
+      const rightW = (W - margin*2 - gapX) - leftW;
+      const rightX = margin + leftW + gapX;
+      this.drawLeaderboard(margin, contentTop, leftW, availH);
+      const btnH = Math.min(90, availH*0.22);
+      const rulesH = availH - btnH - 20;
+      this.drawRules(rightX, contentTop, rightW, rulesH);
+      this.dealButton(rightX + rightW/2, contentTop + rulesH + 20 + btnH/2, rightW, btnH, t('confirmDealBtn'), ()=>this.scene.start('main'));
+    }
   }
 }
 
@@ -1328,6 +1806,7 @@ class MainScene extends Phaser.Scene {
   }
 
   create(){
+    if(window.__onSceneChange) window.__onSceneChange('main');
     gameState = createGame();
     this.spriteByCardId = {};
     this.dragReleasePos = {};
@@ -2084,6 +2563,7 @@ class MainScene extends Phaser.Scene {
   // Dispatch vers la bonne mise en page selon l'orientation detectee dans
   // layoutAndDraw().
   drawAll(){
+    maybeReportMatchResult();
     if(this.isPortrait) return this.drawAllPortrait();
     return this.drawAllLandscape();
   }
@@ -2209,11 +2689,16 @@ class MainScene extends Phaser.Scene {
     // plus loin -- plutot que de s'inserer entre la plus ancienne et le
     // fan, ou de faire bouger les cartes deja en place (ce qui donnait un
     // ordre d'apparition bizarre). Pas de Math.random (deterministe).
-    // Plafonne aux 24 plus RECENTES des cartes "en trop" (les plus proches
-    // du fan, donc les plus pertinentes a montrer).
+    // Plafonne aux 16 plus RECENTES des cartes "en trop" (les plus proches
+    // du fan, donc les plus pertinentes a montrer). Angle max a -80 (32 +
+    // 16*3) plutot que de pouvoir grimper jusqu'a -128 : au-dela de -90 le
+    // pivot etant le coin bas-gauche, la carte se met a pointer vers le BAS
+    // et finit par deborder sur les zones face visible/cachee du joueur
+    // juste en dessous. -80 reste large (bon volume visuel) sans jamais
+    // franchir ce cap.
     const hiddenCount = Math.max(0, gameState.pile.length - 3);
-    const shownExtras = Math.min(24, hiddenCount);
-    const anglePerCard = 4;
+    const shownExtras = Math.min(16, hiddenCount);
+    const anglePerCard = 3;
     for(let depth=shownExtras; depth>=1; depth--){
       const spr = this.add.image(pivotX, pivotY, 'card_back');
       spr.setOrigin(0,1);
@@ -2254,8 +2739,12 @@ class MainScene extends Phaser.Scene {
       {fontSize:'18px', originX:0.5, originY:0.5}, {alpha:0.45});
 
     // ---- Cut / cartes hors jeu : empilement chaotique, un angle fige par coupe ----
+    // Plafonne le nombre de cartes dessinees (les plus recentes) : au-dela
+    // d'une quinzaine l'eventail n'ajoute plus rien visuellement, juste plus
+    // de risque de deborder sur les cartes face visible/cachee juste en
+    // dessous. Le compteur, lui, reste exact (gameState.discardOut.length).
     const cutX = sx(ZONES.cut.x), cutY = ty(ZONES.cut.y);
-    gameState.cutBatches.forEach((batch, i)=>{
+    gameState.cutBatches.slice(-CUT_FAN_MAX).forEach((batch, i)=>{
       this.addCardSprite(cutX, cutY, 'card_back', 1.0, null, false, batch.angle);
     });
     this.autoLabel(cutX, cutY+70, t('cutCount', {n: gameState.discardOut.length}),
@@ -2534,9 +3023,12 @@ class MainScene extends Phaser.Scene {
     const pivotX = this.pileX - (CARD_W*TOP_SCALE)/2;
     const pivotY = this.pileY + (CARD_H*TOP_SCALE)/2;
 
+    // Meme plafond qu'en paysage (16 cartes, -80 deg max) : le pivot est le
+    // coin bas-gauche, au-dela de -90 la carte finit par pointer vers le bas
+    // et deborder sur les zones face visible/cachee du joueur en dessous.
     const hiddenCount = Math.max(0, gameState.pile.length-3);
-    const shownExtras = Math.min(24, hiddenCount);
-    const anglePerCard = 4;
+    const shownExtras = Math.min(16, hiddenCount);
+    const anglePerCard = 3;
     for(let depth=shownExtras; depth>=1; depth--){
       const spr = this.add.image(pivotX, pivotY, 'card_back');
       spr.setOrigin(0,1);
@@ -2570,7 +3062,7 @@ class MainScene extends Phaser.Scene {
       {fontSize:'14px', color:'#c9d6e3', originX:0.5, originY:0.5});
 
     const cutX = cx - 112*spaceScale, cutY = this.pileY;
-    gameState.cutBatches.forEach(batch=>{
+    gameState.cutBatches.slice(-CUT_FAN_MAX).forEach(batch=>{
       this.addCardSprite(cutX, cutY, 'card_back', 0.7*spaceScale, null, false, batch.angle);
     });
     this.autoLabel(cutX, cutY+54*spaceScale, t('cutCount', {n: gameState.discardOut.length}),
@@ -2735,17 +3227,43 @@ class MainScene extends Phaser.Scene {
     this.animateResult('player', res, pileTopBefore, pileSnapshotBefore);
   }
 
+  // ---- Clic sur une carte du joueur (main ou zone face visible/cachee) :
+  // - Jokers (2/3/10/A) : toggle carte-par-carte, inchange -- leur effet
+  //   depend souvent d'un nombre precis choisi a la main, pas d'un
+  //   ramassage automatique de tout le rang.
+  // - Cartes normales : 1er clic sur une carte -> tout son rang (dans la
+  //   meme zone) est preselectionne d'un coup (et donc glissable en
+  //   groupe) ; recliquer CETTE MEME carte retrecit la selection a elle
+  //   seule ; recliquer encore (ou cliquer une autre carte) deselectionne
+  //   completement / relance le cycle sur la nouvelle carte. ----
   onPlayerCardClick(card){
     if(gameState.turn!=='player' || gameState.winner || this.animating) return;
     if(this.awaitingFaceUpChoice){
       this.confirmTakePileWithFaceUp(card);
       return;
     }
-    const idx = selected.findIndex(c=>c.id===card.id);
-    if(idx>=0){ selected.splice(idx,1); }
-    else {
-      if(selected.length>0 && selected[0].rank!==card.rank) selected = [];
-      selected.push(card);
+    if(isSpecial(card.rank)){
+      const idx = selected.findIndex(c=>c.id===card.id);
+      if(idx>=0){ selected.splice(idx,1); }
+      else {
+        if(selected.length>0 && selected[0].rank!==card.rank) selected = [];
+        selected.push(card);
+      }
+      groupClickCardId = null;
+      this.render();
+      return;
+    }
+    if(groupClickCardId===card.id && selected.some(s=>s.id===card.id)){
+      if(selected.length>1){
+        selected = [card];
+      } else {
+        selected = [];
+        groupClickCardId = null;
+      }
+    } else {
+      const { cards } = getActiveZoneCards(gameState.player);
+      selected = cards.filter(c=>c.rank===card.rank);
+      groupClickCardId = card.id;
     }
     this.render();
   }
@@ -2896,7 +3414,7 @@ const config = {
   // automatique : le jeu doit continuer a tourner (animations, tour de l'IA)
   // meme si le focus de la fenetre bouge un peu.
   disableVisibilityChange: true,
-  scene: [MenuScene, DifficultyScene, MainScene]
+  scene: [MenuScene, DifficultyScene, ConfirmScene, MainScene]
 };
 game = new Phaser.Game(config);
 
@@ -2911,7 +3429,7 @@ window.__applyLang = function(newLang){
   try{ localStorage.setItem('shithead_lang', newLang); }catch(e){}
   if(window.__updateLangPopup) window.__updateLangPopup(newLang);
   if(!game || !game.scene) return;
-  ['menu','difficulty','main'].forEach(key=>{
+  ['menu','difficulty','confirm','main'].forEach(key=>{
     if(!game.scene.isActive(key)) return;
     const scene = game.scene.getScene(key);
     if(!scene) return;
@@ -2924,6 +3442,253 @@ window.__applyLang = function(newLang){
   });
 };
 window.__updateLangPopup(lang);
+</script>
+<script>
+/* =========================================================
+   Compte / classement (DOM, hors Phaser) : place APRES le script
+   principal expres, pour pouvoir appeler directement `t()` et lire
+   `lang` (bindings globaux partages entre <script> classiques sur la
+   meme page) sans passer par un pont window.__xxx comme pour le popup
+   de langue plus haut -- ce bloc-ci n'a pas besoin d'etre pret avant
+   que le script principal ait fini de s'executer.
+   ========================================================= */
+(function(){
+  const bar = document.getElementById('account-bar');
+  const btn = document.getElementById('account-btn');
+  const btnLabel = document.getElementById('account-btn-label');
+  const panel = document.getElementById('account-panel');
+  const guestBox = document.getElementById('account-guest');
+  const guestLabel = document.getElementById('account-guest-label');
+  const tabsBar = document.getElementById('account-tabs');
+  const tabSignup = document.getElementById('account-tab-signup');
+  const tabSignin = document.getElementById('account-tab-signin');
+  const signupFields = document.getElementById('account-signup-fields');
+  const signinFields = document.getElementById('account-signin-fields');
+  const needsPseudoFields = document.getElementById('account-needspseudo-fields');
+  const pseudoInput = document.getElementById('account-pseudo-input');
+  const emailInput = document.getElementById('account-email-input');
+  const passwordInput = document.getElementById('account-password-input');
+  const signupBtn = document.getElementById('account-signup-btn');
+  const signinEmailInput = document.getElementById('account-signin-email-input');
+  const signinPasswordInput = document.getElementById('account-signin-password-input');
+  const signinBtn = document.getElementById('account-signin-btn');
+  const needsPseudoInput = document.getElementById('account-needspseudo-input');
+  const needsPseudoBtn = document.getElementById('account-needspseudo-btn');
+  const signoutBtn = document.getElementById('account-signout-btn');
+  const errorBox = document.getElementById('account-error');
+  const loggedBox = document.getElementById('account-logged');
+  const pseudoDisplay = document.getElementById('account-pseudo-display');
+  const statsBox = document.getElementById('account-stats');
+  const leaderboardBtn = document.getElementById('account-leaderboard-btn');
+  const lbOverlay = document.getElementById('leaderboard-overlay');
+  const lbTitle = document.getElementById('leaderboard-title');
+  const lbBody = document.getElementById('leaderboard-body');
+  const lbCloseBtn = document.getElementById('leaderboard-close-btn');
+
+  // Le bouton compte (icone + "Profil") n'existe que sur l'ecran de menu :
+  // une fois une partie lancee (difficulte/partie), pas d'entre-deux visible
+  // -- soit un profil a deja ete choisi avant de lancer la partie, soit la
+  // partie compte comme invite, un point c'est tout.
+  let currentScene = 'menu';
+  window.__onSceneChange = function(key){
+    currentScene = key;
+    if(key!=='menu'){ closePanel(); lbOverlay.classList.remove('open'); }
+    refreshAccountUI();
+  };
+
+  // 'signup' | 'signin' | 'needsPseudo' -- lequel des 3 formulaires du bloc
+  // "non connecte" est affiche. needsPseudo est impose par signIn() quand un
+  // compte existe (email+mdp valides) mais n'a jamais eu de pseudo enregistre
+  // (inscription interrompue avant confirmation email, par ex.).
+  let guestMode = 'signup';
+
+  function setGuestMode(mode){
+    guestMode = mode;
+    errorBox.textContent = '';
+    tabSignup.classList.toggle('active', mode==='signup');
+    tabSignin.classList.toggle('active', mode==='signin');
+    signupFields.style.display = mode==='signup' ? 'block' : 'none';
+    signinFields.style.display = mode==='signin' ? 'block' : 'none';
+    needsPseudoFields.style.display = mode==='needsPseudo' ? 'block' : 'none';
+    tabsBar.style.display = mode==='needsPseudo' ? 'none' : 'flex';
+  }
+
+  function refreshAccountUI(){
+    bar.style.display = currentScene==='menu' ? '' : 'none';
+    if(currentScene!=='menu') return;
+    const state = window.DaniszAccount ? window.DaniszAccount.getState() : {session:null, profile:null};
+    btn.title = t('accountBtnTitle');
+    btnLabel.textContent = t('accountMenuLabel');
+    tabSignup.textContent = t('accountTabSignup');
+    tabSignin.textContent = t('accountTabSignin');
+    pseudoInput.placeholder = t('accountPseudoPlaceholder');
+    emailInput.placeholder = t('accountEmailPlaceholder');
+    passwordInput.placeholder = t('accountPasswordPlaceholder');
+    signupBtn.textContent = t('accountSignupBtn');
+    signinEmailInput.placeholder = t('accountEmailPlaceholder');
+    signinPasswordInput.placeholder = t('accountPasswordPlaceholder');
+    signinBtn.textContent = t('accountSigninBtn');
+    needsPseudoInput.placeholder = t('accountPseudoPlaceholder');
+    needsPseudoBtn.textContent = t('accountSignupBtn');
+    leaderboardBtn.textContent = t('accountLeaderboardBtn');
+    signoutBtn.textContent = t('accountSignoutBtn');
+    if(state.profile){
+      guestBox.style.display = 'none';
+      loggedBox.style.display = 'block';
+      pseudoDisplay.textContent = state.profile.pseudo;
+      statsBox.textContent = t('accountStats', {wins: state.profile.victoires, games: state.profile.parties_jouees});
+    } else {
+      guestBox.style.display = 'block';
+      loggedBox.style.display = 'none';
+      // Session active sans profil = compte cree mais jamais fini d'installer
+      // (pseudo pas encore choisi) : force le mode plutot que de laisser
+      // l'utilisateur revoir un formulaire email+mdp qu'il a deja rempli.
+      if(state.session && guestMode!=='needsPseudo') setGuestMode('needsPseudo');
+      guestLabel.textContent = t(guestMode==='needsPseudo' ? 'accountNeedsPseudoLabel' : 'accountGuestTitle');
+    }
+  }
+
+  function closePanel(){
+    panel.classList.remove('open');
+    errorBox.textContent = '';
+    if(guestMode!=='needsPseudo') setGuestMode('signup');
+  }
+
+  function showError(code){
+    errorBox.textContent = t('accountError' + code.charAt(0).toUpperCase() + code.slice(1));
+  }
+
+  async function withBusyButton(button, busyKey, fn){
+    button.disabled = true;
+    const prevLabel = button.textContent;
+    button.textContent = t(busyKey);
+    try{
+      return await fn();
+    } finally {
+      button.disabled = false;
+      button.textContent = prevLabel;
+    }
+  }
+
+  btn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    refreshAccountUI();
+    panel.classList.toggle('open');
+  });
+  panel.addEventListener('click', (e)=>e.stopPropagation());
+  document.addEventListener('click', closePanel);
+
+  tabSignup.addEventListener('click', (e)=>{ e.stopPropagation(); setGuestMode('signup'); });
+  tabSignin.addEventListener('click', (e)=>{ e.stopPropagation(); setGuestMode('signin'); });
+
+  signupBtn.addEventListener('click', async (e)=>{
+    e.stopPropagation();
+    if(!window.DaniszAccount) return;
+    errorBox.textContent = '';
+    const result = await withBusyButton(signupBtn, 'accountWorking', ()=>
+      window.DaniszAccount.signUp(pseudoInput.value, emailInput.value, passwordInput.value));
+    if(result.error){ showError(result.error); return; }
+    pseudoInput.value = ''; emailInput.value = ''; passwordInput.value = '';
+    refreshAccountUI();
+  });
+  [pseudoInput, emailInput, passwordInput].forEach(el=>{
+    el.addEventListener('keydown', (e)=>{ if(e.key==='Enter') signupBtn.click(); });
+  });
+
+  signinBtn.addEventListener('click', async (e)=>{
+    e.stopPropagation();
+    if(!window.DaniszAccount) return;
+    errorBox.textContent = '';
+    const result = await withBusyButton(signinBtn, 'accountWorking', ()=>
+      window.DaniszAccount.signIn(signinEmailInput.value, signinPasswordInput.value));
+    if(result.error && result.error!=='needsPseudo'){ showError(result.error); return; }
+    signinEmailInput.value = ''; signinPasswordInput.value = '';
+    refreshAccountUI();
+  });
+  [signinEmailInput, signinPasswordInput].forEach(el=>{
+    el.addEventListener('keydown', (e)=>{ if(e.key==='Enter') signinBtn.click(); });
+  });
+
+  needsPseudoBtn.addEventListener('click', async (e)=>{
+    e.stopPropagation();
+    if(!window.DaniszAccount) return;
+    errorBox.textContent = '';
+    const result = await withBusyButton(needsPseudoBtn, 'accountWorking', ()=>
+      window.DaniszAccount.setPseudo(needsPseudoInput.value));
+    if(result.error){ showError(result.error); return; }
+    needsPseudoInput.value = '';
+    refreshAccountUI();
+  });
+  needsPseudoInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') needsPseudoBtn.click(); });
+
+  signoutBtn.addEventListener('click', async (e)=>{
+    e.stopPropagation();
+    if(!window.DaniszAccount) return;
+    await window.DaniszAccount.signOut();
+    setGuestMode('signup');
+    refreshAccountUI();
+  });
+
+  function renderLeaderboard(rows){
+    lbBody.innerHTML = '';
+    if(rows.length===0){
+      const p = document.createElement('div');
+      p.textContent = t('leaderboardEmpty');
+      lbBody.appendChild(p);
+      return;
+    }
+    const table = document.createElement('table');
+    table.id = 'leaderboard-table';
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    [['leaderboardColPseudo',false], ['leaderboardColWins',true], ['leaderboardColGames',true]].forEach(([key,num])=>{
+      const th = document.createElement('th');
+      th.textContent = t(key);
+      if(num) th.className = 'num';
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    rows.forEach(row=>{
+      const tr = document.createElement('tr');
+      const tdPseudo = document.createElement('td');
+      tdPseudo.textContent = row.pseudo;
+      const tdWins = document.createElement('td');
+      tdWins.className = 'num';
+      tdWins.textContent = row.victoires;
+      const tdGames = document.createElement('td');
+      tdGames.className = 'num';
+      tdGames.textContent = row.parties_jouees;
+      tr.appendChild(tdPseudo); tr.appendChild(tdWins); tr.appendChild(tdGames);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    lbBody.appendChild(table);
+  }
+
+  leaderboardBtn.addEventListener('click', async (e)=>{
+    e.stopPropagation();
+    closePanel();
+    lbTitle.textContent = t('leaderboardTitle');
+    lbBody.textContent = t('leaderboardLoading');
+    lbOverlay.classList.add('open');
+    const rows = window.DaniszAccount ? await window.DaniszAccount.fetchLeaderboard(20) : [];
+    renderLeaderboard(rows);
+  });
+  lbCloseBtn.addEventListener('click', ()=>lbOverlay.classList.remove('open'));
+  lbOverlay.addEventListener('click', (e)=>{ if(e.target===lbOverlay) lbOverlay.classList.remove('open'); });
+
+  setGuestMode('signup');
+  if(window.DaniszAccount) window.DaniszAccount.onChange(refreshAccountUI);
+  refreshAccountUI();
+
+  const prevApplyLang = window.__applyLang;
+  window.__applyLang = function(newLang){
+    prevApplyLang(newLang);
+    refreshAccountUI();
+  };
+})();
 </script>
 </body>
 </html>
