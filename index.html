@@ -22,11 +22,42 @@
     cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;
   }
   #fullscreen-btn:active{ background:rgba(12,20,16,0.8); }
+
+  /* Ecran "tourne ton telephone" : trop de cartes/elements pour bien tenir
+     verticalement, donc plutot que de forcer un mode portrait compresse,
+     on demande de passer en paysage sur mobile. Cible specifiquement les
+     ecrans tactiles en portrait (pas une fenetre desktop juste redimensionnee
+     en haut-et-etroit, via pointer:coarse). */
+  #rotate-overlay{
+    display:none;
+    position:fixed; inset:0; z-index:20000;
+    background:#1c2b18;
+    color:#e9ddc8;
+    flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:32px;
+    font-family:'Press Start 2P', monospace;
+  }
+  #rotate-overlay .icon{ font-size:64px; margin-bottom:24px; animation:rotate-hint 1.8s ease-in-out infinite; }
+  #rotate-overlay .msg{ font-size:15px; line-height:1.8; max-width:320px; }
+  #rotate-overlay .msg-sub{ font-family:'VT323',monospace; font-size:18px; color:#9aa8b0; margin-top:14px; }
+  @keyframes rotate-hint{
+    0%,100%{ transform:rotate(0deg); }
+    50%{ transform:rotate(90deg); }
+  }
+  @media (orientation:portrait) and (pointer:coarse){
+    #rotate-overlay{ display:flex; }
+    #game-container, #fullscreen-btn{ display:none; }
+  }
 </style>
 </head>
 <body>
 <div id="game-container"></div>
 <button id="fullscreen-btn" title="Plein ecran">⛶</button>
+<div id="rotate-overlay">
+  <div class="icon">📱</div>
+  <div class="msg">TOURNE TON TELEPHONE</div>
+  <div class="msg-sub">Trop de cartes pour tenir a l'ecran en vertical -- passe en paysage.</div>
+</div>
 <script>
 // Bouton plein ecran : sur mobile, la barre d'adresse et la barre de
 // navigation Android bouffent une bonne partie de la hauteur reelle. Le
@@ -43,9 +74,24 @@
   // le bouton reste visuellement colle au toggle, peu importe la taille
   // d'ecran, plutot qu'une position fixe qui ne marche que sur un format.
   function repositionButton(){
-    const zoom = Math.min(1, window.innerHeight / 900);
-    btn.style.left = Math.round(140 * zoom) + 'px';
-    btn.style.top = Math.round(6 * zoom + 4) + 'px';
+    const isPortrait = window.innerHeight > window.innerWidth;
+    if(isPortrait){
+      // En portrait, colle au coin haut-droit (rien d'autre a cet endroit,
+      // et ca laisse le coin gauche pour FR/EN + compteur de tours).
+      btn.style.left = '';
+      btn.style.right = '8px';
+      btn.style.top = '8px';
+    } else {
+      // En paysage, reste colle au toggle FR/EN : le jeu zoome son canevas
+      // logique (900 de haut) pour remplir l'ecran reel, donc tout (dont ce
+      // toggle) s'affiche plus petit/plus proche du bord sur un petit
+      // ecran. On approxime ce meme zoom ici pour rester visuellement
+      // colle au toggle, peu importe la taille d'ecran.
+      const zoom = Math.min(1, window.innerHeight / 900);
+      btn.style.right = '';
+      btn.style.left = Math.round(140 * zoom) + 'px';
+      btn.style.top = Math.round(6 * zoom + 4) + 'px';
+    }
   }
   repositionButton();
   window.addEventListener('resize', repositionButton);
@@ -136,12 +182,22 @@ const I18N = {
     defeat: "DEFAITE",
     takenLabel: "+{n} carte(s)",
     takenLabelBig: "+{n} carte(s) !",
-    menuVsAI: "1v1 vs Adversaire",
-    menuOnline: "1v1 online",
-    menuFFA: "1v1v1v1",
+    menuVsAI: "1v1 offline",
+    menuVs3: "1v3 offline",
+    menuOnline: "1v1 joueur",
+    menuFFA: "1v3 joueurs",
     comingSoon: "Bientot",
     turnCounter: "Tour {n}",
-    turnsSubtitle: "en {n} tours"
+    turnsSubtitle: "en {n} tours",
+    diffTitle: "Choisis la difficulte",
+    diffEasy: "Facile",
+    diffEasySub: "Main triee, injouables grisees",
+    diffNormal: "Normal",
+    diffNormalSub: "Main libre, glisse pour trier",
+    diffHard: "Difficile",
+    diffHardSub: "+ strategies avancees",
+    diffNightmare: "Cauchemar",
+    diffNightmareSub: "Impossible de prendre si tu peux jouer"
   },
   en: {
     logStarterYou: "You go first, with the lowest card.",
@@ -192,12 +248,22 @@ const I18N = {
     defeat: "DEFEAT",
     takenLabel: "+{n} card(s)",
     takenLabelBig: "+{n} card(s)!",
-    menuVsAI: "1v1 vs Opponent",
+    menuVsAI: "1v1 offline",
+    menuVs3: "1v3 offline",
     menuOnline: "1v1 online",
-    menuFFA: "1v1v1v1",
+    menuFFA: "1v3 players",
     comingSoon: "Coming soon",
     turnCounter: "Turn {n}",
-    turnsSubtitle: "in {n} turns"
+    turnsSubtitle: "in {n} turns",
+    diffTitle: "Choose difficulty",
+    diffEasy: "Easy",
+    diffEasySub: "Sorted hand, unplayable greyed",
+    diffNormal: "Normal",
+    diffNormalSub: "Free hand, drag to sort",
+    diffHard: "Hard",
+    diffHardSub: "+ advanced strategies",
+    diffNightmare: "Nightmare",
+    diffNightmareSub: "Can't take if you can play"
   }
 };
 
@@ -637,10 +703,112 @@ function advanceTurn(state, who){
   state.turn = next;
 }
 
+// ---- Strategies avancees de l'IA (mode Difficile, et donc aussi Cauchemar
+// qui les cumule). JAMAIS appelee en Facile/Normal -- voir le branchement
+// explicite dans aiTakeTurn ci-dessous, qui garde la logique de base
+// (lignes 737-745 originales) totalement intacte pour ces deux modes.
+//
+// Regles, telles qu'expliquees :
+// 1. Ne jamais jouer plusieurs jokers (2/3/10/As) d'un coup, meme si l'IA en
+//    a plusieurs du meme rang : les poser un par un use l'adversaire et fait
+//    durer une guerre plus longtemps, plutot que de gacher 3 As en un coup.
+// 2. Economiser les jokers (et ENCORE PLUS les 10) tant que possible : le
+//    but est d'en garder pour la phase "cartes decouvertes", ou un joker
+//    (et surtout un 10, qui vide la pile) permet de sortir une carte gratos.
+// 3. Traiter le 7 comme un joker a part : anti-joker puissant, excellent
+//    bloquant de fin de partie, donc pas gaspille non plus en jeu courant.
+// 4. Cruaute de fin de partie, basee sur la PHASE ACTUELLE DE L'ADVERSAIRE
+//    (info publique, pas de triche : on sait toujours dans quelle zone
+//    l'adversaire pioche, seule l'identite d'une carte face cachee reste
+//    secrete) :
+//    - Adversaire en phase "decouverte" (face visible, cartes connues de
+//      tous) : le forcer a bruler ses meilleures cartes decouvertes en
+//      jouant un 7 (contrainte) ou en l'attaquant (As, guerre) des que
+//      possible.
+//    - Adversaire en phase "cartes cachees" (tirage a l'aveugle) : jouer un
+//      7 si possible (grosses chances qu'un tirage aleatoire ne puisse pas
+//      suivre), sinon attaquer (As), sinon jouer de facon a laisser la carte
+//      de plus haute valeur possible sur la pile (hors jokers, qui ne
+//      bloquent jamais rien puisqu'ils passent toujours).
+function aiChooseAdvancedPlay(state, byRank, playableRanks){
+  const JOKERS = ['2','3','A']; // le 10 est gere a part (encore plus economise)
+  const isJokerish = (r) => r==='10' || r==='7' || JOKERS.includes(r);
+  // Rang 1 seule carte pour tout ce qui est "joker-like" (jamais groupe),
+  // sinon le groupe complet (jusqu'a 4) comme la logique de base.
+  const safeCount = (r) => isJokerish(r) ? 1 : Math.min(byRank[r].length, 4);
+
+  // Valeur EFFECTIVE si ce rang est joue, pour choisir quoi laisser sur la
+  // pile : un 2/10/As ne bloque jamais rien (toujours jouable, donc pas de
+  // "valeur" a proprement parler). Un 3, lui, COPIE la carte juste en
+  // dessous : s'il y a deja une carte de haute valeur sur la pile, jouer un
+  // 3 dessus PRESERVE cette valeur au lieu de la remplacer par un simple 3 --
+  // il reste donc pertinent dans ce cas precis, contrairement aux autres
+  // jokers.
+  const effectiveValueIfPlayed = (r) => {
+    if(r==='3'){
+      const top = pileTop(state);
+      if(top){
+        const belowEffective = top.effectiveRank || top.rank;
+        if(belowEffective !== '3') return RANK_VALUE[belowEffective];
+      }
+      return -1;
+    }
+    if(r==='2' || r==='10' || r==='A') return -1;
+    return RANK_VALUE[r];
+  };
+
+  const opponentZone = getActiveZoneCards(state.player).zone;
+
+  if(opponentZone==='faceDown'){
+    if(playableRanks.includes('7')) return { rank:'7', count:1 };
+    if(playableRanks.includes('A')) return { rank:'A', count:1 };
+    // Sinon : laisser la carte de plus haute valeur EFFECTIVE possible sur
+    // la pile (le 3 compte s'il copie une valeur haute deja presente).
+    const scored = playableRanks.map(r=>({ r, val: effectiveValueIfPlayed(r) }));
+    const withValue = scored.filter(s=>s.val>=0);
+    const pool = withValue.length>0 ? withValue : scored;
+    let best = pool[0];
+    for(const s of pool){ if(s.val > best.val) best = s; }
+    return { rank:best.r, count: safeCount(best.r) };
+  }
+
+  if(opponentZone==='faceUp'){
+    if(playableRanks.includes('7')) return { rank:'7', count:1 };
+    if(playableRanks.includes('A')) return { rank:'A', count:1 };
+    // Sinon, retombe sur la strategie generale ci-dessous.
+  }
+
+  // Strategie generale (hors cruaute ciblee) : cartes normales d'abord, puis
+  // le 7 (traite comme un joker), puis les jokers 2/3/As, puis le 10 en tout
+  // dernier recours (le plus economise de tous).
+  const tier = (r) => {
+    if(r==='10') return 3;
+    if(JOKERS.includes(r)) return 2;
+    if(r==='7') return 1;
+    return 0;
+  };
+  const sorted = [...playableRanks].sort((a,b)=>{
+    const ta = tier(a), tb = tier(b);
+    if(ta!==tb) return ta-tb;
+    return RANK_VALUE[a]-RANK_VALUE[b];
+  });
+  const chosen = sorted[0];
+  return { rank: chosen, count: safeCount(chosen) };
+}
+
 function aiTakeTurn(state){
   if(state.winner || state.turn!=='ai') return null;
   const zoneInfo = getActiveZoneCards(state.ai);
 
+  // ATTENTION : ceci est le comportement de BASE de l'IA, utilise tel quel
+  // en mode Facile et Normal. Les "strategies avancees" du mode Difficile
+  // (et donc aussi Cauchemar, qui les cumule) doivent etre ajoutees comme
+  // un branchement explicite ici (ex: if(difficulty==='hard' ||
+  // difficulty==='nightmare'){ ... logique avancee ... } else { ... logique
+  // de base inchangee ... }), jamais en modifiant directement la logique
+  // ci-dessous : Facile/Normal doivent rester strictement sur ce
+  // comportement de base, peu importe ce qui est ajoute pour les modes
+  // superieurs.
   if(zoneInfo.zone==='faceDown'){
     const card = zoneInfo.cards[Math.floor(secureRandom()*zoneInfo.cards.length)];
     return tryFaceDownCard(state, 'ai', card);
@@ -661,15 +829,21 @@ function aiTakeTurn(state){
     return forceTakePile(state, 'ai');
   }
 
-  playableRanks.sort((a,b)=>{
-    const aSpec = isSpecial(a) ? 1 : 0, bSpec = isSpecial(b) ? 1 : 0;
-    if(aSpec!==bSpec) return aSpec-bSpec;
-    return RANK_VALUE[a]-RANK_VALUE[b];
-  });
-
-  const chosenRank = playableRanks[0];
-  const group = byRank[chosenRank];
-  const play = group.slice(0, Math.min(group.length,4));
+  let chosenRank, play;
+  if(difficulty==='hard' || difficulty==='nightmare'){
+    const choice = aiChooseAdvancedPlay(state, byRank, playableRanks);
+    chosenRank = choice.rank;
+    play = byRank[chosenRank].slice(0, choice.count);
+  } else {
+    playableRanks.sort((a,b)=>{
+      const aSpec = isSpecial(a) ? 1 : 0, bSpec = isSpecial(b) ? 1 : 0;
+      if(aSpec!==bSpec) return aSpec-bSpec;
+      return RANK_VALUE[a]-RANK_VALUE[b];
+    });
+    chosenRank = playableRanks[0];
+    const group = byRank[chosenRank];
+    play = group.slice(0, Math.min(group.length,4));
+  }
   return playGroup(state, 'ai', play);
 }
 
@@ -689,6 +863,13 @@ const ZONES = {
 function ty(y){ return y + TABLE_Y_OFFSET; }
 
 let game, gameState, selected = [];
+// 'easy' | 'normal' | 'hard' | 'nightmare' -- choisi sur l'ecran de
+// difficulte, avant de lancer une partie. Les regles precises de chaque
+// mode sont documentees a chaque endroit ou "difficulty" est lue.
+let difficulty = 'normal';
+// Date de derniere mise a jour du jeu, affichee en bulle sur l'ecran de
+// demarrage. A mettre a jour a chaque nouvelle session de modifications.
+const LAST_UPDATE = "16 aout 2026";
 
 /* =========================================================
    MENU DE DEMARRAGE
@@ -737,27 +918,68 @@ class MenuScene extends Phaser.Scene {
     // Titre : taille proportionnelle a la hauteur dispo, pour ne jamais
     // deborder sur un petit ecran paysage (barre d'adresse mobile qui
     // bouffe une bonne partie de la hauteur reelle).
-    const titleSize = Math.max(34, Math.min(72, Math.round(H*0.16)));
-    const titleY = Math.max(30, Math.min(210, H*0.18));
+    const isPortraitMenu = H > W;
+    const titleSize = isPortraitMenu
+      ? Math.max(34, Math.min(64, Math.round(W*0.13)))
+      : Math.max(34, Math.min(72, Math.round(H*0.16)));
+    const titleY = isPortraitMenu
+      ? Math.max(60, Math.min(180, H*0.12))
+      : Math.max(30, Math.min(210, H*0.18));
     this.add.text(cx, titleY, 'Danisz', {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px', color:'#e9ddc8'}).setOrigin(0.5);
 
-    // Boutons en grille 2 colonnes (utilise la largeur dispo plutot que de
-    // tout empiler verticalement, precieux sur un ecran paysage bas) :
-    // 3 cases remplies, une 4eme reservee pour un futur mode.
-    const btnW = Math.min(320, W*0.4);
-    const btnH = 66;
-    const gapX = 26, gapY = 18;
-    const gridTop = titleY + titleSize*0.75 + 30;
-    const col0X = cx - btnW/2 - gapX/2;
-    const col1X = cx + btnW/2 + gapX/2;
-    const row0Y = gridTop + btnH/2;
-    const row1Y = row0Y + btnH + gapY;
-    this.menuButton(col0X, row0Y, btnW, btnH, t('menuVsAI'), true, ()=>this.scene.start('main'));
-    this.menuButton(col1X, row0Y, btnW, btnH, t('menuOnline'), false);
-    this.menuButton(col0X, row1Y, btnW, btnH, t('menuFFA'), false);
+    if(isPortraitMenu){
+      // Empile en 1 colonne pleine largeur : une grille 2 colonnes ne
+      // laisse pas assez de place pour le texte des boutons sur un ecran
+      // etroit (ca debordait/se chevauchait). Le nouveau mode "1 vs 3" est
+      // place juste apres "vs Adversaire" (demande : en-dessous en vertical).
+      const btnW = Math.min(380, W*0.86);
+      const btnH = 68;
+      const step = 96; // assez pour le sous-titre "Bientot" des boutons desactives
+      let y = titleY + titleSize*0.8 + 50;
+      this.menuButton(cx, y, btnW, btnH, t('menuVsAI'), true, ()=>this.scene.start('difficulty'));
+      y += step;
+      this.menuButton(cx, y, btnW, btnH, t('menuVs3'), false);
+      y += step;
+      this.menuButton(cx, y, btnW, btnH, t('menuOnline'), false);
+      y += step;
+      this.menuButton(cx, y, btnW, btnH, t('menuFFA'), false);
+    } else {
+      // Boutons en grille 2 colonnes (utilise la largeur dispo plutot que de
+      // tout empiler verticalement, precieux sur un ecran paysage bas) :
+      // le nouveau mode "1 vs 3" va juste a droite de "vs Adversaire"
+      // (demande : a droite en horizontal), la grille est desormais pleine.
+      const btnW = Math.min(320, W*0.4);
+      const btnH = 66;
+      const gapX = 26, gapY = 40;
+      const gridTop = titleY + titleSize*0.75 + 30;
+      const col0X = cx - btnW/2 - gapX/2;
+      const col1X = cx + btnW/2 + gapX/2;
+      const row0Y = gridTop + btnH/2;
+      const row1Y = row0Y + btnH + gapY;
+      this.menuButton(col0X, row0Y, btnW, btnH, t('menuVsAI'), true, ()=>this.scene.start('difficulty'));
+      this.menuButton(col1X, row0Y, btnW, btnH, t('menuVs3'), false);
+      this.menuButton(col0X, row1Y, btnW, btnH, t('menuOnline'), false);
+      this.menuButton(col1X, row1Y, btnW, btnH, t('menuFFA'), false);
+    }
 
     // Marque, discrete en bas
     this.add.text(cx, H-28, 'Hugin Corp™', {fontFamily:'"VT323"', fontSize:'18px', color:'#e9ddc8'}).setOrigin(0.5).setAlpha(0.25);
+
+    // Bulle "derniere mise a jour", coin bas-droit (le bas-centre est deja
+    // pris par la marque).
+    const updText = `MAJ ${LAST_UPDATE}`;
+    const updSize = 13;
+    const probe = this.add.text(0, 0, updText, {fontFamily:'"VT323"', fontSize:updSize+'px'}).setVisible(false);
+    const padX = 10, padY = 6;
+    const bw = probe.width + padX*2, bh = probe.height + padY*2;
+    probe.destroy();
+    const bx = W - 14 - bw, by = H - 14 - bh;
+    const g = this.add.graphics();
+    g.fillStyle(0x0c1410, 0.5);
+    g.fillRoundedRect(bx, by, bw, bh, 6);
+    g.lineStyle(1, 0xd7a45c, 0.4);
+    g.strokeRoundedRect(bx, by, bw, bh, 6);
+    this.add.text(bx+padX, by+padY, updText, {fontFamily:'"VT323"', fontSize:updSize+'px', color:'#9aa8b0'});
   }
 
   setLang(newLang){
@@ -786,6 +1008,81 @@ class MenuScene extends Phaser.Scene {
       const hit = this.add.rectangle(x, y, w, h, 0x000000, 0).setInteractive({useHandCursor:true});
       hit.on('pointerdown', onClick);
     }
+  }
+}
+
+// ---- Ecran de choix de difficulte, entre le menu principal et la partie
+// elle-meme (uniquement pour le mode "vs Adversaire" pour l'instant). Les
+// regles precises de chaque mode sont appliquees dans MainScene en lisant
+// la variable globale `difficulty`. ----
+class DifficultyScene extends Phaser.Scene {
+  constructor(){ super('difficulty'); }
+
+  create(){
+    this.cameras.main.setBackgroundColor(0x2e4928);
+    this.render();
+    const onResize = ()=>this.render();
+    this.scale.on('resize', onResize);
+    this.events.once('shutdown', ()=>{ this.scale.off('resize', onResize); });
+    if(document.fonts && document.fonts.ready){
+      document.fonts.ready.then(()=>{ this.render(); });
+    }
+  }
+
+  render(){
+    if(!this.scene.isActive() || !this.cameras || !this.cameras.main) return;
+    this.children.removeAll();
+    const W = this.scale.width, H = this.scale.height;
+    const cx = W/2;
+
+    const frColor = lang==='fr' ? '#ffd23f' : '#8a95a0';
+    const enColor = lang==='en' ? '#ffd23f' : '#8a95a0';
+    const frLbl = this.add.text(20, 18, 'FR', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:frColor}).setOrigin(0,0.5);
+    frLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('fr'));
+    const enLbl = this.add.text(68, 18, 'EN', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:enColor}).setOrigin(0,0.5);
+    enLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('en'));
+
+    const titleSize = Math.max(22, Math.min(34, Math.round(W*0.05)));
+    const titleY = Math.max(60, Math.min(150, H*0.14));
+    this.add.text(cx, titleY, t('diffTitle'), {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px', color:'#e9ddc8'}).setOrigin(0.5);
+
+    // Toujours empiles en 1 colonne verticale (demande explicitement),
+    // peu importe l'orientation.
+    const btnW = Math.min(380, W*0.86);
+    const btnH = 66;
+    const step = 84;
+    let y = titleY + titleSize*0.9 + 46;
+    const modes = [
+      { key:'easy', label: t('diffEasy'), sub: t('diffEasySub') },
+      { key:'normal', label: t('diffNormal'), sub: t('diffNormalSub') },
+      { key:'hard', label: t('diffHard'), sub: t('diffHardSub') },
+      { key:'nightmare', label: t('diffNightmare'), sub: t('diffNightmareSub') },
+    ];
+    modes.forEach(m=>{
+      this.diffButton(cx, y, btnW, btnH, m.label, m.sub, ()=>{ difficulty = m.key; this.scene.start('main'); });
+      y += step;
+    });
+
+    this.add.text(cx, H-24, 'Hugin Corp™', {fontFamily:'"VT323"', fontSize:'18px', color:'#e9ddc8'}).setOrigin(0.5).setAlpha(0.25);
+  }
+
+  diffButton(x, y, w, h, label, sub, onClick){
+    const g = this.add.graphics();
+    g.fillStyle(0x3f6b3f, 1);
+    g.fillRoundedRect(x-w/2, y-h/2, w, h, 10);
+    g.lineStyle(3, 0x8fd18f, 1);
+    g.strokeRoundedRect(x-w/2, y-h/2, w, h, 10);
+    this.add.text(x, y-8, label, {fontFamily:'"Press Start 2P"', fontSize:'17px', color:'#f2ead9'}).setOrigin(0.5);
+    this.add.text(x, y+16, sub, {fontFamily:'"VT323"', fontSize:'14px', color:'#c9d6c0'}).setOrigin(0.5);
+    const hit = this.add.rectangle(x, y, w, h, 0x000000, 0).setInteractive({useHandCursor:true});
+    hit.on('pointerdown', onClick);
+  }
+
+  setLang(newLang){
+    if(lang===newLang) return;
+    lang = newLang;
+    try{ localStorage.setItem('shithead_lang', newLang); }catch(e){}
+    this.render();
   }
 }
 
@@ -873,23 +1170,53 @@ class MainScene extends Phaser.Scene {
   // de l'IA, mais teste et confirme innocent : le vrai bug etait un
   // probleme d'ordre dans afterAnimation() (voir plus bas), maintenant
   // corrige. Le zoom peut donc revenir sans risque.
+  // Choisit le canevas virtuel (paysage large-et-court ou portrait
+  // etroit-et-haut) selon le vrai ratio de l'ecran, et cale la camera
+  // dessus. this.isPortrait pilote ensuite drawAll() vers la bonne mise en
+  // page (drawAllLandscape / drawAllPortrait), qui sont deux presentations
+  // assez differentes (la portrait n'a pas la place pour le journal, la
+  // colonne de boutons a droite, etc.)
   layoutAndDraw(){
     if(!this.scene.isActive() || !this.cameras || !this.cameras.main) return;
     const W = this.scale.width, H = this.scale.height;
-    const DH = 900;
-    const baseAspect = 1280/900;
-    const screenAspect = W/H;
-    let DW, Z;
-    if(screenAspect >= baseAspect){
-      DW = Math.round(DH * screenAspect);
-      Z = H/DH;
+    this.isPortrait = H > W;
+    if(this.isPortrait){
+      const basePW = 720, basePH = 1280;
+      const baseAspect = basePW/basePH; // 0.5625
+      const screenAspect = W/H;
+      let PW, PH, Z;
+      if(screenAspect <= baseAspect){
+        // ecran encore plus etroit/haut que le design de base : etire la
+        // hauteur du canevas virtuel plutot que de laisser des bandes.
+        PW = basePW;
+        PH = Math.round(PW/screenAspect);
+        Z = W/PW;
+      } else {
+        PH = basePH;
+        PW = Math.round(PH*screenAspect);
+        Z = H/PH;
+      }
+      this.W = PW;
+      this.H = PH;
+      this.cameras.main.setZoom(Z);
+      this.cameras.main.centerOn(PW/2, PH/2);
     } else {
-      DW = 1280;
-      Z = W/DW;
+      const DH = 900;
+      const baseAspect = 1280/900;
+      const screenAspect = W/H;
+      let DW, Z;
+      if(screenAspect >= baseAspect){
+        DW = Math.round(DH*screenAspect);
+        Z = H/DH;
+      } else {
+        DW = 1280;
+        Z = W/DW;
+      }
+      this.W = DW;
+      this.H = DH;
+      this.cameras.main.setZoom(Z);
+      this.cameras.main.centerOn(DW/2, DH/2);
     }
-    this.W = DW;
-    this.cameras.main.setZoom(Z);
-    this.cameras.main.centerOn(DW/2, DH/2);
     this.drawAll();
   }
 
@@ -1453,7 +1780,14 @@ class MainScene extends Phaser.Scene {
     }
   }
 
+  // Dispatch vers la bonne mise en page selon l'orientation detectee dans
+  // layoutAndDraw().
   drawAll(){
+    if(this.isPortrait) return this.drawAllPortrait();
+    return this.drawAllLandscape();
+  }
+
+  drawAllLandscape(){
     // On detruit tout SAUF les elements persistants du journal (panneau de
     // fond + lignes en cours d'animation), qui gerent leur propre cycle de
     // vie via pushLogLine/syncLog pour un defilement anime plutot qu'un
@@ -1538,9 +1872,12 @@ class MainScene extends Phaser.Scene {
     // Juste le nombre reel de cartes (pas de texte "MAIN ADVERSAIRE :"),
     // colle a GAUCHE de l'eventail visuel (le journal, en haut a droite,
     // peut deborder assez loin a gauche avec une phrase longue -- a droite
-    // le chiffre se faisait donc parfois recouvrir).
-    this.label(W/2 - (fanCount-1)*12 - 24 - 14, 50, `${aiHandCount}`,
-      {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#e9ddc8', originX:1, originY:0.5});
+    // le chiffre se faisait donc parfois recouvrir). Masque en mode
+    // Cauchemar : aucune info de comptage n'est donnee dans ce mode.
+    if(difficulty!=='nightmare'){
+      this.label(W/2 - (fanCount-1)*12 - 24 - 14, 50, `${aiHandCount}`,
+        {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#e9ddc8', originX:1, originY:0.5});
+    }
 
     // ---- Zones face cachee / face visible de l'IA (miroir, plus petites) ----
     for(let i=0;i<3;i++){
@@ -1592,9 +1929,11 @@ class MainScene extends Phaser.Scene {
       this.spriteByCardId[top.id] = sprTop;
     }
     // Numero a DROITE de la pile (a gauche il se faisait recouvrir par
-    // l'eventail, qui deborde de ce cote-la).
-    this.label(this.pileX+78, this.pileY, `${gameState.pile.length}`,
-      {fontFamily:'"Press Start 2P"', fontSize:'16px', color:'#c9d6e3', originX:0.5, originY:0.5});
+    // l'eventail, qui deborde de ce cote-la). Masque en mode Cauchemar.
+    if(difficulty!=='nightmare'){
+      this.label(this.pileX+78, this.pileY, `${gameState.pile.length}`,
+        {fontFamily:'"Press Start 2P"', fontSize:'16px', color:'#c9d6e3', originX:0.5, originY:0.5});
+    }
 
     // ---- Deck (pioche) : tranches derriere qui disparaissent au fil des dernieres cartes ----
     const deckX = sx(ZONES.deck.x), deckY = ty(ZONES.deck.y);
@@ -1659,7 +1998,10 @@ class MainScene extends Phaser.Scene {
     // eviter de declencher le bouton/geste "accueil" du telephone en jouant.
     const handY = 720;
     const isHandActive = isPlayerTurn && pZoneInfo.zone==='hand';
-    const hand = sortHandDisplay(gameState.player.hand);
+    // Mode Facile : main triee automatiquement. Sinon (Normal/Difficile/
+    // Cauchemar) : ordre naturel de gameState.player.hand, modifiable par le
+    // joueur lui-meme via glisser-deposer (voir onCardDropped).
+    const hand = difficulty==='easy' ? sortHandDisplay(gameState.player.hand) : gameState.player.hand;
     // La main se resserre (spacing) puis retrecit (scale) automatiquement
     // pour toujours tenir dans l'espace dispo, meme apres avoir ramasse
     // un gros tas. L'espace dispo suit la largeur reelle de l'ecran.
@@ -1682,20 +2024,31 @@ class MainScene extends Phaser.Scene {
         }
       }
     }
-    const startX = W/2 - (N-1)*spacing/2;
+    this.handStartX = W/2 - (N-1)*spacing/2;
+    this.handSpacing = spacing;
+    this.handY = handY;
+    const startX = this.handStartX;
     hand.forEach((c,i)=>{
       const isSel = selected.some(s=>s.id===c.id);
       // Une carte non jouable par rapport a l'etat actuel de la pile est
-      // grisee et non interactive (sauf si deja selectionnee, pour pouvoir
-      // toujours la deselectionner si l'etat de la pile a change entre temps).
+      // grisee et non interactive UNIQUEMENT en mode Facile (sauf si deja
+      // selectionnee, pour pouvoir toujours la deselectionner si l'etat de
+      // la pile a change entre temps). Les autres modes n'indiquent rien :
+      // au joueur de reperer lui-meme ce qui est jouable.
       const playable = isHandActive ? canPlayGroup(gameState, c.rank) : true;
-      const interactive = isHandActive && (playable || isSel);
-      const dragCfg = (isHandActive && playable) ? { onDrop: (pointer)=>this.onCardDropped(c, pointer), card: c } : null;
+      const interactive = isHandActive && (playable || isSel || difficulty!=='easy');
+      // Glisser est toujours actif des que la main est active : soit pour
+      // jouer (si la carte est valide et lachee sur la pile), soit pour
+      // reordonner la main a la main (Normal/Difficile/Cauchemar, voir
+      // onCardDropped) meme si la carte n'est pas jouable dans l'immediat.
+      const dragCfg = isHandActive ? { onDrop: (pointer)=>this.onCardDropped(c, pointer), card: c } : null;
       const spr = this.addCardSprite(startX + i*spacing, handY, RANK_TO_TEXTURE[c.rank], handScale,
         interactive ? ()=>this.onPlayerCardClick(c) : null, isSel, 0, dragCfg);
-      if(isHandActive && !playable){
-        spr.setAlpha(0.42);
-        spr.setTint(0x777777);
+      if(difficulty==='easy' && isHandActive && !playable){
+        // Grisage adouci : l'ancienne version (alpha 0.42 + gris 0x777777)
+        // rendait les cartes un peu illisibles.
+        spr.setAlpha(0.65);
+        spr.setTint(0xaaaaaa);
       }
       this.spriteByCardId[c.id] = spr;
     });
@@ -1744,8 +2097,12 @@ class MainScene extends Phaser.Scene {
       // "Prendre le tas" n'a aucun sens si la pile est vide (tout est
       // jouable dans ce cas) : on masque carrement le bouton plutot que de
       // laisser un bouton cliquable qui ne fait rien, pour que ce soit
-      // evident qu'il faut jouer une carte.
-      if(gameState.pile.length>0 || this.awaitingFaceUpChoice){
+      // evident qu'il faut jouer une carte. En mode Cauchemar, egalement
+      // masque des qu'un coup jouable existe (coherent avec le blocage de
+      // onTakeClick : impossible de "prendre" tant qu'on peut jouer).
+      const canShowTake = (gameState.pile.length>0 || this.awaitingFaceUpChoice) &&
+        (difficulty!=='nightmare' || noPlayableMove || this.awaitingFaceUpChoice);
+      if(canShowTake){
         const takeWord = this.awaitingFaceUpChoice ? t('btnCancel') : t('btnTake');
         this.roundButton(btnX, 540, 34*btnScale, 0x9a2f2f, 0xff5f5f, takeWord, ()=>this.onTakeClick(),
           { highlight: noPlayableMove });
@@ -1779,6 +2136,293 @@ class MainScene extends Phaser.Scene {
     }
   }
 
+  // ---- Mise en page PORTRAIT : premiere vraie implementation (avant,
+  // isPortrait etait fige a false avec un TODO). Verticalement plus
+  // contrainte donc plus compacte : pas de colonne de boutons a droite (ils
+  // passent cote a cote au-dessus de la main), pas de journal (pas la place,
+  // et demande explicitement retiree dans ce mode), main sur DEUX rangees
+  // pour ne jamais s'etaler hors ecran meme avec beaucoup de cartes. Budget
+  // vertical verifie par le calcul avant integration, mais pas encore teste
+  // sur un vrai telephone -- des ajustements sont a prevoir. ----
+  drawAllPortrait(){
+    const preserved = new Set([this.logPanelBg]);
+    this.children.list.slice().forEach(child=>{ if(!preserved.has(child)) child.destroy(); });
+    this.spriteByCardId = {};
+    // Pas de journal en portrait (pas la place) : on vide le panneau et les
+    // lignes existantes, mais on garde lastLogCount synchronise pour ne pas
+    // deverser tout l'historique d'un coup si on repasse en paysage.
+    if(this.logPanelBg) this.logPanelBg.clear();
+    this.logLines.forEach(entry=>{ this.tweens.killTweensOf(entry.obj); entry.obj.destroy(); });
+    this.logLines = [];
+    this.lastLogCount = gameState.log.length;
+
+    const W = this.W, H = this.H || 1280;
+    const cx = W/2;
+    this.fontScale = Math.min(1.35, Math.max(1, W/720));
+
+    // La zone de jeu (adversaire+pile+joueur+boutons) occupe les 60% du
+    // haut, la main les 40% du bas -- mais H peut s'etirer bien au-dela de
+    // 1280 sur un ecran tres etroit/haut. Sans ca, les positions fixes
+    // restaient tassees en haut pendant que la main (calculee depuis H)
+    // partait tres bas, laissant un grand vide au milieu. Tout se cale
+    // desormais en PROPORTION de la bande disponible, et grossit avec elle
+    // (spaceScale) pour profiter du surplus d'espace plutot que de le
+    // laisser vide.
+    const gameAreaTop = 115;
+    const gameAreaBottom = H*0.6;
+    const bandH = gameAreaBottom - gameAreaTop;
+    const baseBandH = 653; // le budget calcule/valide pour H=1280
+    const posY = (frac) => gameAreaTop + frac*bandH;
+    const spaceScale = Math.min(1.6, Math.max(1, bandH/baseBandH));
+
+    this.pileScale = 1.1 * spaceScale;
+    this.playerHandX = cx;
+    this.aiHandX = cx;
+    this.aiHandOffY = -20;
+
+    // Fond : bandeau brun en haut, comme en paysage.
+    this.add.rectangle(cx, 60, W, 110, 0x5a3a30).setOrigin(0.5);
+
+    // FR/EN (coin haut-gauche, position absolue comme en paysage)
+    const frColor = lang==='fr' ? '#ffd23f' : '#8a95a0';
+    const enColor = lang==='en' ? '#ffd23f' : '#8a95a0';
+    const frLbl = this.label(20, 18, 'FR', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:frColor, originY:0.5});
+    frLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('fr'));
+    const enLbl = this.label(68, 18, 'EN', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:enColor, originY:0.5});
+    enLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('en'));
+
+    // Compteur de tours
+    this.label(20, 45, t('turnCounter', {n: gameState.turnCount}),
+      {fontSize:'15px', color:'#8a95a0', originY:0.5});
+
+    // ---- Bandeau adversaire : eventail + compte reel a gauche ----
+    const aiHandCount = gameState.ai.hand.length;
+    const fanCount = Math.min(aiHandCount, 7);
+    const aiScale = 0.32 * spaceScale;
+    const aiFanY = posY(0.0536);
+    const aiArcHeight = 0.22 * CARD_H * aiScale;
+    const aiMaxAngle = 9;
+    const aiHalfSpan = (fanCount-1)/2 || 1;
+    for(let i=0;i<fanCount;i++){
+      const u = fanCount>1 ? (i-(fanCount-1)/2)/aiHalfSpan : 0;
+      const y = aiFanY + aiArcHeight*(1-u*u);
+      const angle = aiMaxAngle*u;
+      this.addCardSprite(cx - (fanCount-1)*10*spaceScale + i*20*spaceScale, y, 'card_back', aiScale, null, false, angle);
+    }
+    if(difficulty!=='nightmare'){
+      this.label(cx - (fanCount-1)*10*spaceScale - 20*spaceScale - 12, aiFanY, `${aiHandCount}`,
+        {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#e9ddc8', originX:1, originY:0.5});
+    }
+
+    // ---- Zone face cachee/visible de l'adversaire (3 slots, spacing reduit) ----
+    const aiSlotSpacing = Math.min(95, (W-60)/2.4) * spaceScale;
+    const aiZoneY = posY(0.1915);
+    for(let i=0;i<3;i++){
+      const x = cx + (i-1)*aiSlotSpacing;
+      const fd = gameState.ai.faceDown.find(c=>c.slot===i);
+      const fu = gameState.ai.faceUp.find(c=>c.slot===i);
+      this.drawStackedZone(x, aiZoneY, fd, fu, 0.45*spaceScale, false, false);
+    }
+
+    // ---- Pile centrale (deck a droite, cut a gauche, plus rapproches
+    // qu'en paysage vu la largeur reduite) ----
+    const top = pileTop(gameState);
+    this.pileX = cx;
+    this.pileY = posY(0.4211);
+    const TOP_SCALE = this.pileScale;
+    const FAN_SCALE = 0.85 * spaceScale;
+    const pivotX = this.pileX - (CARD_W*TOP_SCALE)/2;
+    const pivotY = this.pileY + (CARD_H*TOP_SCALE)/2;
+
+    const extraCount = Math.min(24, Math.max(0, gameState.pile.length-3));
+    for(let i=extraCount; i>=1; i--){
+      const spr = this.add.image(pivotX + i*1.4, pivotY + i*0.9, 'card_back');
+      spr.setOrigin(0,1);
+      spr.setScale(FAN_SCALE);
+      spr.setAngle(-32 + i*0.8);
+    }
+    const previous2 = gameState.pile.slice(-3,-1);
+    previous2.forEach((c, idx)=>{
+      const depthFromTop = previous2.length - idx;
+      const spr = this.add.image(pivotX, pivotY, RANK_TO_TEXTURE[c.rank]);
+      spr.setOrigin(0,1);
+      spr.setScale(FAN_SCALE);
+      spr.setAngle(-16*depthFromTop);
+    });
+    if(top){
+      const sprTop = this.addCardSprite(this.pileX, this.pileY, RANK_TO_TEXTURE[top.rank], TOP_SCALE);
+      this.spriteByCardId[top.id] = sprTop;
+    }
+    if(difficulty!=='nightmare'){
+      this.label(this.pileX+58*spaceScale, this.pileY, `${gameState.pile.length}`,
+        {fontFamily:'"Press Start 2P"', fontSize:'14px', color:'#c9d6e3', originX:0.5, originY:0.5});
+    }
+
+    const deckX = cx + 112*spaceScale, deckY = this.pileY;
+    const deckSliverCount = Math.min(2, Math.max(0, gameState.deck.length-1));
+    for(let i=deckSliverCount; i>=1; i--){
+      this.addCardSprite(deckX + i*9, deckY, 'card_back', TOP_SCALE);
+    }
+    if(gameState.deck.length>0) this.addCardSprite(deckX, deckY, 'card_back', TOP_SCALE);
+    this.label(deckX, deckY+70*spaceScale, `${gameState.deck.length}`,
+      {fontSize:'14px', color:'#c9d6e3', originX:0.5, originY:0.5});
+
+    const cutX = cx - 112*spaceScale, cutY = this.pileY;
+    gameState.cutBatches.forEach(batch=>{
+      this.addCardSprite(cutX, cutY, 'card_back', 0.7*spaceScale, null, false, batch.angle);
+    });
+    this.autoLabel(cutX, cutY+54*spaceScale, t('cutCount', {n: gameState.discardOut.length}),
+      {fontSize:'14px', originX:0.5, originY:0.5}, {alpha:0.45});
+
+    // ---- Contraintes / guerre (colonne gauche, comme en paysage) ----
+    if(gameState.forceMax!==null){
+      this.autoLabel(20, 145, t('forceConstraint'),
+        {fontFamily:'"Press Start 2P"', fontSize:'9px', color:'#f0a840', originY:0.5},
+        {alpha:0.6});
+    }
+    if(gameState.war){
+      const round = gameState.war.round || 1;
+      const turnWord = gameState.turn==='player' ? t('turnYou') : t('turnAI');
+      this.autoLabel(20, 175, t('battle', {n: round, turn: turnWord}),
+        {fontFamily:'"Press Start 2P"', fontSize:'9px', color:'#ff5f5f', originY:0.5},
+        {alpha:0.65});
+    }
+
+    // ---- Zone face cachee/visible du joueur ----
+    const pZoneInfo = getActiveZoneCards(gameState.player);
+    const isPlayerTurn = gameState.turn==='player' && !gameState.winner && !this.animating;
+    const playerSlotSpacing = Math.min(105, (W-60)/2.4) * spaceScale;
+    const playerZoneY = posY(0.6279);
+    for(let i=0;i<3;i++){
+      const x = cx + (i-1)*playerSlotSpacing;
+      const fd = gameState.player.faceDown.find(c=>c.slot===i);
+      const fu = gameState.player.faceUp.find(c=>c.slot===i);
+      const canClickUp = isPlayerTurn && pZoneInfo.zone==='faceUp';
+      const canClickDown = isPlayerTurn && pZoneInfo.zone==='faceDown';
+      this.drawStackedZone(x, playerZoneY, fd, fu, 0.75*spaceScale, canClickUp, canClickDown);
+    }
+
+    // ---- Boutons Jouer/Prendre, cote a cote au-dessus de la main (pas de
+    // colonne libre a droite en portrait, la largeur est trop precieuse) ----
+    const btnY = posY(0.7657);
+    if(gameState.turn==='player' && !gameState.winner){
+      const noPlayableMove = !this.awaitingFaceUpChoice && gameState.pile.length>0 && (
+        (pZoneInfo.zone==='hand' && !sortHandDisplay(gameState.player.hand).some(c=>canPlayGroup(gameState, c.rank))) ||
+        (pZoneInfo.zone==='faceUp' && !gameState.player.faceUp.some(c=>canPlayGroup(gameState, c.rank)))
+      );
+      if(!this.awaitingFaceUpChoice){
+        this.roundButton(cx-68*spaceScale, btnY, 32*this.fontScale*spaceScale, 0x2f8f4e, 0x5fdc7a, t('btnPlay'), ()=>this.onPlayClick(),
+          { dim: noPlayableMove });
+      }
+      const canShowTake = (gameState.pile.length>0 || this.awaitingFaceUpChoice) &&
+        (difficulty!=='nightmare' || noPlayableMove || this.awaitingFaceUpChoice);
+      if(canShowTake){
+        const takeWord = this.awaitingFaceUpChoice ? t('btnCancel') : t('btnTake');
+        this.roundButton(cx+68*spaceScale, btnY, 28*this.fontScale*spaceScale, 0x9a2f2f, 0xff5f5f, takeWord, ()=>this.onTakeClick(),
+          { highlight: noPlayableMove });
+      }
+    }
+
+    // ---- Statut ----
+    let statusMsg = '';
+    let statusColor = '#e9ddc8';
+    if(gameState.winner){
+      statusMsg = gameState.winner==='player' ? t('statusWin') : t('statusLose');
+      statusColor = gameState.winner==='player' ? '#5fdc7a' : '#ff5f5f';
+    } else if(gameState.turn==='ai'){
+      statusMsg = t('statusAITurn');
+    } else if(this.awaitingFaceUpChoice){
+      statusMsg = t('statusChooseFaceUp');
+      statusColor = '#f0a840';
+    } else {
+      statusMsg = selected.length ? t('statusSelected', {n: selected.length}) : t('statusChoose');
+    }
+    this.autoLabel(20, 110, statusMsg,
+      {fontFamily:'"Press Start 2P"', fontSize:'10px', color:statusColor, originY:0.5},
+      {padX:12, padY:8, alpha:0.55});
+
+    // ---- Main du joueur : occupe les 40% du bas de l'ecran (comme demande),
+    // sur DEUX RANGEES (jamais une seule rangee etiree hors-ecran quelle que
+    // soit la taille de la main). La rangee "arriere" (plus haute) recoit la
+    // moitie basse des cartes, la "avant" (plus basse, la plus proche du
+    // joueur) le reste + la carte surnumeraire si la main est impaire.
+    // Chaque rangee garde son propre arc leger. ----
+    const hand = difficulty==='easy' ? sortHandDisplay(gameState.player.hand) : gameState.player.hand;
+    const N = hand.length;
+    const isHandActive = isPlayerTurn && pZoneInfo.zone==='hand';
+    const rowFrontCount = Math.ceil(N/2);
+    const rowBackCount = N - rowFrontCount;
+    const rowBack = hand.slice(0, rowBackCount);
+    const rowFront = hand.slice(rowBackCount);
+
+    const maxHandWidth = W - 50;
+    const minSpacing = 22;
+    const baseHandScale = 1.6 * Math.min(1.25, spaceScale);
+    const widestRow = Math.max(1, rowFrontCount, rowBackCount);
+    let handScale = baseHandScale;
+    let spacing = 96;
+    const desiredWidth = (widestRow-1)*spacing + CARD_W*handScale;
+    if(desiredWidth > maxHandWidth){
+      spacing = Math.max(minSpacing, (maxHandWidth - CARD_W*handScale)/(widestRow-1 || 1));
+      const widthAtMinSpacing = (widestRow-1)*minSpacing + CARD_W*handScale;
+      if(widthAtMinSpacing > maxHandWidth){
+        handScale = Math.max(0.5, (maxHandWidth - (widestRow-1)*minSpacing)/CARD_W);
+        spacing = minSpacing;
+      }
+    }
+    const arcHeight = 0.22 * CARD_H * handScale;
+    const frontY = H - 30 - (CARD_H*handScale)/2;
+    const backY = frontY - 100;
+    this.handStartX = cx; // approximatif (2 rangees) : sert de repere large pour le reorder
+    this.handSpacing = spacing;
+    this.handY = frontY;
+
+    const layoutRow = (cards, rowY, allowInteract)=>{
+      const n = cards.length;
+      const startX = cx - (n-1)*spacing/2;
+      const half = (n-1)/2 || 1;
+      cards.forEach((c,i)=>{
+        const isSel = selected.some(s=>s.id===c.id);
+        const playable = isHandActive ? canPlayGroup(gameState, c.rank) : true;
+        const interactive = allowInteract && isHandActive && (playable || isSel || difficulty!=='easy');
+        const dragCfg = (allowInteract && isHandActive) ? { onDrop: (pointer)=>this.onCardDropped(c, pointer), card: c } : null;
+        const u = n>1 ? (i-(n-1)/2)/half : 0;
+        const cardY = rowY - arcHeight*(1-u*u);
+        const spr = this.addCardSprite(startX + i*spacing, cardY, RANK_TO_TEXTURE[c.rank], handScale,
+          interactive ? ()=>this.onPlayerCardClick(c) : null, isSel, 0, dragCfg);
+        if(difficulty==='easy' && isHandActive && !playable){
+          spr.setAlpha(0.65);
+          spr.setTint(0xaaaaaa);
+        }
+        this.spriteByCardId[c.id] = spr;
+      });
+    };
+    // La rangee arriere est dessinee EN PREMIER (sous la rangee avant),
+    // mais reste pleinement interactive : rien n'empeche de jouer une carte
+    // qui s'y trouve.
+    layoutRow(rowBack, backY, true);
+    layoutRow(rowFront, frontY, true);
+
+    if(gameState.winner){
+      const isWin = gameState.winner==='player';
+      const emoji = isWin ? '🏆' : '💀';
+      const bigWord = isWin ? t('victory') : t('defeat');
+      const wordColor = isWin ? '#ffd23f' : '#ff4d4d';
+      this.add.circle(cx, 500, 100, 0x0c1410, 0.55);
+      this.add.text(cx, 500, emoji, {fontSize:'130px'}).setOrigin(0.5);
+      this.add.text(cx+2, 620, bigWord,
+        {fontFamily:'"Press Start 2P"', fontSize:'34px', color:'#1a1008'}).setOrigin(0.5);
+      this.add.text(cx, 618, bigWord,
+        {fontFamily:'"Press Start 2P"', fontSize:'34px', color:wordColor}).setOrigin(0.5);
+      const turnsSub = t('turnsSubtitle', {n: gameState.turnCount});
+      this.add.text(cx+1, 662, turnsSub,
+        {fontFamily:'"Press Start 2P"', fontSize:'14px', color:'#1a1008'}).setOrigin(0.5);
+      this.add.text(cx, 661, turnsSub,
+        {fontFamily:'"Press Start 2P"', fontSize:'14px', color:wordColor}).setOrigin(0.5);
+      this.roundButton(cx, 730, 40*this.fontScale, 0x2f8f4e, 0x5fdc7a, t('btnReplay'), ()=>this.restartGame());
+    }
+  }
+
   onPlayerFaceDownClick(card){
     if(gameState.turn!=='player' || gameState.winner || this.animating) return;
     this.armAnimating();
@@ -1807,6 +2451,23 @@ class MainScene extends Phaser.Scene {
   // ---- Depose (drag & drop) d'une carte : si lachee assez pres de la pile,
   // on tente de jouer (elle seule, ou tout le groupe selectionne si elle en
   // fait partie) ; sinon la carte revient simplement a sa place. ----
+  // ---- Reordonne la main a la main (Normal/Difficile/Cauchemar) : calcule
+  // l'index cible d'apres la position X ou la carte a ete lachee, relative a
+  // l'espacement actuel de la main (this.handStartX/handSpacing, calcules a
+  // chaque rendu). Ne fait rien en mode Facile (main toujours auto-triee). ----
+  reorderHand(card, pointer){
+    if(!this.handSpacing) return;
+    const hand = gameState.player.hand;
+    const idx = hand.findIndex(c=>c.id===card.id);
+    if(idx===-1) return;
+    const relativeX = pointer.worldX - this.handStartX;
+    let targetIdx = Math.round(relativeX / this.handSpacing);
+    targetIdx = Math.max(0, Math.min(hand.length-1, targetIdx));
+    if(targetIdx === idx) return;
+    const [moved] = hand.splice(idx, 1);
+    hand.splice(targetIdx, 0, moved);
+  }
+
   onCardDropped(card, pointer){
     if(gameState.turn!=='player' || gameState.winner || this.animating || this.awaitingFaceUpChoice){
       this.render();
@@ -1815,7 +2476,15 @@ class MainScene extends Phaser.Scene {
     const dx = pointer.worldX - this.pileX;
     const dy = pointer.worldY - this.pileY;
     const closeEnough = Math.sqrt(dx*dx + dy*dy) < this.pileDropRadius;
-    if(!closeEnough){ this.render(); return; }
+    if(!closeEnough){
+      // Pas lache sur la pile : en mode Normal/Difficile/Cauchemar, on
+      // permet de reordonner sa main a la main plutot que de juste faire
+      // revenir la carte a sa place (le mode Facile, lui, reste toujours
+      // trie automatiquement, donc pas de reorder manuel a proposer).
+      if(difficulty!=='easy') this.reorderHand(card, pointer);
+      this.render();
+      return;
+    }
 
     const group = (selected.length>0 && selected.some(s=>s.id===card.id)) ? [...selected] : [card];
 
@@ -1862,6 +2531,15 @@ class MainScene extends Phaser.Scene {
     // doit pas pouvoir sauter le tour gratuitement.
     if(gameState.pile.length===0) return;
     const pZoneInfo = getActiveZoneCards(gameState.player);
+    // Mode Cauchemar : interdit de "prendre" si une carte de la zone active
+    // est jouable -- on doit jouer si on peut, ramasser n'est reserve qu'aux
+    // vrais blocages.
+    if(difficulty==='nightmare'){
+      const hasPlayable =
+        (pZoneInfo.zone==='hand' && gameState.player.hand.some(c=>canPlayGroup(gameState, c.rank))) ||
+        (pZoneInfo.zone==='faceUp' && gameState.player.faceUp.some(c=>canPlayGroup(gameState, c.rank)));
+      if(hasPlayable) return;
+    }
     // Phase "decouverte" (face visible) : on doit choisir une carte a
     // recuperer avec le tas avant de valider.
     if(pZoneInfo.zone==='faceUp' && gameState.player.faceUp.length>0){
@@ -1902,7 +2580,7 @@ const config = {
   // automatique : le jeu doit continuer a tourner (animations, tour de l'IA)
   // meme si le focus de la fenetre bouge un peu.
   disableVisibilityChange: true,
-  scene: [MenuScene, MainScene]
+  scene: [MenuScene, DifficultyScene, MainScene]
 };
 game = new Phaser.Game(config);
 </script>
