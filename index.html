@@ -14,14 +14,44 @@
 <style>
   html,body{margin:0;padding:0;background:#2e4928;overflow:hidden;font-family:'VT323',monospace;}
   #game-container{width:100vw;height:100vh;}
-  #fullscreen-btn{
-    position:fixed; top:6px; left:96px; z-index:10000;
-    width:34px; height:34px; border-radius:8px;
-    background:rgba(12,20,16,0.55); border:1px solid rgba(215,164,92,0.5);
-    color:#e9ddc8; font-size:16px; line-height:32px; text-align:center;
-    cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;
+
+  /* Barre d'icones, coin haut-gauche, position FIXE en pixels ecran reels
+     (jamais liee au zoom du jeu) : un seul petit bloc, toujours au meme
+     endroit sur les trois ecrans (menu, difficulte, partie), independant
+     de tout ce qui se passe cote Phaser -- ca elimine d'un coup toute la
+     classe de bugs de synchronisation qu'on a eu avec l'ancien bouton
+     plein ecran (qui essayait de suivre le zoom, different sur chaque
+     scene et chaque taille d'ecran). */
+  #ui-bar{
+    position:fixed; top:6px; left:6px; z-index:10000;
+    display:flex; gap:6px; align-items:center;
   }
-  #fullscreen-btn:active{ background:rgba(12,20,16,0.8); }
+  #ui-bar button{
+    width:30px; height:30px; padding:0; margin:0;
+    background:transparent; border:none;
+    color:#e9ddc8; font-size:17px; line-height:30px; text-align:center;
+    cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;
+    opacity:0.85;
+  }
+  #ui-bar button:active{ opacity:1; }
+
+  /* Popup de langue, sous l'icone reglages : seule chose du groupe a avoir
+     un fond (pour rester lisible), les icones elles-memes restent nues. */
+  #lang-popup{
+    display:none;
+    position:fixed; top:40px; left:6px; z-index:10001;
+    background:rgba(12,20,16,0.9); border:1px solid rgba(215,164,92,0.5);
+    border-radius:6px; padding:4px;
+    font-family:'Press Start 2P', monospace; font-size:12px;
+  }
+  #lang-popup.open{ display:block; }
+  #lang-popup button{
+    display:block; width:100%; padding:6px 14px; margin:0;
+    background:transparent; border:none; text-align:left;
+    color:#8a95a0; cursor:pointer; -webkit-tap-highlight-color:transparent;
+  }
+  #lang-popup button.active{ color:#ffd23f; }
+  #lang-popup button:hover{ background:rgba(255,255,255,0.08); }
 
   /* Ecran "tourne ton telephone" : trop de cartes/elements pour bien tenir
      verticalement, donc plutot que de forcer un mode portrait compresse,
@@ -46,13 +76,20 @@
   }
   @media (orientation:portrait) and (pointer:coarse){
     #rotate-overlay{ display:flex; }
-    #game-container, #fullscreen-btn{ display:none; }
+    #game-container, #ui-bar, #lang-popup{ display:none; }
   }
 </style>
 </head>
 <body>
 <div id="game-container"></div>
-<button id="fullscreen-btn" title="Plein ecran">⛶</button>
+<div id="ui-bar">
+  <button id="settings-btn" title="Langue">⚙</button>
+  <button id="fullscreen-btn" title="Plein ecran">⛶</button>
+</div>
+<div id="lang-popup">
+  <button id="lang-fr" data-lang="fr">FR</button>
+  <button id="lang-en" data-lang="en">EN</button>
+</div>
 <div id="rotate-overlay">
   <div class="icon">📱</div>
   <div class="msg">TOURNE TON TELEPHONE</div>
@@ -63,42 +100,12 @@
 // navigation Android bouffent une bonne partie de la hauteur reelle. Le
 // mode plein ecran natif du navigateur les fait disparaitre.
 (function(){
-  const btn = document.getElementById('fullscreen-btn');
+  const fsBtn = document.getElementById('fullscreen-btn');
   function isFs(){
     return !!(document.fullscreenElement || document.webkitFullscreenElement);
   }
-  function updateIcon(){ btn.textContent = isFs() ? '⤢' : '⛶'; }
-  // Le jeu zoome son canevas logique pour remplir l'ecran reel : sur un
-  // petit ecran, tout (dont le toggle FR/EN) s'affiche donc plus petit/plus
-  // proche du bord. Le MENU et l'ECRAN DE DIFFICULTE, eux, ne zoomment PAS
-  // (ils dessinent en pixels ecran reels directement) -- utiliser la MEME
-  // formule de zoom que le jeu pour positionner ce bouton la-bas faisait
-  // deriver le bouton pile sur "EN" des que l'ecran etait court. Chaque
-  // scene expose donc son propre facteur via window.__uiZoom (1 pour
-  // Menu/Difficulte, le vrai zoom de la camera pour la partie), et ce
-  // bouton s'y cale plutot que de le recalculer lui-meme a l'aveugle.
-  function repositionButton(){
-    const isPortrait = window.innerHeight > window.innerWidth;
-    if(isPortrait){
-      // En portrait, colle au coin haut-droit (rien d'autre a cet endroit,
-      // et ca laisse le coin gauche pour FR/EN + compteur de tours).
-      btn.style.left = '';
-      btn.style.right = '8px';
-      btn.style.top = '8px';
-    } else {
-      const zoom = window.__uiZoom || 1;
-      btn.style.right = '';
-      btn.style.left = Math.round(140 * zoom) + 'px';
-      btn.style.top = Math.round(6 * zoom + 4) + 'px';
-    }
-  }
-  // Expose pour que chaque scene puisse redemander un repositionnement des
-  // qu'elle change window.__uiZoom (ex: en passant du menu -- zoom 1 -- a
-  // la partie -- zoom variable), pas seulement au resize de la fenetre.
-  window.__repositionFsButton = repositionButton;
-  repositionButton();
-  window.addEventListener('resize', repositionButton);
-  btn.addEventListener('click', ()=>{
+  function updateIcon(){ fsBtn.textContent = isFs() ? '⤢' : '⛶'; }
+  fsBtn.addEventListener('click', ()=>{
     const el = document.documentElement;
     if(!isFs()){
       (el.requestFullscreen || el.webkitRequestFullscreen || function(){}).call(el);
@@ -108,6 +115,34 @@
   });
   document.addEventListener('fullscreenchange', updateIcon);
   document.addEventListener('webkitfullscreenchange', updateIcon);
+})();
+
+// Reglages / langue : popup simple sous l'icone engrenage. La langue
+// elle-meme (variable globale `lang`, fonction `t()`) vit dans le script
+// du jeu plus bas ; on expose window.__applyLang pour que ce bloc,
+// entierement independant de Phaser, puisse quand meme demander a la
+// scene active de se redessiner avec la nouvelle langue.
+(function(){
+  const settingsBtn = document.getElementById('settings-btn');
+  const popup = document.getElementById('lang-popup');
+  settingsBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    popup.classList.toggle('open');
+  });
+  document.addEventListener('click', ()=>{ popup.classList.remove('open'); });
+  popup.addEventListener('click', (e)=>e.stopPropagation());
+  document.querySelectorAll('#lang-popup button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(window.__applyLang) window.__applyLang(btn.dataset.lang);
+      popup.classList.remove('open');
+    });
+  });
+  // Reflete la langue active dans le popup (appele par __applyLang cote jeu).
+  window.__updateLangPopup = function(current){
+    document.querySelectorAll('#lang-popup button').forEach(btn=>{
+      btn.classList.toggle('active', btn.dataset.lang===current);
+    });
+  };
 })();
 </script>
 <script>
@@ -880,6 +915,28 @@ const LAST_UPDATE = "16 aout 2026";
 class MenuScene extends Phaser.Scene {
   constructor(){ super('menu'); }
 
+  // ---- Rend un objet interactif de maniere FIABLE : si Phaser echoue a
+  // generer automatiquement une zone de clic valide (ca arrive en silence
+  // -- juste un warning en console -- des que l'objet a une largeur/hauteur
+  // nulle au moment de l'appel : police pas encore chargee, dimension
+  // d'ecran transitoirement a 0 pendant une rotation, etc.), l'objet reste
+  // avec hitAreaCallback indefini et fait planter Phaser en interne au
+  // moindre geste ensuite (potentiellement bien apres, et sur N'IMPORTE
+  // QUEL clic/mouvement, puisque Phaser reteste tous les objets interactifs
+  // a chaque evenement pointeur). On verifie donc APRES coup que ca a
+  // fonctionne, et on force une zone de secours avec des dimensions
+  // minimales garanties sinon. ----
+  safeInteractive(obj, useHandCursor=true){
+    obj.setInteractive(useHandCursor ? {useHandCursor:true} : undefined);
+    if(!obj.input || typeof obj.input.hitAreaCallback !== 'function'){
+      const w = Math.max(20, obj.width || 20);
+      const h = Math.max(20, obj.height || 20);
+      obj.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
+      if(obj.input && useHandCursor) obj.input.cursor = 'pointer';
+    }
+    return obj;
+  }
+
   create(){
     this.cameras.main.setBackgroundColor(0x2e4928);
     this.render();
@@ -900,6 +957,16 @@ class MenuScene extends Phaser.Scene {
 
   render(){
     if(!this.scene.isActive() || !this.cameras || !this.cameras.main) return;
+    const Wcheck = this.scale.width, Hcheck = this.scale.height;
+    // Sur mobile, une rotation/redimensionnement peut brievement remonter
+    // des dimensions nulles avant que le navigateur ne stabilise le nouveau
+    // format. Un bouton calcule avec une largeur/hauteur 0 a ce moment-la
+    // echoue silencieusement a obtenir une zone cliquable valide chez
+    // Phaser (hitAreaCallback reste indefini), ce qui fait planter le jeu
+    // au moindre geste ensuite -- meme apres que l'ecran se soit stabilise,
+    // puisque cet objet casse reste dans la scene. On ignore ces evenements
+    // transitoires : le vrai resize final redeclenche render() correctement.
+    if(!Wcheck || !Hcheck || Wcheck<10 || Hcheck<10) return;
     this.children.removeAll();
     // Plus de camera zoomee/centree sur un "canevas virtuel" : tout se
     // calcule directement a partir de la vraie taille d'ecran. Le zoom de
@@ -907,21 +974,8 @@ class MenuScene extends Phaser.Scene {
     // Phaser (la zone cliquable des objets se desynchronise du rendu quand
     // le zoom bouge), donc on l'evite completement plutot que d'essayer de
     // le contourner.
-    // Ce menu ne zoome donc PAS : le bouton plein ecran (DOM, hors Phaser)
-    // doit le savoir pour se positionner en pixels reels lui aussi, pas
-    // selon le zoom (variable) utilise pendant la partie.
-    window.__uiZoom = 1;
-    if(window.__repositionFsButton) window.__repositionFsButton();
     const W = this.scale.width, H = this.scale.height;
     const cx = W/2;
-
-    // Toggle FR/EN, visible et fonctionnel des le menu (meme style qu'en jeu)
-    const frColor = lang==='fr' ? '#ffd23f' : '#8a95a0';
-    const enColor = lang==='en' ? '#ffd23f' : '#8a95a0';
-    const frLbl = this.add.text(20, 18, 'FR', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:frColor}).setOrigin(0,0.5);
-    frLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('fr'));
-    const enLbl = this.add.text(68, 18, 'EN', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:enColor}).setOrigin(0,0.5);
-    enLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('en'));
 
     // Titre : taille proportionnelle a la hauteur dispo, pour ne jamais
     // deborder sur un petit ecran paysage (barre d'adresse mobile qui
@@ -990,13 +1044,6 @@ class MenuScene extends Phaser.Scene {
     this.add.text(bx+padX, by+padY, updText, {fontFamily:'"VT323"', fontSize:updSize+'px', color:'#9aa8b0'});
   }
 
-  setLang(newLang){
-    if(lang===newLang) return;
-    lang = newLang;
-    try{ localStorage.setItem('shithead_lang', newLang); }catch(e){}
-    this.render();
-  }
-
   menuButton(x, y, w, h, label, enabled, onClick){
     const g = this.add.graphics();
     const fill = enabled ? 0x3f6b3f : 0x2a332a;
@@ -1013,7 +1060,7 @@ class MenuScene extends Phaser.Scene {
       this.add.text(x, y+h/2+16, t('comingSoon'), {fontFamily:'"VT323"', fontSize:'16px', color:'#8a95a0'}).setOrigin(0.5);
     }
     if(enabled){
-      const hit = this.add.rectangle(x, y, w, h, 0x000000, 0).setInteractive({useHandCursor:true});
+      const hit = this.safeInteractive(this.add.rectangle(x, y, w, h, 0x000000, 0));
       hit.on('pointerdown', onClick);
     }
   }
@@ -1025,6 +1072,17 @@ class MenuScene extends Phaser.Scene {
 // la variable globale `difficulty`. ----
 class DifficultyScene extends Phaser.Scene {
   constructor(){ super('difficulty'); }
+
+  safeInteractive(obj, useHandCursor=true){
+    obj.setInteractive(useHandCursor ? {useHandCursor:true} : undefined);
+    if(!obj.input || typeof obj.input.hitAreaCallback !== 'function'){
+      const w = Math.max(20, obj.width || 20);
+      const h = Math.max(20, obj.height || 20);
+      obj.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
+      if(obj.input && useHandCursor) obj.input.cursor = 'pointer';
+    }
+    return obj;
+  }
 
   create(){
     this.cameras.main.setBackgroundColor(0x2e4928);
@@ -1039,21 +1097,14 @@ class DifficultyScene extends Phaser.Scene {
 
   render(){
     if(!this.scene.isActive() || !this.cameras || !this.cameras.main) return;
+    const Wcheck = this.scale.width, Hcheck = this.scale.height;
+    // Meme garde que MenuScene : ignore les dimensions transitoires
+    // nulles/invalides pendant une rotation d'ecran.
+    if(!Wcheck || !Hcheck || Wcheck<10 || Hcheck<10) return;
     this.children.removeAll();
-    // Comme le menu principal, cet ecran ne zoome pas non plus (pixels
-    // ecran reels directement) : le bouton plein ecran (DOM) doit le savoir.
-    window.__uiZoom = 1;
-    if(window.__repositionFsButton) window.__repositionFsButton();
     const W = this.scale.width, H = this.scale.height;
     const cx = W/2;
     const isPortraitDiff = H > W;
-
-    const frColor = lang==='fr' ? '#ffd23f' : '#8a95a0';
-    const enColor = lang==='en' ? '#ffd23f' : '#8a95a0';
-    const frLbl = this.add.text(20, 18, 'FR', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:frColor}).setOrigin(0,0.5);
-    frLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('fr'));
-    const enLbl = this.add.text(68, 18, 'EN', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:enColor}).setOrigin(0,0.5);
-    enLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('en'));
 
     const titleSize = isPortraitDiff
       ? Math.max(22, Math.min(34, Math.round(W*0.05)))
@@ -1111,20 +1162,24 @@ class DifficultyScene extends Phaser.Scene {
     g.strokeRoundedRect(x-w/2, y-h/2, w, h, 10);
     this.add.text(x, y-8, label, {fontFamily:'"Press Start 2P"', fontSize:'17px', color:'#f2ead9'}).setOrigin(0.5);
     this.add.text(x, y+16, sub, {fontFamily:'"VT323"', fontSize:'14px', color:'#c9d6c0'}).setOrigin(0.5);
-    const hit = this.add.rectangle(x, y, w, h, 0x000000, 0).setInteractive({useHandCursor:true});
+    const hit = this.safeInteractive(this.add.rectangle(x, y, w, h, 0x000000, 0));
     hit.on('pointerdown', onClick);
-  }
-
-  setLang(newLang){
-    if(lang===newLang) return;
-    lang = newLang;
-    try{ localStorage.setItem('shithead_lang', newLang); }catch(e){}
-    this.render();
   }
 }
 
 class MainScene extends Phaser.Scene {
   constructor(){ super('main'); }
+
+  safeInteractive(obj, useHandCursor=true){
+    obj.setInteractive(useHandCursor ? {useHandCursor:true} : undefined);
+    if(!obj.input || typeof obj.input.hitAreaCallback !== 'function'){
+      const w = Math.max(20, obj.width || 20);
+      const h = Math.max(20, obj.height || 20);
+      obj.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
+      if(obj.input && useHandCursor) obj.input.cursor = 'pointer';
+    }
+    return obj;
+  }
 
   preload(){
     this.load.image('card_back', 'assets/cards/back.png');
@@ -1216,6 +1271,27 @@ class MainScene extends Phaser.Scene {
   layoutAndDraw(){
     if(!this.scene.isActive() || !this.cameras || !this.cameras.main) return;
     const W = this.scale.width, H = this.scale.height;
+    // Sur mobile, une rotation d'ecran peut brievement faire remonter des
+    // dimensions invalides (0 ou quasi nulles) avant que le navigateur ne
+    // stabilise le nouveau viewport. Les utiliser telles quelles dans les
+    // calculs de ratio/zoom ci-dessous (division par H, etc.) peut produire
+    // des NaN/Infinity qui font planter Phaser -- d'ou l'ecran noir apres
+    // une rotation, recupere seulement par un F5. On ignore ces evenements
+    // transitoires : le VRAI resize final, quelques ms plus tard, redeclenche
+    // layoutAndDraw() avec des dimensions correctes.
+    if(!W || !H || W<10 || H<10) return;
+    try{
+      this.layoutAndDrawInner(W, H);
+    } catch(e){
+      // Filet de securite : si malgre tout quelque chose casse ici, on log
+      // et on retente un redessin simple plutot que de rester plante sur un
+      // ecran noir sans recours autre qu'un F5.
+      console.error('layoutAndDraw a echoue, nouvelle tentative:', e);
+      this.time.delayedCall(50, ()=>{ if(this.scene.isActive()) this.layoutAndDraw(); });
+    }
+  }
+
+  layoutAndDrawInner(W, H){
     // Resynchronise explicitement le viewport de la camera sur la taille
     // reelle du canevas a CHAQUE redimensionnement (rotation d'ecran, resize
     // navigateur...). Sans ca, en combinaison avec le zoom manuel utilise
@@ -1243,9 +1319,9 @@ class MainScene extends Phaser.Scene {
       }
       this.W = PW;
       this.H = PH;
+      if(!isFinite(Z) || Z<=0) Z = 1; // garde-fou ultime, ne devrait plus arriver vu le check plus haut
       this.cameras.main.setZoom(Z);
       this.cameras.main.centerOn(PW/2, PH/2);
-      window.__uiZoom = Z;
     } else {
       const DH = 900;
       const baseAspect = 1280/900;
@@ -1260,20 +1336,34 @@ class MainScene extends Phaser.Scene {
       }
       this.W = DW;
       this.H = DH;
+      if(!isFinite(Z) || Z<=0) Z = 1; // meme garde-fou ultime
       this.cameras.main.setZoom(Z);
       this.cameras.main.centerOn(DW/2, DH/2);
-      window.__uiZoom = Z;
     }
-    if(window.__repositionFsButton) window.__repositionFsButton();
-    this.drawAll();
+    // Reporte au tick suivant, meme raison que dans render() : un
+    // redimensionnement/rotation peut survenir alors qu'un doigt est encore
+    // en train de toucher l'ecran (Phaser en plein traitement d'un
+    // pointerdown/drag sur une carte) -- detruire cette carte ICI via
+    // drawAll() ferait planter le traitement interne de Phaser juste apres.
+    this.time.delayedCall(0, ()=>{ if(this.scene.isActive()) this.drawAll(); });
   }
 
   // Redessine avec la largeur actuelle, sans retoucher au zoom de la camera
   // (utilise par tous les rafraichissements "normaux" suite a une action ;
   // layoutAndDraw() est reserve au tout premier rendu et aux vrais
   // changements de taille/orientation d'ecran).
+  // TOUJOURS reporte au tick suivant (delayedCall 0) plutot qu'immediat :
+  // drawAll() detruit et recree tous les sprites, y compris souvent celui
+  // qui vient de declencher le clic en cours (carte cliquee, bouton FR/EN,
+  // "Annuler"...). Le detruire EN PLEIN MILIEU du gestionnaire d'evenement
+  // que Phaser vient d'appeler pour CE MEME sprite fait planter le
+  // traitement interne de Phaser juste apres (il continue son propre cycle
+  // de hit-test sur un objet deja mort -> "hitAreaCallback is not a
+  // function"), un plantage qui persiste sur tous les clics suivants
+  // jusqu'a un F5. Un report de 0ms suffit : Phaser finit son cycle en
+  // cours avant que quoi que ce soit soit detruit.
   render(){
-    this.drawAll();
+    this.time.delayedCall(0, ()=>{ if(this.scene.isActive()) this.drawAll(); });
   }
 
   // ---- Journal persistant, reconstruit a chaque nouvelle entree (au lieu
@@ -1391,15 +1481,6 @@ class MainScene extends Phaser.Scene {
     hist.forEach(({key, params})=>{ this.pushLogLine(key, params); });
   }
 
-  // ---- Change de langue et persiste le choix pour la prochaine visite ----
-  setLang(newLang){
-    if(lang===newLang) return;
-    lang = newLang;
-    try{ localStorage.setItem('shithead_lang', newLang); }catch(e){}
-    this.refreshLogText();
-    this.render();
-  }
-
   // ---- Continuation apres n'importe quelle action + son animation ----
   afterAnimation(){
     this.disarmWatchdog();
@@ -1481,10 +1562,11 @@ class MainScene extends Phaser.Scene {
       } else if(this.spriteByCardId[card.id]){
         origin = this.captureSpriteOrigin(this.spriteByCardId[card.id]);
         needsFlip = origin.textureKey === 'card_back';
-        // On retire tout de suite la sprite d'origine (celle du dernier
-        // drawAll) : sinon elle reste affichee en double pendant que la
-        // copie volante s'anime par dessus, ce qui donne un effet dedouble.
-        this.spriteByCardId[card.id].destroy();
+        // On retire tout de suite la REFERENCE (pour eviter tout doublon
+        // logique), mais la destruction reelle est reportee (safeDestroy) :
+        // ce chemin peut etre declenche par un simple clic sur "Jouer",
+        // donc en plein milieu du traitement de CET evenement par Phaser.
+        this.safeDestroy(this.spriteByCardId[card.id]);
         delete this.spriteByCardId[card.id];
       } else {
         origin = this.fallbackOrigin(who, res.fromZone);
@@ -1504,7 +1586,7 @@ class MainScene extends Phaser.Scene {
       ? this.captureSpriteOrigin(this.spriteByCardId[card.id])
       : this.fallbackOrigin(who, 'faceDown');
     if(this.spriteByCardId[card.id]){
-      this.spriteByCardId[card.id].destroy();
+      this.safeDestroy(this.spriteByCardId[card.id]);
       delete this.spriteByCardId[card.id];
     }
     const spr = this.add.image(origin.x, origin.y, origin.textureKey).setScale(origin.scale).setDepth(2000);
@@ -1528,6 +1610,21 @@ class MainScene extends Phaser.Scene {
 
   captureSpriteOrigin(spr){
     return { x:spr.x, y:spr.y, scale:spr.scaleX, angle:spr.angle, textureKey:spr.texture.key };
+  }
+
+  // ---- Detruit une sprite en toute securite : reporte au tick suivant.
+  // Ne JAMAIS detruire un objet interactif de facon synchrone en plein
+  // milieu du traitement d'un evenement pointeur (clic sur un bouton,
+  // glisser-deposer...) : Phaser continue son propre cycle de hit-test
+  // juste apres notre callback et plante en tombant sur un objet deja mort
+  // ("hitAreaCallback is not a function"), un plantage qui persiste sur
+  // tous les clics suivants jusqu'a un F5. Utilisee partout dans les
+  // fonctions d'animation ci-dessous, qui peuvent toutes etre declenchees
+  // directement par un clic (bouton "Prendre", "Jouer"...), pas seulement
+  // par un glisser. ----
+  safeDestroy(spr){
+    if(!spr) return;
+    this.time.delayedCall(0, ()=>{ spr.destroy(); });
   }
 
   // ---- Vol d'une carte vers la pile, avec un petit flottement avant la pose ----
@@ -1591,7 +1688,7 @@ class MainScene extends Phaser.Scene {
     let extraSpr = null;
     if(faceUpCardTaken && this.spriteByCardId[faceUpCardTaken.id]){
       const eo = this.captureSpriteOrigin(this.spriteByCardId[faceUpCardTaken.id]);
-      this.spriteByCardId[faceUpCardTaken.id].destroy();
+      this.safeDestroy(this.spriteByCardId[faceUpCardTaken.id]);
       delete this.spriteByCardId[faceUpCardTaken.id];
       extraSpr = this.add.image(eo.x, eo.y, eo.textureKey).setScale(eo.scale).setDepth(2000);
     }
@@ -1603,7 +1700,7 @@ class MainScene extends Phaser.Scene {
       // ci-dessous s'envolent par dessus, meme probleme de doublon que
       // pour le petit tas).
       if(pileTopBefore && this.spriteByCardId[pileTopBefore.id]){
-        this.spriteByCardId[pileTopBefore.id].destroy();
+        this.safeDestroy(this.spriteByCardId[pileTopBefore.id]);
         delete this.spriteByCardId[pileTopBefore.id];
       }
       if(extraSpr){
@@ -1657,7 +1754,7 @@ class MainScene extends Phaser.Scene {
     // doit disparaitre tout de suite : sinon elle reste plantee la pendant
     // que les cartes individuelles ci-dessous s'envolent par dessus.
     if(pileTopBefore && this.spriteByCardId[pileTopBefore.id]){
-      this.spriteByCardId[pileTopBefore.id].destroy();
+      this.safeDestroy(this.spriteByCardId[pileTopBefore.id]);
       delete this.spriteByCardId[pileTopBefore.id];
     }
     const shown = (pileSnapshotBefore && pileSnapshotBefore.length>0) ? pileSnapshotBefore.slice(-8) : [];
@@ -1703,7 +1800,7 @@ class MainScene extends Phaser.Scene {
     spr.restX = x; spr.restY = liftedY;
 
     if(dragConfig){
-      spr.setInteractive({useHandCursor:true});
+      this.safeInteractive(spr);
       this.input.setDraggable(spr);
       let dragged = false;
       let groupSprites = [];
@@ -1742,7 +1839,7 @@ class MainScene extends Phaser.Scene {
       spr.on('dragend', (pointer)=>{ dragConfig.onDrop(pointer); dragged = false; });
       spr.on('pointerup', ()=>{ if(!dragged && onClick) onClick(); });
     } else if(onClick){
-      spr.setInteractive({useHandCursor:true});
+      this.safeInteractive(spr);
       spr.on('pointerdown', onClick);
     }
     return spr;
@@ -1836,7 +1933,16 @@ class MainScene extends Phaser.Scene {
       txt.setFontSize(fontSize);
     }
     if(!opts.dim){
-      const hit = this.add.circle(x, y, radius, 0x000000, 0).setInteractive({useHandCursor:true});
+      // Rectangle plutot que Cercle pour la zone cliquable : Phaser genere
+      // fiablement une zone de detection automatique pour les rectangles
+      // (deja utilise sans souci pour menuButton/diffButton), mais PAS
+      // toujours pour les cercles sans forme de hit-area explicite --
+      // hitAreaCallback pouvait alors rester indefini, faisant planter
+      // Phaser en interne au moindre geste (mouvement de souris y compris,
+      // puisque ce bouton est de la premiere partie affichee en
+      // permanence). La zone est legerement carree plutot que ronde, un
+      // compromis mineur largement acceptable vu la gravite du plantage.
+      const hit = this.safeInteractive(this.add.rectangle(x, y, radius*2, radius*2, 0x000000, 0));
       hit.on('pointerdown', onClick);
     }
   }
@@ -1901,17 +2007,13 @@ class MainScene extends Phaser.Scene {
     this.aiHandX = W/2;
     this.aiHandOffY = -20;
 
-    // ---- Bouton FR/EN (coin haut-gauche, hors du chemin de tout le reste,
-    // toujours colle au vrai bord gauche donc pas de sx() ici) ----
-    const frColor = lang==='fr' ? '#ffd23f' : '#8a95a0';
-    const enColor = lang==='en' ? '#ffd23f' : '#8a95a0';
-    const frLbl = this.label(20, 18, 'FR', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:frColor, originY:0.5});
-    frLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('fr'));
-    const enLbl = this.label(68, 18, 'EN', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:enColor, originY:0.5});
-    enLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('en'));
-
-    // ---- Compteur de tours, discret, juste sous le toggle FR/EN ----
-    this.label(20, 45, t('turnCounter', {n: gameState.turnCount}),
+    // Plus de toggle FR/EN dessine par Phaser : la langue vit desormais
+    // dans la barre d'icones fixe (DOM, hors Phaser, coin haut-gauche a
+    // l'ecran) commune aux trois scenes. Le compteur de tours est pousse
+    // un peu plus bas (52 au lieu de 45) pour rester degage de cette barre
+    // meme au zoom le plus proche de 1 (ou elle occupe le plus d'espace
+    // relatif par rapport au canevas logique).
+    this.label(20, 52, t('turnCounter', {n: gameState.turnCount}),
       {fontSize:'15px', color:'#8a95a0', originY:0.5});
 
     // ---- Bandeau adversaire (au dessus de la table) : main cachee ----
@@ -2253,16 +2355,10 @@ class MainScene extends Phaser.Scene {
     // Fond : bandeau brun en haut, comme en paysage.
     this.add.rectangle(cx, 60, W, 110, 0x5a3a30).setOrigin(0.5);
 
-    // FR/EN (coin haut-gauche, position absolue comme en paysage)
-    const frColor = lang==='fr' ? '#ffd23f' : '#8a95a0';
-    const enColor = lang==='en' ? '#ffd23f' : '#8a95a0';
-    const frLbl = this.label(20, 18, 'FR', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:frColor, originY:0.5});
-    frLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('fr'));
-    const enLbl = this.label(68, 18, 'EN', {fontFamily:'"Press Start 2P"', fontSize:'11px', color:enColor, originY:0.5});
-    enLbl.setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.setLang('en'));
-
-    // Compteur de tours
-    this.label(20, 45, t('turnCounter', {n: gameState.turnCount}),
+    // Plus de toggle FR/EN dessine par Phaser (barre d'icones DOM fixe,
+    // commune aux trois scenes) : compteur de tours pousse a 52 pour
+    // rester degage de cette barre.
+    this.label(20, 52, t('turnCounter', {n: gameState.turnCount}),
       {fontSize:'15px', color:'#8a95a0', originY:0.5});
 
     // ---- Bandeau adversaire : eventail + compte reel a gauche ----
@@ -2576,8 +2672,15 @@ class MainScene extends Phaser.Scene {
       const s = this.spriteByCardId[c.id];
       if(s){
         this.dragReleasePos[c.id] = { x:s.x, y:s.y, scale:s.scaleX };
-        s.destroy();
         delete this.spriteByCardId[c.id];
+        // La destruction elle-meme est REPORTEE au tick suivant : la
+        // detruire ICI, en plein milieu du gestionnaire "dragend" que
+        // Phaser vient d'appeler pour CETTE MEME carte, fait planter le
+        // traitement interne de Phaser (qui continue son propre cycle de
+        // hit-test juste apres notre callback et retombe sur un objet deja
+        // detruit -> "hitAreaCallback is not a function", plantage
+        // recuperable seulement par un F5).
+        this.time.delayedCall(0, ()=>{ s.destroy(); });
       }
     }
 
@@ -2662,6 +2765,31 @@ const config = {
   scene: [MenuScene, DifficultyScene, MainScene]
 };
 game = new Phaser.Game(config);
+
+// Pont entre le bouton de langue (DOM, hors Phaser) et la scene active :
+// met a jour la variable globale `lang`, puis redemande a la scene
+// actuellement affichee de se redessiner. On ne sait pas d'avance laquelle
+// des trois est active, donc on les essaie toutes (isActive() renvoie
+// simplement false pour celles qui ne le sont pas).
+window.__applyLang = function(newLang){
+  if(lang===newLang) return;
+  lang = newLang;
+  try{ localStorage.setItem('shithead_lang', newLang); }catch(e){}
+  if(window.__updateLangPopup) window.__updateLangPopup(newLang);
+  if(!game || !game.scene) return;
+  ['menu','difficulty','main'].forEach(key=>{
+    if(!game.scene.isActive(key)) return;
+    const scene = game.scene.getScene(key);
+    if(!scene) return;
+    if(scene.refreshLogText) scene.refreshLogText();
+    // Reporte au tick suivant, meme raison que partout ailleurs dans le
+    // jeu : ce clic vient de l'exterieur de Phaser, mais un redessin
+    // immediat detruirait quand meme des sprites potentiellement en plein
+    // milieu d'un traitement d'evenement Phaser en cours.
+    scene.time.delayedCall(0, ()=>{ if(scene.scene.isActive()) scene.render(); });
+  });
+};
+window.__updateLangPopup(lang);
 </script>
 </body>
 </html>
