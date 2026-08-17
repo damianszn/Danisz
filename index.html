@@ -93,6 +93,55 @@
      un SVG currentColor, lui, prend exactement la meme couleur que le
      texte du bouton (donc que ⚙/⛶ a cote). */
   #account-icon{ flex:none; }
+
+  /* Bulle "cree-toi un compte" : pousse le joueur non-connecte a le faire,
+     style BD/cartoon (fond vif, contour epais, petite pointe vers le
+     bouton, leger rebond) pour etre nettement plus visible que le bouton
+     discret qu'elle pointe -- juste en dessous de lui, jamais superposee.
+     Purement CSS/DOM (comme tout le groupe compte), ind. de Phaser :
+     affichee/masquee depuis refreshAccountUI() selon l'etat de connexion.
+     Largeur/police REELLEMENT responsive : ni une valeur fixe (illisible
+     sur grand ecran) ni juste plafonnee en vw (peut quand meme chevaucher
+     le titre "Danisz" dessine sur le canvas Phaser, dont ce CSS ne sait
+     rien) -- voir window.__setAccountHintAvail, appele par
+     MenuScene.render() a chaque rendu avec la position REELLE du titre,
+     qui vise ~75% de l'espace dispo entre lui et le bord d'ecran. */
+  #account-hint-bubble{
+    display:none;
+    box-sizing:border-box;
+    position:fixed; top:44px; right:8px; z-index:9999;
+    max-width:min(170px, 40vw); /* repli avant le tout premier rendu */
+    background:#ffd23f; color:#1a1008;
+    border:3px solid #1a1008; border-radius:14px;
+    padding:8px 10px;
+    font-family:'VT323',monospace; font-size:15px; line-height:1.22;
+    text-align:center;
+    box-shadow:0 4px 0 rgba(0,0,0,0.35);
+    cursor:pointer;
+    animation: hint-bounce 1.6s ease-in-out infinite;
+  }
+  #account-hint-bubble.show{ display:block; }
+  /* Petite pointe triangulaire vers le haut-droit, en direction du bouton
+     compte juste au-dessus. */
+  #account-hint-bubble::after{
+    content:''; position:absolute; top:-9px; right:18px;
+    width:0; height:0;
+    border-left:8px solid transparent; border-right:8px solid transparent;
+    border-bottom:9px solid #1a1008;
+  }
+  #account-hint-bubble::before{
+    content:''; position:absolute; top:-6px; right:19px;
+    width:0; height:0;
+    border-left:7px solid transparent; border-right:7px solid transparent;
+    border-bottom:7px solid #ffd23f;
+  }
+  @keyframes hint-bounce{
+    0%, 100%{ transform:translateY(0); }
+    50%{ transform:translateY(-4px); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    #account-hint-bubble{ animation:none; }
+  }
   #account-panel{
     display:none;
     position:fixed; top:40px; right:6px; z-index:10001;
@@ -355,6 +404,7 @@
     <span id="account-btn-label"></span>
   </button>
 </div>
+<div id="account-hint-bubble"></div>
 <div id="account-panel">
   <div id="account-guest">
     <div class="account-label" id="account-guest-label"></div>
@@ -711,6 +761,7 @@ const I18N = {
     betaLabel: "Closed Beta",
     onlineBetaPrompt: "Mot de passe beta :",
     lastUpdateLabel: "MAJ",
+    accountHintBubble: "Cree-toi un compte : le online et le competitif t'y attendent !",
     onlineLobbyTitle: "1v1 en ligne",
     onlineStatsLine: "{online} en ligne · {queue} en file d'attente",
     onlineNeedsAccountMsg: "Cree un profil (bouton Profil, menu precedent) pour jouer en ligne.",
@@ -859,6 +910,7 @@ const I18N = {
     betaLabel: "Closed Beta",
     onlineBetaPrompt: "Beta-wachtwoord:",
     lastUpdateLabel: "Laatste update",
+    accountHintBubble: "Maak een profiel aan: online en competitief wachten op je!",
     onlineLobbyTitle: "1v1 online",
     onlineStatsLine: "{online} online · {queue} in wachtrij",
     onlineNeedsAccountMsg: "Maak een profiel aan (knop Profiel, vorig menu) om online te spelen.",
@@ -1007,6 +1059,7 @@ const I18N = {
     betaLabel: "Closed Beta",
     onlineBetaPrompt: "Haslo beta:",
     lastUpdateLabel: "Ostatnia aktualizacja",
+    accountHintBubble: "Zaloz konto: tryb online i rankingowy juz na Ciebie czekaja!",
     onlineLobbyTitle: "1v1 online",
     onlineStatsLine: "{online} online · {queue} w kolejce",
     onlineNeedsAccountMsg: "Utworz profil (przycisk Profil, poprzednie menu), aby grac online.",
@@ -1155,6 +1208,7 @@ const I18N = {
     betaLabel: "Closed Beta",
     onlineBetaPrompt: "Beta password:",
     lastUpdateLabel: "Last update",
+    accountHintBubble: "Create an account: online and competitive play await!",
     onlineLobbyTitle: "1v1 online",
     onlineStatsLine: "{online} online · {queue} in queue",
     onlineNeedsAccountMsg: "Create a profile (Profile button, previous menu) to play online.",
@@ -2122,7 +2176,14 @@ class MenuScene extends Phaser.Scene {
     const titleY = isPortraitMenu
       ? Math.max(60, Math.min(180, H*0.12))
       : Math.max(30, Math.min(210, H*0.18));
-    this.add.text(cx, titleY, 'Danisz', {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px', color:'#e9ddc8'}).setOrigin(0.5);
+    const titleObj = this.add.text(cx, titleY, 'Danisz', {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px', color:'#e9ddc8'}).setOrigin(0.5);
+    // La bulle "cree-toi un compte" (overlay DOM, voir plus bas) ne connait
+    // pas la position du titre dessine ici sur le canvas -- on le lui
+    // communique a chaque rendu pour qu'elle puisse occuper le plus de
+    // place possible sans jamais le chevaucher, plutot que de deviner une
+    // largeur fixe qui est soit trop large (chevauchement) soit trop
+    // etroite (illisible) selon la taille d'ecran.
+    if(window.__setAccountHintAvail) window.__setAccountHintAvail(titleObj.getBounds().right, W);
 
     if(isPortraitMenu){
       // Empile en 1 colonne pleine largeur : une grille 2 colonnes ne
@@ -2775,8 +2836,13 @@ class OnlineLobbyScene extends Phaser.Scene {
       this.scene.start('menu');
     });
 
-    const titleSize = Math.max(22, Math.min(34, Math.round(H*0.06)));
-    this.add.text(cx, 90, t('onlineLobbyTitle'), {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px', color:'#e9ddc8'}).setOrigin(0.5);
+    // Titre + compteur en Y RELATIF a H (pas fixe) : sur un telephone en
+    // paysage, H peut descendre tres bas (barre d'adresse comprise), et un
+    // bloc d'entete a position fixe finit par chevaucher le contenu du mode
+    // actif (cy-relatif, lui) des que l'ecran est assez court.
+    const titleSize = Math.max(18, Math.min(30, Math.round(H*0.08)));
+    const titleY = Math.max(30, Math.min(70, H*0.13));
+    this.add.text(cx, titleY, t('onlineLobbyTitle'), {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px', color:'#e9ddc8'}).setOrigin(0.5);
 
     const hasAccount = window.DaniszAccount && window.DaniszAccount.hasAccount();
     if(!hasAccount){
@@ -2792,28 +2858,38 @@ class OnlineLobbyScene extends Phaser.Scene {
     // l'ecran transitoire "adversaire trouve"). Rien tant que les deux
     // valeurs n'ont pas encore ete recues au moins une fois (evite un
     // "0 en ligne / 0 en file" trompeur pendant l'instant de chargement).
-    if(this.mode!=='matched' && this.onlineCount!==null && this.queueCount!==null){
-      this.add.text(cx, 122, t('onlineStatsLine', {online: this.onlineCount, queue: this.queueCount}),
+    const showStats = this.mode!=='matched' && this.onlineCount!==null && this.queueCount!==null;
+    let headerBottom = titleY + titleSize*0.9;
+    if(showStats){
+      const statsY = headerBottom + 18;
+      this.add.text(cx, statsY, t('onlineStatsLine', {online: this.onlineCount, queue: this.queueCount}),
         {fontFamily:'"VT323"', fontSize:'17px', color:'#9aa8b0'}).setOrigin(0.5);
+      headerBottom = statsY + 10;
     }
+
+    // Point de depart du contenu du mode actif : centre verticalement
+    // (cy) sur un ecran normal/haut, mais jamais plus haut que juste sous
+    // l'entete (titre + compteur) -- sur un paysage tres court, ca pousse
+    // le contenu vers le bas au lieu de le laisser chevaucher l'entete.
+    const baseY = Math.max(cy, headerBottom + 46);
 
     if(this.mode==='choice'){
       const btnW = Math.min(360, W*0.7), btnH = 64;
-      this.bigButton(cx, cy-60, btnW, btnH, t('onlineQueueBtn'), ()=>this.startQueue());
-      this.bigButton(cx, cy+20, btnW, btnH, t('onlineCreateBtn'), ()=>this.createInvite());
+      this.bigButton(cx, baseY-60, btnW, btnH, t('onlineQueueBtn'), ()=>this.startQueue());
+      this.bigButton(cx, baseY+20, btnW, btnH, t('onlineCreateBtn'), ()=>this.createInvite());
       if(this.errorMsg){
-        this.add.text(cx, cy+80, this.errorMsg, {fontFamily:'"VT323"', fontSize:'18px', color:'#ff5f5f'}).setOrigin(0.5);
+        this.add.text(cx, baseY+80, this.errorMsg, {fontFamily:'"VT323"', fontSize:'18px', color:'#ff5f5f'}).setOrigin(0.5);
       }
     } else if(this.mode==='searching'){
-      this.add.text(cx, cy-20, t('onlineSearching'), {fontFamily:'"VT323"', fontSize:'24px', color:'#c9d6c0'}).setOrigin(0.5);
-      this.bigButton(cx, cy+60, 200, 54, t('btnCancel'), ()=>this.cancelQueue());
+      this.add.text(cx, baseY-20, t('onlineSearching'), {fontFamily:'"VT323"', fontSize:'24px', color:'#c9d6c0'}).setOrigin(0.5);
+      this.bigButton(cx, baseY+60, 200, 54, t('btnCancel'), ()=>this.cancelQueue());
     } else if(this.mode==='waiting-invite'){
-      this.add.text(cx, cy-70, t('onlineWaitingTitle'), {fontFamily:'"VT323"', fontSize:'22px', color:'#c9d6c0'}).setOrigin(0.5);
-      this.add.text(cx, cy-28, t('onlineYourCode'), {fontFamily:'"VT323"', fontSize:'18px', color:'#9aa8b0'}).setOrigin(0.5);
-      this.add.text(cx, cy+18, this.inviteCode, {fontFamily:'"Press Start 2P"', fontSize:'32px', color:'#ffd23f'}).setOrigin(0.5);
-      this.bigButton(cx, cy+90, 200, 54, t('btnCancel'), ()=>this.cancelQueue());
+      this.add.text(cx, baseY-70, t('onlineWaitingTitle'), {fontFamily:'"VT323"', fontSize:'22px', color:'#c9d6c0'}).setOrigin(0.5);
+      this.add.text(cx, baseY-28, t('onlineYourCode'), {fontFamily:'"VT323"', fontSize:'18px', color:'#9aa8b0'}).setOrigin(0.5);
+      this.add.text(cx, baseY+18, this.inviteCode, {fontFamily:'"Press Start 2P"', fontSize:'32px', color:'#ffd23f'}).setOrigin(0.5);
+      this.bigButton(cx, baseY+90, 200, 54, t('btnCancel'), ()=>this.cancelQueue());
     } else if(this.mode==='matched'){
-      this.add.text(cx, cy, t('onlineMatchedMsg'), {
+      this.add.text(cx, baseY, t('onlineMatchedMsg'), {
         fontFamily:'"VT323"', fontSize:'24px', color:'#5fdc7a', align:'center', wordWrap:{width:Math.min(460,W-100)}
       }).setOrigin(0.5);
     }
@@ -5002,6 +5078,7 @@ window.__updateLangPopup(lang);
    ========================================================= */
 (function(){
   const bar = document.getElementById('account-bar');
+  const hintBubble = document.getElementById('account-hint-bubble');
   const btn = document.getElementById('account-btn');
   const btnLabel = document.getElementById('account-btn-label');
   const panel = document.getElementById('account-panel');
@@ -5060,11 +5137,17 @@ window.__updateLangPopup(lang);
 
   function refreshAccountUI(){
     bar.style.display = currentScene==='menu' ? '' : 'none';
-    if(currentScene!=='menu') return;
+    if(currentScene!=='menu'){ hintBubble.classList.remove('show'); return; }
     const state = window.DaniszAccount ? window.DaniszAccount.getState() : {session:null, profile:null};
     btn.title = t('accountBtnTitle');
     btn.classList.toggle('connected', !!state.profile);
     btnLabel.textContent = state.profile ? state.profile.pseudo : t('accountMenuLabel');
+    // Bulle d'incitation a se creer un compte : uniquement tant que non
+    // connecte, disparait immediatement des que state.profile existe (voir
+    // signIn/signUp -- notify() declenche refreshAccountUI() a chaque
+    // changement de state, donc pas de delai/etape supplementaire ici).
+    hintBubble.textContent = t('accountHintBubble');
+    hintBubble.classList.toggle('show', !state.profile);
     tabSignup.textContent = t('accountTabSignup');
     tabSignin.textContent = t('accountTabSignin');
     pseudoInput.placeholder = t('accountPseudoPlaceholder');
@@ -5122,6 +5205,20 @@ window.__updateLangPopup(lang);
     refreshAccountUI();
     panel.classList.toggle('open');
   });
+  hintBubble.addEventListener('click', (e)=>{ e.stopPropagation(); btn.click(); });
+  // Appele par MenuScene.render() (voir la-bas) : occupe une bonne partie
+  // (3/4) de l'espace REELLEMENT disponible entre le bord droit du titre
+  // "Danisz" (dessine sur le canvas, donc inconnu d'ici sans ce pont) et le
+  // bord droit de l'ecran, avec une marge de securite fixe -- plutot qu'une
+  // largeur figee qui est soit illisible (trop etroite) soit en collision
+  // (trop large) selon la taille d'ecran. La police suit proportionnellement.
+  window.__setAccountHintAvail = function(titleRightPx, screenW){
+    const marginTitle = 20, marginEdge = 8;
+    const avail = Math.max(70, screenW - titleRightPx - marginTitle - marginEdge);
+    const width = Math.max(90, Math.min(360, avail * 0.75));
+    hintBubble.style.maxWidth = width + 'px';
+    hintBubble.style.fontSize = Math.max(11, Math.min(18, Math.round(width / 11))) + 'px';
+  };
   panel.addEventListener('click', (e)=>e.stopPropagation());
   document.addEventListener('click', closePanel);
 
