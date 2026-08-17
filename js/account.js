@@ -213,6 +213,12 @@
   function getState(){ return state; }
   function onChange(fn){ listeners.push(fn); if(ready) fn(state); }
 
-  window.DaniszAccount = { signUp, signIn, signOut, setPseudo, reportAiMatch, fetchMyTopScores, fetchModeLeaderboard, hasAccount, getState, onChange };
+  // Expose le client Supabase deja initialise (session/auth partagee) a
+  // d'autres modules (js/online.js) : create un 2e client independant
+  // desynchroniserait l'etat d'auth entre les deux (localStorage partage
+  // mais etat memoire separe).
+  async function getClient(){ await init(); return supabase; }
+
+  window.DaniszAccount = { signUp, signIn, signOut, setPseudo, reportAiMatch, fetchMyTopScores, fetchModeLeaderboard, hasAccount, getState, onChange, getClient };
   init().catch(e=>console.error('[DaniszAccount] init failed', e));
 })();

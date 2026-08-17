@@ -12,6 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
 <script src="js/account.js"></script>
+<script src="js/online.js"></script>
 <style>
   html,body{margin:0;padding:0;background:#2e4928;overflow:hidden;font-family:'VT323',monospace;}
   #game-container{width:100vw;height:100vh;}
@@ -129,6 +130,152 @@
   }
   .topscore-row span:first-child{ color:#9aa8b0; }
 
+  /* Saisie du code d'invitation (1v1 en ligne) : overlay HTML comme le
+     panneau compte, seul moyen simple d'avoir un vrai champ de saisie
+     texte par-dessus le canvas Phaser (qui ne sait pas faire ca nativement).
+     N'existe que sur l'ecran de lobby en ligne (voir window.__onSceneChange
+     plus bas), cache partout ailleurs. */
+  #online-join-panel{
+    display:none;
+    position:fixed; left:50%; bottom:32px; transform:translateX(-50%); z-index:9000;
+    background:rgba(12,20,16,0.92); border:1px solid rgba(215,164,92,0.5);
+    border-radius:6px; padding:12px; width:260px; box-sizing:border-box;
+    font-family:'VT323',monospace; color:#e9ddc8;
+  }
+  #online-join-panel.open{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  #online-join-input{
+    flex:1; min-width:90px; box-sizing:border-box; padding:8px; text-align:center;
+    background:#0c1410; border:1px solid rgba(215,164,92,0.5); border-radius:4px;
+    color:#e9ddc8; font-family:'Press Start 2P', monospace; font-size:16px;
+    letter-spacing:2px; text-transform:uppercase;
+  }
+  #online-join-btn{
+    padding:8px 14px; background:#2f8f4e; border:1px solid #5fdc7a;
+    border-radius:4px; color:#1a1008; font-family:'Press Start 2P', monospace;
+    font-size:12px; cursor:pointer;
+  }
+  #online-join-btn:disabled{ opacity:0.6; cursor:default; }
+  #online-join-error{ flex-basis:100%; color:#ff5f5f; font-size:14px; min-height:1em; }
+
+  /* Tutoriel : overlay DOM (pas de canvas ici, plus simple pour du texte +
+     images qui defile) avec des vraies images de cartes (assets/cards/) --
+     coherent avec le reste (compte, code d'invitation) qui vit deja hors
+     Phaser. */
+  #tutorial-overlay{
+    display:none;
+    position:fixed; inset:0; z-index:15000;
+    background:rgba(0,0,0,0.65);
+    align-items:center; justify-content:center;
+  }
+  #tutorial-overlay.open{ display:flex; }
+  #tutorial-modal{
+    position:relative;
+    background:#152018; border:1px solid rgba(215,164,92,0.5); border-radius:10px;
+    width:min(640px, 92vw); max-height:88vh; overflow-y:auto;
+    padding:26px 24px 18px; box-sizing:border-box;
+    color:#e9ddc8; font-family:'VT323',monospace;
+  }
+  #tutorial-close-btn{
+    position:absolute; top:12px; right:14px; background:transparent; border:none;
+    color:#e9ddc8; font-size:24px; cursor:pointer; line-height:1; opacity:0.8;
+  }
+  #tutorial-close-btn:hover{ opacity:1; }
+  .tutorial-slide{ display:none; min-height:280px; }
+  .tutorial-slide.active{ display:block; }
+  .tutorial-slide-title{
+    font-family:'Press Start 2P', monospace; font-size:19px; color:#ffd23f;
+    margin:0 0 18px; padding-right:20px;
+  }
+  .tutorial-intro{ font-size:19px; line-height:1.5; margin:0 0 8px; color:#e9ddc8; }
+  .tutorial-intro-note{
+    font-size:17px; line-height:1.4; margin:0 0 16px; color:#c9d6c0;
+    background:rgba(215,164,92,0.1); border-left:3px solid rgba(215,164,92,0.5);
+    padding:6px 10px; border-radius:0 4px 4px 0;
+  }
+  .tutorial-bullets{ margin:0; padding-left:22px; font-size:19px; line-height:1.65; }
+  .tutorial-bullets li{ margin-bottom:8px; }
+  .tutorial-illustration{
+    display:flex; align-items:center; justify-content:center; gap:20px;
+    margin-bottom:18px; min-height:110px; flex-wrap:wrap;
+  }
+  .tutorial-mini-card{ width:58px; border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,0.4); }
+  .tutorial-mini-card.big{ width:90px; }
+
+  /* Petite pioche : 3 dos de carte legerement decales, comme en jeu. */
+  .deck-stack{ position:relative; width:80px; height:78px; }
+  .deck-stack img{ position:absolute; width:58px; border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,0.4); }
+  .deck-stack img:nth-child(1){ top:8px; left:8px; }
+  .deck-stack img:nth-child(2){ top:4px; left:4px; }
+  .deck-stack img:nth-child(3){ top:0; left:0; }
+  .tutorial-hand-mini{ display:flex; gap:6px; }
+  .tutorial-hand-mini img{ width:52px; border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,0.4); }
+
+  /* Carte face cachee + face visible legerement decalee derriere : le setup
+     "3 colonnes cachees/visibles" evoque sans redessiner toute la table. */
+  .stacked-pair{ position:relative; width:56px; height:80px; }
+  .stacked-pair img{ position:absolute; width:52px; border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,0.4); }
+  .stacked-pair .back{ top:6px; left:6px; }
+  .stacked-pair .front{ top:0; left:0; }
+
+  /* Eventail de decoupe, meme esprit visuel que l'ecran de jeu (dos de carte
+     empiles en rotation), en beaucoup plus modeste. */
+  .cut-stack{ position:relative; width:110px; height:90px; margin:0 auto; }
+  .cut-stack img{ position:absolute; width:56px; top:16px; left:26px; border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,0.4); transform-origin:bottom left; }
+  .cut-stack img:nth-child(1){ transform:rotate(-18deg); }
+  .cut-stack img:nth-child(2){ transform:rotate(-9deg); }
+  .cut-stack img:nth-child(3){ transform:rotate(0deg); }
+  .cut-stack img:nth-child(4){ transform:rotate(9deg); }
+  .cut-stack img:nth-child(5){ transform:rotate(18deg); }
+
+  /* Cadre autour de la rangee de jokers, pour bien la distinguer visuellement
+     de la rangee "normale" juste en dessous. fieldset/legend donne
+     nativement l'encoche avec le mot decoupe dans la bordure, sans code
+     de positionnement manuel. */
+  .tutorial-joker-frame{
+    border:2px solid #ffd23f; border-radius:8px;
+    margin:0 0 18px; padding:16px 12px 4px;
+  }
+  .tutorial-joker-label{
+    padding:0 8px; font-family:'VT323',monospace; font-size:14px;
+    color:#ffd23f; opacity:0.75; letter-spacing:1px; text-transform:uppercase;
+  }
+  .tutorial-card-row{ display:flex; justify-content:center; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+  .tutorial-card-row .tutorial-mini-card{ width:48px; margin-top:14px; }
+  .tutorial-card-bubble{ display:flex; flex-direction:column; align-items:center; gap:6px; width:80px; }
+  .tutorial-card-bubble img{ width:52px; border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,0.4); margin-top:14px; }
+  /* 7 et 8 : cartes NORMALES qui ont quand meme une bulle -- pas des jokers.
+     Plutot que de les agrandir (illisible, "pousse" vers la rangee de
+     jokers au-dessus), on les souleve legerement comme une carte
+     preselectionnee en jeu (voir addCardSprite/highlighted) : meme taille
+     que leurs voisines, juste un peu plus haut. */
+  .tutorial-card-bubble.lifted img{ width:48px; margin-top:0; }
+  .tutorial-card-bubble .bubble{
+    background:rgba(12,20,16,0.85); border:1px solid rgba(215,164,92,0.5); border-radius:6px;
+    padding:6px 7px; font-size:13px; line-height:1.3; text-align:center; color:#e9ddc8;
+  }
+  /* Bulle des 7/8 : accent plus froid/discret que le dore des jokers, pour
+     bien marquer que c'est une info secondaire sur une carte normale, pas
+     la regle qui definit un joker. */
+  .tutorial-card-bubble.lifted .bubble{
+    border-color:rgba(138,196,196,0.5);
+  }
+
+  #tutorial-nav{
+    display:flex; align-items:center; justify-content:center; gap:16px;
+    margin-top:14px; padding-top:14px; border-top:1px solid rgba(215,164,92,0.25);
+  }
+  #tutorial-prev-btn, #tutorial-next-btn{
+    background:#2f8f4e; border:1px solid #5fdc7a; color:#1a1008;
+    width:36px; height:36px; border-radius:50%; font-size:18px; cursor:pointer;
+  }
+  #tutorial-prev-btn:disabled, #tutorial-next-btn:disabled{ opacity:0.35; cursor:default; }
+  #tutorial-dots{ display:flex; gap:8px; }
+  .tutorial-dot{
+    width:10px; height:10px; border-radius:50%; background:rgba(233,221,200,0.3);
+    border:none; cursor:pointer; padding:0;
+  }
+  .tutorial-dot.active{ background:#ffd23f; }
+
   /* Ecran "tourne ton telephone" : trop de cartes/elements pour bien tenir
      verticalement, donc plutot que de forcer un mode portrait compresse,
      on demande de passer en paysage sur mobile. Cible specifiquement les
@@ -224,6 +371,110 @@
     <div id="account-topscores-title"></div>
     <div id="account-topscores"></div>
     <button id="account-signout-btn" class="secondary"></button>
+  </div>
+</div>
+<div id="online-join-panel">
+  <input id="online-join-input" maxlength="6" autocomplete="off" autocapitalize="characters">
+  <button id="online-join-btn"></button>
+  <div id="online-join-error"></div>
+</div>
+<div id="tutorial-overlay">
+  <div id="tutorial-modal">
+    <button id="tutorial-close-btn">&times;</button>
+
+    <div class="tutorial-slide" data-slide="0">
+      <h3 class="tutorial-slide-title"></h3>
+      <div class="tutorial-illustration">
+        <div class="deck-stack">
+          <img src="assets/cards/back.png"><img src="assets/cards/back.png"><img src="assets/cards/back.png">
+        </div>
+        <div class="tutorial-hand-mini">
+          <img src="assets/cards/4.png"><img src="assets/cards/7.png"><img src="assets/cards/12-Q.png">
+        </div>
+      </div>
+      <ul class="tutorial-bullets"></ul>
+    </div>
+
+    <div class="tutorial-slide" data-slide="1">
+      <h3 class="tutorial-slide-title"></h3>
+      <div class="tutorial-illustration">
+        <div class="stacked-pair"><img class="back" src="assets/cards/back.png"><img class="front" src="assets/cards/9.png"></div>
+        <div class="stacked-pair"><img class="back" src="assets/cards/back.png"><img class="front" src="assets/cards/13-K.png"></div>
+        <div class="stacked-pair"><img class="back" src="assets/cards/back.png"><img class="front" src="assets/cards/5.png"></div>
+      </div>
+      <ul class="tutorial-bullets"></ul>
+    </div>
+
+    <div class="tutorial-slide" data-slide="2">
+      <h3 class="tutorial-slide-title"></h3>
+      <p class="tutorial-intro"></p>
+      <p class="tutorial-intro-note"></p>
+      <fieldset class="tutorial-joker-frame">
+        <legend class="tutorial-joker-label"></legend>
+        <div class="tutorial-card-row jokers">
+          <div class="tutorial-card-bubble">
+            <img src="assets/cards/2.png"><div class="bubble"></div>
+          </div>
+          <div class="tutorial-card-bubble">
+            <img src="assets/cards/3.png"><div class="bubble"></div>
+          </div>
+          <div class="tutorial-card-bubble">
+            <img src="assets/cards/10.png"><div class="bubble"></div>
+          </div>
+          <div class="tutorial-card-bubble">
+            <img src="assets/cards/14-A.png"><div class="bubble"></div>
+          </div>
+        </div>
+      </fieldset>
+      <div class="tutorial-card-row normals">
+        <img class="tutorial-mini-card" src="assets/cards/4.png">
+        <img class="tutorial-mini-card" src="assets/cards/5.png">
+        <img class="tutorial-mini-card" src="assets/cards/6.png">
+        <div class="tutorial-card-bubble lifted">
+          <img src="assets/cards/7.png"><div class="bubble"></div>
+        </div>
+        <div class="tutorial-card-bubble lifted">
+          <img src="assets/cards/8.png"><div class="bubble"></div>
+        </div>
+        <img class="tutorial-mini-card" src="assets/cards/9.png">
+        <img class="tutorial-mini-card" src="assets/cards/11-J.png">
+        <img class="tutorial-mini-card" src="assets/cards/12-Q.png">
+        <img class="tutorial-mini-card" src="assets/cards/13-K.png">
+      </div>
+    </div>
+
+    <div class="tutorial-slide" data-slide="3">
+      <h3 class="tutorial-slide-title"></h3>
+      <div class="tutorial-illustration">
+        <img class="tutorial-mini-card big" src="assets/cards/14-A.png">
+      </div>
+      <ul class="tutorial-bullets"></ul>
+    </div>
+
+    <div class="tutorial-slide" data-slide="4">
+      <h3 class="tutorial-slide-title"></h3>
+      <div class="tutorial-illustration">
+        <div class="cut-stack">
+          <img src="assets/cards/back.png"><img src="assets/cards/back.png"><img src="assets/cards/back.png">
+          <img src="assets/cards/back.png"><img src="assets/cards/back.png">
+        </div>
+      </div>
+      <ul class="tutorial-bullets"></ul>
+    </div>
+
+    <div class="tutorial-slide" data-slide="5">
+      <h3 class="tutorial-slide-title"></h3>
+      <div class="tutorial-illustration">
+        <img class="tutorial-mini-card big" src="assets/cards/8.png">
+      </div>
+      <ul class="tutorial-bullets"></ul>
+    </div>
+
+    <div id="tutorial-nav">
+      <button id="tutorial-prev-btn">‹</button>
+      <div id="tutorial-dots"></div>
+      <button id="tutorial-next-btn">›</button>
+    </div>
   </div>
 </div>
 <div id="rotate-overlay">
@@ -352,6 +603,7 @@ const I18N = {
     btnTake: "Prendre",
     btnCancel: "Annuler",
     btnReplay: "Rejouer",
+    btnBackToMode: "Retour",
     victory: "VICTOIRE",
     defeat: "DEFAITE",
     takenLabel: "+{n} carte(s)",
@@ -409,7 +661,45 @@ const I18N = {
     diffEasyRules: "🗂️ Main triee automatiquement par rang\n🔒 Cartes injouables grisees\n🤖 IA basique",
     diffNormalRules: "✋ Main libre, glisse pour reordonner\n🤖 IA basique",
     diffHardRules: "✋ Main libre, glisse pour reordonner\n🧠 IA avancee, anticipe mieux",
-    diffNightmareRules: "✋ Main libre, glisse pour reordonner\n🧠 IA avancee, anticipe mieux\n🙈 Compteurs masques (main adverse + pile)\n🚫 \"Prendre\" impossible si tu as un coup jouable"
+    diffNightmareRules: "✋ Main libre, glisse pour reordonner\n🧠 IA avancee, anticipe mieux\n🙈 Compteurs masques (main adverse + pile)\n🚫 \"Prendre\" impossible si tu as un coup jouable",
+
+    betaLabel: "Beta",
+    onlineBetaPrompt: "Mot de passe beta :",
+    onlineLobbyTitle: "1v1 en ligne",
+    onlineNeedsAccountMsg: "Cree un profil (bouton Profil, menu precedent) pour jouer en ligne.",
+    onlineQueueBtn: "Recherche rapide",
+    onlineCreateBtn: "Creer un code",
+    onlineJoinBtn: "Rejoindre",
+    onlineJoinPlaceholder: "CODE",
+    onlineSearching: "Recherche d'un adversaire...",
+    onlineWaitingTitle: "En attente d'un adversaire...",
+    onlineYourCode: "Ton code :",
+    onlineMatchedMsg: "Adversaire trouve ! La partie en temps reel arrive bientot.",
+    onlineJoinEmpty: "Entre un code.",
+    onlineErrorNotFound: "Code introuvable.",
+    onlineErrorOwnLobby: "Tu ne peux pas rejoindre ta propre partie.",
+
+    tutorialBtn: "Tutoriel",
+    tutorialSlide1Title: "Rythme de jeu",
+    tutorialSlide1Bullets: "Vous jouez chacun votre tour.\nTu poses une ou plusieurs cartes du meme rang, de valeur egale ou superieure a la derniere carte posee.\nTu ne peux pas (ou ne veux pas) jouer ? Tu ramasses tout le tas.\nApres avoir joue depuis ta main, tu repioches jusqu'a en avoir 3, tant qu'il reste des cartes dans la pioche.",
+    tutorialSlide2Title: "Une fois la pioche vide",
+    tutorialSlide2Bullets: "Chaque joueur a aussi 3 cartes face visible et 3 cartes face cachee, posees devant lui des le debut de partie.\nMain et pioche vides ? Tu joues directement tes cartes face visible.\nCartes face visible epuisees ? Tu joues tes cartes face cachee a l'aveugle, sans connaitre leur valeur.\nCarte face cachee injouable ? Tu ramasses le tas ET cette carte.\nPremier a n'avoir plus aucune carte : victoire !",
+    tutorialSlide3Title: "Les cartes",
+    tutorialSlide3Intro: "A part les jokers, toutes les cartes se jouent dans l'ordre normal : a valeur egale ou superieure a la derniere carte posee.",
+    tutorialSlide3IntroNote: "Meme si elles ont un pouvoir, les 7 et 8 doivent etre poses dans cet ordre normal, comme n'importe quelle autre carte.",
+    tutorialJokerLabel: "Jokers",
+    tutorialSlide4Title: "Les guerres",
+    tutorialSlide4Bullets: "Jouer un As declenche une guerre : l'adversaire ne peut plus repondre qu'avec un joker.\nAs : relance la guerre. 3 : copie l'As, la guerre continue.\n2 : reset, la guerre s'arrete. 10 : coupe la pile, tout s'arrete net.\nAucun joker en main ? Tu ramasses tout le tas, la guerre est terminee.",
+    tutorialSlide5Title: "La decoupe",
+    tutorialSlide5Bullets: "4 cartes de meme valeur d'affilee sur la pile : decoupe ! La pile est mise de cote, tu rejoues.\nCa marche aussi avec 3 cartes identiques + un 3 qui copie la derniere pour completer la suite.\nEt comme vu plus haut : un 10 coupe toujours la pile, peu importe ce qu'il y a dessous.",
+    tutorialSlide6Title: "Les 8 et les blocages",
+    tutorialSlide6Bullets: "En 1v1, un 8 passe simplement le tour de l'adversaire.\nPlusieurs 8 d'un coup : chaque 8 en plus du premier te donne un tour bonus.\nEn multijoueur (bientot), les 8 serviront a bloquer plusieurs adversaires a la fois.",
+    tutorialBubble2: "Reset : n'importe quelle carte peut suivre, une seule fois.",
+    tutorialBubble3: "Copie la carte juste en dessous (ou l'As pendant une guerre).",
+    tutorialBubble10: "Vide la pile d'un coup : tu rejoues immediatement.",
+    tutorialBubbleA: "Declenche (ou relance) une guerre.",
+    tutorialBubble7: "La prochaine carte doit valoir 7 ou moins.",
+    tutorialBubble8: "Passe le tour adverse. Plusieurs d'un coup = tours bonus."
   },
   nl: {
     logStarterYou: "Jij begint, met de laagste kaart.",
@@ -456,6 +746,7 @@ const I18N = {
     btnTake: "Pakken",
     btnCancel: "Annuleren",
     btnReplay: "Opnieuw",
+    btnBackToMode: "Terug",
     victory: "OVERWINNING",
     defeat: "NEDERLAAG",
     takenLabel: "+{n} kaart(en)",
@@ -513,7 +804,45 @@ const I18N = {
     diffEasyRules: "🗂️ Hand automatisch gesorteerd op rang\n🔒 Onspeelbare kaarten grijs\n🤖 Basis-AI",
     diffNormalRules: "✋ Vrije handvolgorde, sleep om te herschikken\n🤖 Basis-AI",
     diffHardRules: "✋ Vrije handvolgorde, sleep om te herschikken\n🧠 Geavanceerde AI, denkt vooruit",
-    diffNightmareRules: "✋ Vrije handvolgorde, sleep om te herschikken\n🧠 Geavanceerde AI, denkt vooruit\n🙈 Tellers verborgen (hand tegenstander + stapel)\n🚫 \"Pakken\" onmogelijk als je kan spelen"
+    diffNightmareRules: "✋ Vrije handvolgorde, sleep om te herschikken\n🧠 Geavanceerde AI, denkt vooruit\n🙈 Tellers verborgen (hand tegenstander + stapel)\n🚫 \"Pakken\" onmogelijk als je kan spelen",
+
+    betaLabel: "Beta",
+    onlineBetaPrompt: "Beta-wachtwoord:",
+    onlineLobbyTitle: "1v1 online",
+    onlineNeedsAccountMsg: "Maak een profiel aan (knop Profiel, vorig menu) om online te spelen.",
+    onlineQueueBtn: "Snel zoeken",
+    onlineCreateBtn: "Code aanmaken",
+    onlineJoinBtn: "Deelnemen",
+    onlineJoinPlaceholder: "CODE",
+    onlineSearching: "Op zoek naar een tegenstander...",
+    onlineWaitingTitle: "Wachten op een tegenstander...",
+    onlineYourCode: "Jouw code:",
+    onlineMatchedMsg: "Tegenstander gevonden! Live spelen komt binnenkort.",
+    onlineJoinEmpty: "Voer een code in.",
+    onlineErrorNotFound: "Code niet gevonden.",
+    onlineErrorOwnLobby: "Je kan niet deelnemen aan je eigen spel.",
+
+    tutorialBtn: "Tutorial",
+    tutorialSlide1Title: "Speelritme",
+    tutorialSlide1Bullets: "Jullie spelen om de beurt.\nJe legt een of meer kaarten van dezelfde rang, met een waarde gelijk aan of hoger dan de laatst gelegde kaart.\nKun je (of wil je) niet spelen? Dan pak je de hele stapel op.\nNa het spelen vanuit je hand vul je aan tot 3 kaarten, zolang er nog kaarten in de pakstapel zitten.",
+    tutorialSlide2Title: "Als de pakstapel leeg is",
+    tutorialSlide2Bullets: "Elke speler heeft ook 3 open kaarten en 3 gesloten kaarten, vanaf het begin voor zich neergelegd.\nHand en pakstapel leeg? Dan speel je direct je open kaarten.\nOpen kaarten op? Dan speel je je gesloten kaarten blind, zonder hun waarde te kennen.\nGesloten kaart onspeelbaar? Dan pak je de stapel EN die kaart.\nEerste zonder kaarten meer: gewonnen!",
+    tutorialSlide3Title: "De kaarten",
+    tutorialSlide3Intro: "Behalve de jokers worden alle kaarten in de normale volgorde gespeeld: met een waarde gelijk aan of hoger dan de laatst gelegde kaart.",
+    tutorialSlide3IntroNote: "Ook al hebben ze een kracht, de 7 en 8 moeten in die normale volgorde gelegd worden, zoals elke andere kaart.",
+    tutorialJokerLabel: "Jokers",
+    tutorialSlide4Title: "De oorlogen",
+    tutorialSlide4Bullets: "Een aas spelen start een oorlog: de tegenstander kan dan alleen nog met een joker antwoorden.\nAas: verlengt de oorlog. 3: kopieert de aas, de oorlog gaat door.\n2: reset, de oorlog stopt. 10: veegt de stapel weg, alles stopt meteen.\nGeen joker op zak? Dan pak je de hele stapel op, de oorlog is voorbij.",
+    tutorialSlide5Title: "De snit",
+    tutorialSlide5Bullets: "4 kaarten met dezelfde waarde achter elkaar op de stapel: snit! De stapel gaat opzij, jij speelt verder.\nWerkt ook met 3 identieke kaarten + een 3 die de laatste kopieert om de reeks compleet te maken.\nEn zoals eerder gezien: een 10 veegt altijd de stapel weg, ongeacht wat eronder ligt.",
+    tutorialSlide6Title: "De 8'en en blokkades",
+    tutorialSlide6Bullets: "In 1v1 slaat een 8 gewoon de beurt van de tegenstander over.\nMeerdere 8'en tegelijk: elke 8 na de eerste geeft jou een extra beurt.\nIn multiplayer (binnenkort) zullen 8'en dienen om meerdere tegenstanders tegelijk te blokkeren.",
+    tutorialBubble2: "Reset: elke kaart mag volgen, eenmalig.",
+    tutorialBubble3: "Kopieert de kaart eronder (of de aas tijdens een oorlog).",
+    tutorialBubble10: "Veegt de stapel in een keer weg: je speelt meteen verder.",
+    tutorialBubbleA: "Start (of verlengt) een oorlog.",
+    tutorialBubble7: "De volgende kaart moet 7 of lager zijn.",
+    tutorialBubble8: "Slaat de beurt van de tegenstander over. Meerdere tegelijk = extra beurten."
   },
   pl: {
     logStarterYou: "Zaczynasz, z najnizsza karta.",
@@ -560,6 +889,7 @@ const I18N = {
     btnTake: "Wez",
     btnCancel: "Anuluj",
     btnReplay: "Zagraj ponownie",
+    btnBackToMode: "Wroc",
     victory: "ZWYCIESTWO",
     defeat: "PORAZKA",
     takenLabel: "+{n} kart",
@@ -617,7 +947,45 @@ const I18N = {
     diffEasyRules: "🗂️ Reka automatycznie posortowana wedlug rangi\n🔒 Niegrywalne karty wyszarzone\n🤖 Podstawowe AI",
     diffNormalRules: "✋ Wolny uklad reki, przeciagnij by zmienic\n🤖 Podstawowe AI",
     diffHardRules: "✋ Wolny uklad reki, przeciagnij by zmienic\n🧠 Zaawansowane AI, planuje z wyprzedzeniem",
-    diffNightmareRules: "✋ Wolny uklad reki, przeciagnij by zmienic\n🧠 Zaawansowane AI, planuje z wyprzedzeniem\n🙈 Liczniki ukryte (reka przeciwnika + stos)\n🚫 Nie mozna \"Wziac\", jesli masz mozliwy ruch"
+    diffNightmareRules: "✋ Wolny uklad reki, przeciagnij by zmienic\n🧠 Zaawansowane AI, planuje z wyprzedzeniem\n🙈 Liczniki ukryte (reka przeciwnika + stos)\n🚫 Nie mozna \"Wziac\", jesli masz mozliwy ruch",
+
+    betaLabel: "Beta",
+    onlineBetaPrompt: "Haslo beta:",
+    onlineLobbyTitle: "1v1 online",
+    onlineNeedsAccountMsg: "Utworz profil (przycisk Profil, poprzednie menu), aby grac online.",
+    onlineQueueBtn: "Szybkie wyszukiwanie",
+    onlineCreateBtn: "Utworz kod",
+    onlineJoinBtn: "Dolacz",
+    onlineJoinPlaceholder: "KOD",
+    onlineSearching: "Szukanie przeciwnika...",
+    onlineWaitingTitle: "Oczekiwanie na przeciwnika...",
+    onlineYourCode: "Twoj kod:",
+    onlineMatchedMsg: "Znaleziono przeciwnika! Gra na zywo wkrotce dostepna.",
+    onlineJoinEmpty: "Wpisz kod.",
+    onlineErrorNotFound: "Nie znaleziono kodu.",
+    onlineErrorOwnLobby: "Nie mozesz dolaczyc do wlasnej gry.",
+
+    tutorialBtn: "Samouczek",
+    tutorialSlide1Title: "Rytm gry",
+    tutorialSlide1Bullets: "Gracie na zmiane.\nWykladasz jedna lub wiecej kart tej samej rangi, o wartosci rownej lub wyzszej niz ostatnia wylozona karta.\nNie mozesz (lub nie chcesz) zagrac? Zabierasz caly stos.\nPo zagraniu z reki dobierasz karty do 3, dopoki w talii sa jeszcze karty.",
+    tutorialSlide2Title: "Gdy talia sie skonczy",
+    tutorialSlide2Bullets: "Kazdy gracz ma tez 3 karty odkryte i 3 karty zakryte, wylozone przed soba od poczatku gry.\nReka i talia puste? Grasz wtedy bezposrednio swoimi kartami odkrytymi.\nKarty odkryte sie skonczyly? Grasz swoimi kartami zakrytymi na slepo, nie znajac ich wartosci.\nKarta zakryta niegrywalna? Zabierasz stos ORAZ te karte.\nPierwszy bez zadnych kart: wygrana!",
+    tutorialSlide3Title: "Karty",
+    tutorialSlide3Intro: "Oprocz jokerow, wszystkie karty graja sie w normalnej kolejnosci: o wartosci rownej lub wyzszej niz ostatnia wylozona karta.",
+    tutorialSlide3IntroNote: "Mimo ze maja moc, 7 i 8 musza byc wylozone w tej normalnej kolejnosci, jak kazda inna karta.",
+    tutorialJokerLabel: "Jokery",
+    tutorialSlide4Title: "Wojny",
+    tutorialSlide4Bullets: "Zagranie Asa rozpoczyna wojne: przeciwnik moze wtedy odpowiedziec juz tylko jokerem.\nAs: przedluza wojne. 3: kopiuje Asa, wojna trwa dalej.\n2: reset, wojna sie konczy. 10: przecina stos, wszystko konczy sie od razu.\nBrak jokera w reku? Zabierasz caly stos, wojna dobiegla konca.",
+    tutorialSlide5Title: "Przeciecie",
+    tutorialSlide5Bullets: "4 karty tej samej wartosci pod rzad na stosie: przeciecie! Stos odklada sie na bok, grasz dalej.\nDziala tez z 3 identycznymi kartami + 3, ktora kopiuje ostatnia, aby dopelnic sekwencje.\nI jak juz widziano: 10 zawsze przecina stos, niezaleznie co pod nim lezy.",
+    tutorialSlide6Title: "8 i blokady",
+    tutorialSlide6Bullets: "W 1v1, 8 po prostu pomija ture przeciwnika.\nKilka 8 naraz: kazda 8 ponad pierwsza daje ci dodatkowa ture.\nW trybie wieloosobowym (wkrotce) 8 posluza do blokowania kilku przeciwnikow naraz.",
+    tutorialBubble2: "Reset: dowolna karta moze nastapic, jednorazowo.",
+    tutorialBubble3: "Kopiuje karte tuz pod spodem (lub Asa podczas wojny).",
+    tutorialBubble10: "Czysci stos od razu: grasz dalej natychmiast.",
+    tutorialBubbleA: "Rozpoczyna (lub przedluza) wojne.",
+    tutorialBubble7: "Nastepna karta musi miec wartosc 7 lub nizsza.",
+    tutorialBubble8: "Pomija ture przeciwnika. Kilka naraz = dodatkowe tury."
   },
   en: {
     logStarterYou: "You go first, with the lowest card.",
@@ -664,6 +1032,7 @@ const I18N = {
     btnTake: "Take",
     btnCancel: "Cancel",
     btnReplay: "Replay",
+    btnBackToMode: "Back",
     victory: "VICTORY",
     defeat: "DEFEAT",
     takenLabel: "+{n} card(s)",
@@ -721,7 +1090,45 @@ const I18N = {
     diffEasyRules: "🗂️ Hand auto-sorted by rank\n🔒 Unplayable cards greyed out\n🤖 Basic AI",
     diffNormalRules: "✋ Free hand order, drag to reorder\n🤖 Basic AI",
     diffHardRules: "✋ Free hand order, drag to reorder\n🧠 Advanced AI, plans ahead",
-    diffNightmareRules: "✋ Free hand order, drag to reorder\n🧠 Advanced AI, plans ahead\n🙈 Counters hidden (opponent's hand + pile)\n🚫 Can't \"Take\" if you have a playable move"
+    diffNightmareRules: "✋ Free hand order, drag to reorder\n🧠 Advanced AI, plans ahead\n🙈 Counters hidden (opponent's hand + pile)\n🚫 Can't \"Take\" if you have a playable move",
+
+    betaLabel: "Beta",
+    onlineBetaPrompt: "Beta password:",
+    onlineLobbyTitle: "1v1 online",
+    onlineNeedsAccountMsg: "Create a profile (Profile button, previous menu) to play online.",
+    onlineQueueBtn: "Quick search",
+    onlineCreateBtn: "Create a code",
+    onlineJoinBtn: "Join",
+    onlineJoinPlaceholder: "CODE",
+    onlineSearching: "Looking for an opponent...",
+    onlineWaitingTitle: "Waiting for an opponent...",
+    onlineYourCode: "Your code:",
+    onlineMatchedMsg: "Opponent found! Live play is coming soon.",
+    onlineJoinEmpty: "Enter a code.",
+    onlineErrorNotFound: "Code not found.",
+    onlineErrorOwnLobby: "You can't join your own game.",
+
+    tutorialBtn: "Tutorial",
+    tutorialSlide1Title: "Turn flow",
+    tutorialSlide1Bullets: "You each take turns.\nPlay one or more cards of the same rank, of equal or higher value than the last card played.\nCan't (or don't want to) play? You pick up the whole pile.\nAfter playing from your hand, you draw back up to 3, as long as the deck still has cards.",
+    tutorialSlide2Title: "Once the deck runs out",
+    tutorialSlide2Bullets: "Each player also has 3 face-up cards and 3 face-down cards, laid out in front of them from the start.\nHand and deck empty? You then play your face-up cards directly.\nFace-up cards used up? You play your face-down cards blind, without knowing their value.\nUnplayable face-down card? You pick up the pile AND that card.\nFirst to have no cards left: victory!",
+    tutorialSlide3Title: "The cards",
+    tutorialSlide3Intro: "Apart from the jokers, all cards are played in normal order: at equal or higher value than the last card played.",
+    tutorialSlide3IntroNote: "Even though they have a power, the 7 and 8 must be played in that normal order, just like any other card.",
+    tutorialJokerLabel: "Jokers",
+    tutorialSlide4Title: "Wars",
+    tutorialSlide4Bullets: "Playing an Ace starts a war: the opponent can then only respond with a joker.\nAce: extends the war. 3: copies the Ace, the war continues.\n2: resets, the war ends. 10: cuts the pile, everything stops immediately.\nNo joker in hand? You pick up the whole pile, the war is over.",
+    tutorialSlide5Title: "The cut",
+    tutorialSlide5Bullets: "4 cards of the same value in a row on the pile: cut! The pile is set aside, you play again.\nAlso works with 3 identical cards + a 3 that copies the last one to complete the set.\nAnd as seen earlier: a 10 always cuts the pile, no matter what's underneath.",
+    tutorialSlide6Title: "8s and blocking",
+    tutorialSlide6Bullets: "In 1v1, an 8 simply skips the opponent's turn.\nSeveral 8s at once: each 8 beyond the first gives you a bonus turn.\nIn multiplayer (coming soon), 8s will be used to block several opponents at once.",
+    tutorialBubble2: "Reset: any card can follow, just once.",
+    tutorialBubble3: "Copies the card right below it (or the Ace during a war).",
+    tutorialBubble10: "Clears the pile at once: you play again immediately.",
+    tutorialBubbleA: "Starts (or extends) a war.",
+    tutorialBubble7: "The next card must be 7 or lower.",
+    tutorialBubble8: "Skips the opponent's turn. Several at once = bonus turns."
   }
 };
 
@@ -1351,7 +1758,7 @@ function maybeReportMatchResult(){
 }
 // Date de derniere mise a jour du jeu, affichee en bulle sur l'ecran de
 // demarrage. A mettre a jour a chaque nouvelle session de modifications.
-const LAST_UPDATE = "16 aout 2026";
+const LAST_UPDATE = "17 aout 2026";
 
 // Attend que les 2 polices web (Press Start 2P / VT323) soient VRAIMENT
 // chargees avant d'appeler cb. document.fonts.ready seul ne suffit pas ici :
@@ -1462,9 +1869,13 @@ class MenuScene extends Phaser.Scene {
       y += step;
       this.menuButton(cx, y, btnW, btnH, t('menuVs3'), false);
       y += step;
-      this.menuButton(cx, y, btnW, btnH, t('menuOnline'), false);
+      this.menuButton(cx, y, btnW, btnH, t('menuOnline'), true, ()=>this.openOnlineBeta(), {
+        fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('betaLabel'), subtitleColor:'#ffa64d'
+      });
       y += step;
       this.menuButton(cx, y, btnW, btnH, t('menuFFA'), false);
+      y += step + 20; // marge en plus : la derniere case ("1v3 joueurs") est desactivee, avec un sous-titre "Bientot" juste en dessous a ne pas chevaucher
+      this.menuButton(cx, y, Math.min(300, W*0.7), 52, '🎓 '+t('tutorialBtn'), true, ()=>{ if(window.__openTutorial) window.__openTutorial(); });
     } else {
       // Boutons en grille 2 colonnes (utilise la largeur dispo plutot que de
       // tout empiler verticalement, precieux sur un ecran paysage bas) :
@@ -1480,8 +1891,15 @@ class MenuScene extends Phaser.Scene {
       const row1Y = row0Y + btnH + gapY;
       this.menuButton(col0X, row0Y, btnW, btnH, t('menuVsAI'), true, ()=>this.scene.start('difficulty'));
       this.menuButton(col1X, row0Y, btnW, btnH, t('menuVs3'), false);
-      this.menuButton(col0X, row1Y, btnW, btnH, t('menuOnline'), false);
+      this.menuButton(col0X, row1Y, btnW, btnH, t('menuOnline'), true, ()=>this.openOnlineBeta(), {
+        fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('betaLabel'), subtitleColor:'#ffa64d'
+      });
       this.menuButton(col1X, row1Y, btnW, btnH, t('menuFFA'), false);
+
+      // +60 et pas +38 : la case "1v3 joueurs" est desactivee, avec un
+      // sous-titre "Bientot" juste en dessous (y+h/2+16) a ne pas chevaucher.
+      const tutorialY = row1Y + btnH/2 + 60;
+      this.menuButton(cx, tutorialY, Math.min(280, btnW*2+gapX), 48, '🎓 '+t('tutorialBtn'), true, ()=>{ if(window.__openTutorial) window.__openTutorial(); });
     }
 
     // Marque, discrete en bas
@@ -1504,25 +1922,39 @@ class MenuScene extends Phaser.Scene {
     this.add.text(bx+padX, by+padY, updText, {fontFamily:'"VT323"', fontSize:updSize+'px', color:'#9aa8b0'});
   }
 
-  menuButton(x, y, w, h, label, enabled, onClick){
+  // opts (optionnel) : override de couleurs + sous-titre force, pour les cas
+  // genre "1v1 en ligne" -- cliquable (enabled=true, onClick appelle) mais
+  // visuellement distinct (beta) plutot que le vert normal/gris desactive.
+  menuButton(x, y, w, h, label, enabled, onClick, opts={}){
     const g = this.add.graphics();
-    const fill = enabled ? 0x3f6b3f : 0x2a332a;
-    const stroke = enabled ? 0x8fd18f : 0x556155;
+    const fill = opts.fill !== undefined ? opts.fill : (enabled ? 0x3f6b3f : 0x2a332a);
+    const stroke = opts.stroke !== undefined ? opts.stroke : (enabled ? 0x8fd18f : 0x556155);
     g.fillStyle(fill, 1);
     g.fillRoundedRect(x-w/2, y-h/2, w, h, 10);
     g.lineStyle(3, stroke, 1);
     g.strokeRoundedRect(x-w/2, y-h/2, w, h, 10);
     this.add.text(x, y, label, {
       fontFamily:'"Press Start 2P"', fontSize:'18px',
-      color: enabled ? '#f2ead9' : '#7c887c'
+      color: opts.textColor || (enabled ? '#f2ead9' : '#7c887c')
     }).setOrigin(0.5);
-    if(!enabled){
+    if(opts.subtitle){
+      this.add.text(x, y+h/2+16, opts.subtitle, {fontFamily:'"VT323"', fontSize:'16px', color: opts.subtitleColor || '#8a95a0'}).setOrigin(0.5);
+    } else if(!enabled){
       this.add.text(x, y+h/2+16, t('comingSoon'), {fontFamily:'"VT323"', fontSize:'16px', color:'#8a95a0'}).setOrigin(0.5);
     }
     if(enabled){
       const hit = this.safeInteractive(this.add.rectangle(x, y, w, h, 0x000000, 0));
       hit.on('pointerdown', onClick);
     }
+  }
+
+  // ---- 1v1 en ligne (beta) : mot de passe temporaire pour eviter que des
+  // joueurs normaux tombent dessus avant que ce soit pret -- juste un
+  // filtre de test, pas une vraie protection. A retirer une fois la feature
+  // prete pour tout le monde. ----
+  openOnlineBeta(){
+    const pwd = window.prompt(t('onlineBetaPrompt'));
+    if(pwd === '6421') this.scene.start('online-lobby');
   }
 }
 
@@ -1833,6 +2265,194 @@ class ConfirmScene extends Phaser.Scene {
       const rulesH = availH - btnH - 20;
       this.drawRules(rightX, contentTop, rightW, rulesH);
       this.dealButton(rightX + rightW/2, contentTop + rulesH + 20 + btnH/2, rightW, btnH, t('confirmDealBtn'), ()=>this.scene.start('main'));
+    }
+  }
+}
+
+// ---- Lobby 1v1 en ligne -- PHASE 1 SEULEMENT : matchmaking (file
+// d'attente aleatoire ou code d'invitation) et mise en relation des deux
+// joueurs. Ne lance PAS encore de partie en temps reel -- juste la
+// confirmation que les deux joueurs sont connectes au meme lobby (voir
+// js/online.js et supabase/schema_online.sql). Necessite un compte : pas de
+// mode invite ici, il faut un pseudo stable pour que l'adversaire puisse te
+// retrouver. ----
+class OnlineLobbyScene extends Phaser.Scene {
+  constructor(){ super('online-lobby'); }
+
+  safeInteractive(obj, useHandCursor=true){
+    obj.setInteractive(useHandCursor ? {useHandCursor:true} : undefined);
+    if(!obj.input || typeof obj.input.hitAreaCallback !== 'function'){
+      const w = Math.max(20, obj.width || 20);
+      const h = Math.max(20, obj.height || 20);
+      obj.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
+      if(obj.input && useHandCursor) obj.input.cursor = 'pointer';
+    }
+    return obj;
+  }
+
+  create(){
+    if(window.__onSceneChange) window.__onSceneChange('online-lobby');
+    this.cameras.main.setBackgroundColor(0x2e4928);
+    // 'choice' | 'searching' | 'waiting-invite' | 'matched'
+    this.mode = 'choice';
+    if(window.__onlineLobbyModeChange) window.__onlineLobbyModeChange('choice');
+    this.errorMsg = '';
+    this.lobbyId = null;
+    this.inviteCode = null;
+    this.render();
+    const onResize = ()=>this.render();
+    this.scale.on('resize', onResize);
+    this.events.once('shutdown', ()=>{
+      this.scale.off('resize', onResize);
+      if(window.DaniszOnline) window.DaniszOnline.stopWatching();
+      if(window.__onlineLobbyModeChange) window.__onlineLobbyModeChange(null);
+    });
+    whenFontsReady(()=>{ if(this.scene.isActive()) this.render(); });
+  }
+
+  panelBg(x, y, w, h, originX=0.5, originY=0.5, alpha=0.55){
+    const px = x - w*originX, py = y - h*originY;
+    const g = this.add.graphics();
+    g.fillStyle(0x0c1410, alpha);
+    g.fillRoundedRect(px, py, w, h, 6);
+    g.lineStyle(1, 0xd7a45c, 0.5);
+    g.strokeRoundedRect(px, py, w, h, 6);
+    return g;
+  }
+
+  backButton(x, y, radius, onClick){
+    const g = this.add.graphics();
+    g.fillStyle(0x3f6b3f, 1);
+    g.fillCircle(x, y, radius);
+    g.lineStyle(3, 0x8fd18f, 1);
+    g.strokeCircle(x, y, radius);
+    this.add.text(x, y-3.5, '←', {fontFamily:'"Press Start 2P"', fontSize:Math.round(radius*0.85)+'px', color:'#f2ead9'}).setOrigin(0.5);
+    const hit = this.safeInteractive(this.add.rectangle(x, y, radius*2, radius*2, 0x000000, 0));
+    hit.on('pointerdown', onClick);
+  }
+
+  bigButton(x, y, w, h, label, onClick){
+    const g = this.add.graphics();
+    g.fillStyle(0x3f6b3f, 1);
+    g.fillRoundedRect(x-w/2, y-h/2, w, h, 10);
+    g.lineStyle(3, 0x8fd18f, 1);
+    g.strokeRoundedRect(x-w/2, y-h/2, w, h, 10);
+    this.add.text(x, y, label, {
+      fontFamily:'"Press Start 2P"', fontSize:'17px', color:'#f2ead9',
+      align:'center', wordWrap:{width:w-24}
+    }).setOrigin(0.5);
+    const hit = this.safeInteractive(this.add.rectangle(x, y, w, h, 0x000000, 0));
+    hit.on('pointerdown', onClick);
+  }
+
+  setMode(mode){
+    this.mode = mode;
+    if(window.__onlineLobbyModeChange) window.__onlineLobbyModeChange(mode);
+    this.render();
+  }
+
+  startQueue(){
+    if(!window.DaniszOnline) return;
+    this.errorMsg = '';
+    this.setMode('searching');
+    window.DaniszOnline.joinRandomQueue().then(res=>{
+      if(!this.scene.isActive()) return;
+      if(res.error){ this.errorMsg = t('accountErrorUnknown'); this.setMode('choice'); return; }
+      this.lobbyId = res.lobbyId;
+      if(res.matched){
+        this.setMode('matched');
+      } else {
+        window.DaniszOnline.watchLobby(res.lobbyId, row=>{
+          if(row.status === 'active' && this.scene.isActive()) this.setMode('matched');
+        });
+      }
+    });
+  }
+
+  cancelQueue(){
+    if(window.DaniszOnline){ window.DaniszOnline.leaveQueue(); window.DaniszOnline.stopWatching(); }
+    this.errorMsg = '';
+    this.setMode('choice');
+  }
+
+  createInvite(){
+    if(!window.DaniszOnline) return;
+    this.errorMsg = '';
+    this.setMode('searching');
+    window.DaniszOnline.createInviteLobby().then(res=>{
+      if(!this.scene.isActive()) return;
+      if(res.error){ this.errorMsg = t('accountErrorUnknown'); this.setMode('choice'); return; }
+      this.lobbyId = res.lobbyId;
+      this.inviteCode = res.code;
+      this.setMode('waiting-invite');
+      window.DaniszOnline.watchLobby(res.lobbyId, row=>{
+        if(row.status === 'active' && this.scene.isActive()) this.setMode('matched');
+      });
+    });
+  }
+
+  // Appele depuis le panneau HTML de saisie de code, voir la fin du fichier.
+  joinInvite(code, errorEl){
+    if(!window.DaniszOnline) return;
+    window.DaniszOnline.joinInviteLobby(code).then(res=>{
+      if(!this.scene.isActive()) return;
+      if(res.error){
+        const key = res.error === 'notFound' ? 'onlineErrorNotFound'
+          : res.error === 'ownLobby' ? 'onlineErrorOwnLobby'
+          : 'accountErrorUnknown';
+        if(errorEl) errorEl.textContent = t(key);
+        return;
+      }
+      if(errorEl) errorEl.textContent = '';
+      this.lobbyId = res.lobbyId;
+      this.setMode('matched');
+    });
+  }
+
+  render(){
+    if(!this.scene.isActive() || !this.cameras || !this.cameras.main) return;
+    const Wcheck = this.scale.width, Hcheck = this.scale.height;
+    if(!Wcheck || !Hcheck || Wcheck<10 || Hcheck<10) return;
+    this.children.removeAll();
+    const W = this.scale.width, H = this.scale.height;
+    const cx = W/2, cy = H/2;
+
+    this.backButton(46, 56, 22, ()=>{
+      if(window.DaniszOnline){ window.DaniszOnline.leaveQueue(); window.DaniszOnline.stopWatching(); }
+      this.scene.start('menu');
+    });
+
+    const titleSize = Math.max(22, Math.min(34, Math.round(H*0.06)));
+    this.add.text(cx, 90, t('onlineLobbyTitle'), {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px', color:'#e9ddc8'}).setOrigin(0.5);
+
+    const hasAccount = window.DaniszAccount && window.DaniszAccount.hasAccount();
+    if(!hasAccount){
+      this.panelBg(cx, cy, Math.min(460, W-60), 140, 0.5, 0.5, 0.55);
+      this.add.text(cx, cy, t('onlineNeedsAccountMsg'), {
+        fontFamily:'"VT323"', fontSize:'22px', color:'#e9ddc8', align:'center', wordWrap:{width:Math.min(420,W-100)}
+      }).setOrigin(0.5);
+      return;
+    }
+
+    if(this.mode==='choice'){
+      const btnW = Math.min(360, W*0.7), btnH = 64;
+      this.bigButton(cx, cy-60, btnW, btnH, t('onlineQueueBtn'), ()=>this.startQueue());
+      this.bigButton(cx, cy+20, btnW, btnH, t('onlineCreateBtn'), ()=>this.createInvite());
+      if(this.errorMsg){
+        this.add.text(cx, cy+80, this.errorMsg, {fontFamily:'"VT323"', fontSize:'18px', color:'#ff5f5f'}).setOrigin(0.5);
+      }
+    } else if(this.mode==='searching'){
+      this.add.text(cx, cy-20, t('onlineSearching'), {fontFamily:'"VT323"', fontSize:'24px', color:'#c9d6c0'}).setOrigin(0.5);
+      this.bigButton(cx, cy+60, 200, 54, t('btnCancel'), ()=>this.cancelQueue());
+    } else if(this.mode==='waiting-invite'){
+      this.add.text(cx, cy-70, t('onlineWaitingTitle'), {fontFamily:'"VT323"', fontSize:'22px', color:'#c9d6c0'}).setOrigin(0.5);
+      this.add.text(cx, cy-28, t('onlineYourCode'), {fontFamily:'"VT323"', fontSize:'18px', color:'#9aa8b0'}).setOrigin(0.5);
+      this.add.text(cx, cy+18, this.inviteCode, {fontFamily:'"Press Start 2P"', fontSize:'32px', color:'#ffd23f'}).setOrigin(0.5);
+      this.bigButton(cx, cy+90, 200, 54, t('btnCancel'), ()=>this.cancelQueue());
+    } else if(this.mode==='matched'){
+      this.add.text(cx, cy, t('onlineMatchedMsg'), {
+        fontFamily:'"VT323"', fontSize:'24px', color:'#5fdc7a', align:'center', wordWrap:{width:Math.min(460,W-100)}
+      }).setOrigin(0.5);
     }
   }
 }
@@ -2982,8 +3602,13 @@ class MainScene extends Phaser.Scene {
         {fontFamily:'"Press Start 2P"', fontSize:'16px', color:'#1a1008'}).setOrigin(0.5);
       this.add.text(W/2, 548, turnsSub,
         {fontFamily:'"Press Start 2P"', fontSize:'16px', color:wordColor}).setOrigin(0.5);
-      // Vrai bouton pour rejouer, plus besoin de rafraichir la page.
-      this.roundButton(W/2, 630, 44*(this.fontScale||1), 0x2f8f4e, 0x5fdc7a, t('btnReplay'), ()=>this.restartGame());
+      // Vrai bouton pour rejouer, plus besoin de rafraichir la page. A cote,
+      // un 2e bouton pour revenir a l'ecran du mode choisi (classement +
+      // regles + "Distribuer les cartes", meme mode/difficulte) plutot que
+      // relancer une partie tout de suite -- utile pour voir son classement
+      // mis a jour apres la partie qui vient de se terminer.
+      this.roundButton(W/2-58, 630, 40*(this.fontScale||1), 0x2f8f4e, 0x5fdc7a, t('btnReplay'), ()=>this.restartGame());
+      this.roundButton(W/2+58, 630, 40*(this.fontScale||1), 0x3f6b3f, 0x8fd18f, t('btnBackToMode'), ()=>this.scene.start('confirm'));
     }
   }
 
@@ -3269,7 +3894,11 @@ class MainScene extends Phaser.Scene {
         {fontFamily:'"Press Start 2P"', fontSize:'14px', color:'#1a1008'}).setOrigin(0.5);
       this.add.text(cx, 661, turnsSub,
         {fontFamily:'"Press Start 2P"', fontSize:'14px', color:wordColor}).setOrigin(0.5);
-      this.roundButton(cx, 730, 40*this.fontScale, 0x2f8f4e, 0x5fdc7a, t('btnReplay'), ()=>this.restartGame());
+      // Empiles verticalement en portrait (plus de marge laterale
+      // qu'horizontale) : rejouer tout de suite, ou revenir a l'ecran du
+      // mode choisi (classement + regles + "Distribuer les cartes").
+      this.roundButton(cx, 730, 36*this.fontScale, 0x2f8f4e, 0x5fdc7a, t('btnReplay'), ()=>this.restartGame());
+      this.roundButton(cx, 730+84*this.fontScale, 36*this.fontScale, 0x3f6b3f, 0x8fd18f, t('btnBackToMode'), ()=>this.scene.start('confirm'));
     }
   }
 
@@ -3470,7 +4099,7 @@ const config = {
   // automatique : le jeu doit continuer a tourner (animations, tour de l'IA)
   // meme si le focus de la fenetre bouge un peu.
   disableVisibilityChange: true,
-  scene: [MenuScene, DifficultyScene, ConfirmScene, MainScene]
+  scene: [MenuScene, DifficultyScene, ConfirmScene, OnlineLobbyScene, MainScene]
 };
 game = new Phaser.Game(config);
 
@@ -3485,7 +4114,7 @@ window.__applyLang = function(newLang){
   try{ localStorage.setItem('shithead_lang', newLang); }catch(e){}
   if(window.__updateLangPopup) window.__updateLangPopup(newLang);
   if(!game || !game.scene) return;
-  ['menu','difficulty','confirm','main'].forEach(key=>{
+  ['menu','difficulty','confirm','online-lobby','main'].forEach(key=>{
     if(!game.scene.isActive(key)) return;
     const scene = game.scene.getScene(key);
     if(!scene) return;
@@ -3729,6 +4358,146 @@ window.__updateLangPopup(lang);
   window.__applyLang = function(newLang){
     prevApplyLang(newLang);
     refreshAccountUI();
+  };
+})();
+</script>
+<script>
+/* =========================================================
+   Saisie du code d'invitation (1v1 en ligne, panneau DOM -- voir
+   #online-join-panel plus haut). Un vrai champ texte par-dessus le canvas
+   Phaser : ce dernier ne sait pas en dessiner un nativement.
+   ========================================================= */
+(function(){
+  const joinPanel = document.getElementById('online-join-panel');
+  const joinInput = document.getElementById('online-join-input');
+  const joinBtn = document.getElementById('online-join-btn');
+  const joinError = document.getElementById('online-join-error');
+
+  function refreshJoinTexts(){
+    joinInput.placeholder = t('onlineJoinPlaceholder');
+    joinBtn.textContent = t('onlineJoinBtn');
+  }
+
+  // Visible uniquement sur l'ecran de lobby en ligne, ET seulement dans son
+  // mode "choix" (pas pendant une recherche/attente/partie trouvee, sinon
+  // rejoindre un code laisserait une entree fantome dans la file d'attente).
+  let onOnlineLobby = false;
+  let lobbyMode = null;
+  function updateJoinPanelVisibility(){
+    joinPanel.classList.toggle('open', onOnlineLobby && lobbyMode==='choice');
+  }
+
+  const prevOnSceneChange = window.__onSceneChange;
+  window.__onSceneChange = function(key){
+    prevOnSceneChange(key);
+    onOnlineLobby = (key==='online-lobby');
+    if(!onOnlineLobby) lobbyMode = null;
+    joinError.textContent = '';
+    updateJoinPanelVisibility();
+  };
+  window.__onlineLobbyModeChange = function(mode){
+    lobbyMode = mode;
+    updateJoinPanelVisibility();
+  };
+
+  joinBtn.addEventListener('click', ()=>{
+    const scene = game.scene.getScene('online-lobby');
+    if(!scene || !scene.scene.isActive()) return;
+    const code = joinInput.value.trim();
+    if(!code){ joinError.textContent = t('onlineJoinEmpty'); return; }
+    joinError.textContent = '';
+    scene.joinInvite(code, joinError);
+  });
+  joinInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') joinBtn.click(); });
+
+  refreshJoinTexts();
+  const prevApplyLang2 = window.__applyLang;
+  window.__applyLang = function(newLang){
+    prevApplyLang2(newLang);
+    refreshJoinTexts();
+  };
+})();
+</script>
+<script>
+/* =========================================================
+   Tutoriel (overlay DOM, plusieurs pages) -- voir #tutorial-overlay plus
+   haut. Ouvert depuis un bouton du menu (Phaser) via window.__openTutorial.
+   ========================================================= */
+(function(){
+  const overlay = document.getElementById('tutorial-overlay');
+  const closeBtn = document.getElementById('tutorial-close-btn');
+  const prevBtn = document.getElementById('tutorial-prev-btn');
+  const nextBtn = document.getElementById('tutorial-next-btn');
+  const dotsBox = document.getElementById('tutorial-dots');
+  const slides = Array.from(document.querySelectorAll('.tutorial-slide'));
+  const SLIDE_COUNT = slides.length;
+  let current = 0;
+
+  // Cle de bulle, dans l'ordre EXACT ou les .tutorial-card-bubble .bubble
+  // apparaissent dans le HTML (rangee jokers 2/3/10/A, puis 7/8 dans la
+  // rangee normale).
+  const bubbleKeys = ['tutorialBubble2', 'tutorialBubble3', 'tutorialBubble10', 'tutorialBubbleA', 'tutorialBubble7', 'tutorialBubble8'];
+
+  function refreshTexts(){
+    slides.forEach((slide, i)=>{
+      const n = i + 1;
+      const title = slide.querySelector('.tutorial-slide-title');
+      if(title) title.textContent = t('tutorialSlide' + n + 'Title');
+      const intro = slide.querySelector('.tutorial-intro');
+      if(intro) intro.textContent = t('tutorialSlide' + n + 'Intro');
+      const introNote = slide.querySelector('.tutorial-intro-note');
+      if(introNote) introNote.textContent = t('tutorialSlide' + n + 'IntroNote');
+      const bullets = slide.querySelector('.tutorial-bullets');
+      if(bullets){
+        const text = t('tutorialSlide' + n + 'Bullets');
+        bullets.innerHTML = '';
+        if(text && text !== 'tutorialSlide' + n + 'Bullets'){
+          text.split('\n').forEach(line=>{
+            const li = document.createElement('li');
+            li.textContent = line;
+            bullets.appendChild(li);
+          });
+        }
+      }
+    });
+    document.querySelectorAll('.tutorial-card-bubble .bubble').forEach((el, i)=>{
+      el.textContent = t(bubbleKeys[i]);
+    });
+    const jokerLabel = document.querySelector('.tutorial-joker-label');
+    if(jokerLabel) jokerLabel.textContent = t('tutorialJokerLabel');
+  }
+
+  function showSlide(i){
+    current = Math.max(0, Math.min(SLIDE_COUNT - 1, i));
+    slides.forEach((s, idx)=> s.classList.toggle('active', idx === current));
+    Array.from(dotsBox.children).forEach((d, idx)=> d.classList.toggle('active', idx === current));
+    prevBtn.disabled = current === 0;
+    nextBtn.disabled = current === SLIDE_COUNT - 1;
+    overlay.querySelector('#tutorial-modal').scrollTop = 0;
+  }
+
+  for(let i = 0; i < SLIDE_COUNT; i++){
+    const dot = document.createElement('button');
+    dot.className = 'tutorial-dot';
+    dot.addEventListener('click', ()=>showSlide(i));
+    dotsBox.appendChild(dot);
+  }
+
+  prevBtn.addEventListener('click', ()=>showSlide(current - 1));
+  nextBtn.addEventListener('click', ()=>showSlide(current + 1));
+  closeBtn.addEventListener('click', ()=>overlay.classList.remove('open'));
+  overlay.addEventListener('click', (e)=>{ if(e.target === overlay) overlay.classList.remove('open'); });
+
+  window.__openTutorial = function(){
+    refreshTexts();
+    showSlide(0);
+    overlay.classList.add('open');
+  };
+
+  const prevApplyLang3 = window.__applyLang;
+  window.__applyLang = function(newLang){
+    prevApplyLang3(newLang);
+    if(overlay.classList.contains('open')) refreshTexts();
   };
 })();
 </script>
