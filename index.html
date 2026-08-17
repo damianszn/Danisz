@@ -2863,7 +2863,14 @@ class MainScene extends Phaser.Scene {
         this.onlineDealt = true;
         this.broadcastOnlineState(null);
       },
-      onMove: (move)=>this.onOpponentMove(move)
+      onMove: (move)=>{
+        // Demande de revanche (voir restartGame(), cote invite) : ne passe
+        // pas par onOpponentMove/networkResolveMove, ce n'est pas un coup
+        // de partie en cours -- juste "recommence", peu importe le tour
+        // actuel ou l'etat de la partie (meme apres une victoire/defaite).
+        if(move.kind==='rematchRequest'){ this.restartGame(); return; }
+        this.onOpponentMove(move);
+      }
     });
   }
 
@@ -2888,6 +2895,15 @@ class MainScene extends Phaser.Scene {
   // jeu ET tout l'etat de scene qui pourrait sinon persister d'une partie a
   // l'autre (journal, selection, animation en cours...). ----
   restartGame(){
+    // 1v1 en ligne, cote INVITE : ne peut pas redistribuer lui-meme
+    // (l'hote est seul autoritaire) -- on envoie juste une demande de
+    // revanche (voir setupOnlineHost -> onMove) ; l'hote s'en charge et
+    // diffuse la nouvelle donne, que onOnlineState() traite exactement
+    // comme la toute premiere distribution.
+    if(this.onlineRole==='guest'){
+      window.DaniszOnline.sendMove({ kind:'rematchRequest' });
+      return;
+    }
     gameState = createGame();
     this.spriteByCardId = {};
     this.dragReleasePos = {};
@@ -2900,7 +2916,19 @@ class MainScene extends Phaser.Scene {
     this.logLines.forEach(entry=>{ this.tweens.killTweensOf(entry.obj); entry.obj.destroy(); });
     this.logLines = [];
     this.render();
+    // 1v1 en ligne, cote HOTE : diffuse la nouvelle donne -- meme
+    // mecanisme que la toute premiere distribution, le canal est deja
+    // etabli donc pas besoin d'attendre quoi que ce soit.
+    if(this.onlineRole==='host') this.broadcastOnlineState(null);
     if(gameState.turn==='ai') this.time.delayedCall(700, ()=>this.aiLoop());
+  }
+
+  // ---- Bouton "Retour" de l'ecran de fin de partie : vers l'ecran de
+  // confirmation (leaderboard/regles du mode) en solo, vers le menu en
+  // 1v1 en ligne -- 'confirm' est specifique au choix de difficulte solo,
+  // ca n'a pas de sens pour une partie en ligne. ----
+  backToModeScreen(){
+    this.scene.start(this.onlineRole ? 'menu' : 'confirm');
   }
 
   // ---- Choisit la largeur du canevas virtuel paysage selon le ratio reel
@@ -4137,7 +4165,7 @@ class MainScene extends Phaser.Scene {
       // relancer une partie tout de suite -- utile pour voir son classement
       // mis a jour apres la partie qui vient de se terminer.
       this.roundButton(W/2-58, 630, 40*(this.fontScale||1), 0x2f8f4e, 0x5fdc7a, t('btnReplay'), ()=>{ sfxClick(); this.restartGame(); });
-      this.roundButton(W/2+58, 630, 40*(this.fontScale||1), 0x3f6b3f, 0x8fd18f, t('btnBackToMode'), ()=>{ sfxClick(); this.scene.start('confirm'); });
+      this.roundButton(W/2+58, 630, 40*(this.fontScale||1), 0x3f6b3f, 0x8fd18f, t('btnBackToMode'), ()=>{ sfxClick(); this.backToModeScreen(); });
     }
   }
 
@@ -4433,7 +4461,7 @@ class MainScene extends Phaser.Scene {
       // qu'horizontale) : rejouer tout de suite, ou revenir a l'ecran du
       // mode choisi (classement + regles + "Distribuer les cartes").
       this.roundButton(cx, 730, 36*this.fontScale, 0x2f8f4e, 0x5fdc7a, t('btnReplay'), ()=>{ sfxClick(); this.restartGame(); });
-      this.roundButton(cx, 730+84*this.fontScale, 36*this.fontScale, 0x3f6b3f, 0x8fd18f, t('btnBackToMode'), ()=>{ sfxClick(); this.scene.start('confirm'); });
+      this.roundButton(cx, 730+84*this.fontScale, 36*this.fontScale, 0x3f6b3f, 0x8fd18f, t('btnBackToMode'), ()=>{ sfxClick(); this.backToModeScreen(); });
     }
   }
 
