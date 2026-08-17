@@ -111,6 +111,61 @@
   }
 
   /* =========================================================
+     Compteur "X en ligne / Y en file d'attente" affiche sur l'ecran de
+     matchmaking. Deux sources bien distinctes :
+     - "en ligne" : Presence Realtime, un canal partage que chaque client
+       sur cet ecran rejoint (track()) -- aucune table, purement ephemere,
+       le nombre de membres du canal EST le nombre de joueurs presents.
+     - "en file d'attente" : la table lobbies elle-meme, via un compte
+       agrege cote serveur (voir get_queue_count() dans schema_online.sql)
+       puisque RLS empeche un client de voir les lobbies des autres --
+       pas de flux temps reel possible pour ce nombre-la (RLS filtre aussi
+       les evenements postgres_changes), donc sondage ponctuel plutot que
+       souscription.
+     ========================================================= */
+  let presenceChannel = null;
+
+  // cb(count) est appele a chaque changement de presence (quelqu'un
+  // arrive/repart de l'ecran de matchmaking). Idempotent : un appel
+  // repete relance proprement (utile si l'ecran est revisite).
+  async function joinPresence(cb){
+    const sb = await getClient();
+    await leavePresence();
+    const key = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('p' + Math.random().toString(36).slice(2));
+    presenceChannel = sb.channel('online-lobby-presence', { config: { presence: { key } } });
+    presenceChannel.on('presence', { event: 'sync' }, () => {
+      const state = presenceChannel.presenceState();
+      cb(Object.keys(state).length);
+    });
+    await new Promise(resolve=>{
+      presenceChannel.subscribe(async status=>{
+        if(status==='SUBSCRIBED'){
+          await presenceChannel.track({ at: Date.now() });
+          resolve();
+        }
+      });
+    });
+  }
+
+  async function leavePresence(){
+    if(presenceChannel){
+      const sb = await getClient();
+      sb.removeChannel(presenceChannel);
+      presenceChannel = null;
+    }
+  }
+
+  // Nombre de joueurs actuellement en file d'attente aleatoire publique
+  // (hors lobbies a code d'invitation). 0 en cas d'erreur reseau, plutot
+  // que de casser l'affichage pour un simple compteur secondaire.
+  async function getQueueCount(){
+    const sb = await getClient();
+    const { data, error } = await sb.rpc('get_queue_count');
+    if(error){ console.warn('[DaniszOnline] get_queue_count failed', error); return 0; }
+    return data || 0;
+  }
+
+  /* =========================================================
      PHASE 2 : synchronisation de partie (une fois la lobby active).
      Modele HOTE-AUTORITAIRE : joueur1 (l'hote) fait tourner le vrai
      moteur de regles (le meme que solo vs IA -- l'adversaire distant est
@@ -172,6 +227,7 @@
 
   window.DaniszOnline = {
     joinRandomQueue, leaveQueue, createInviteLobby, joinInviteLobby, watchLobby, stopWatching,
+    joinPresence, leavePresence, getQueueCount,
     joinGameChannel, announceReady, sendMove, sendState, leaveGameChannel
   };
 })();

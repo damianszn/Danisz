@@ -501,16 +501,41 @@
     return !!(document.fullscreenElement || document.webkitFullscreenElement);
   }
   function updateIcon(){ fsBtn.textContent = isFs() ? '⤢' : '⛶'; }
-  fsBtn.addEventListener('click', ()=>{
+  function requestFs(){
     const el = document.documentElement;
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+    if(!fn) return;
+    const p = fn.call(el);
+    if(p && p.catch) p.catch(()=>{}); // refuse silencieux (pas de geste suffisant, iOS sans support...)
+  }
+  fsBtn.addEventListener('click', ()=>{
     if(!isFs()){
-      (el.requestFullscreen || el.webkitRequestFullscreen || function(){}).call(el);
+      requestFs();
     } else {
       (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
     }
   });
   document.addEventListener('fullscreenchange', updateIcon);
   document.addEventListener('webkitfullscreenchange', updateIcon);
+
+  // Plein ecran AUTOMATIQUE des qu'on est en paysage sur mobile : la barre
+  // d'adresse/navigation bouffe une part deja precieuse de la hauteur en
+  // paysage sur telephone (tout le travail de placement des cartes en tient
+  // compte). L'API Fullscreen exige un vrai geste utilisateur -- impossible
+  // de la declencher toute seule au chargement ou sur un simple changement
+  // d'orientation -- donc on la tente sur CHAQUE tap/clic tant qu'on n'est
+  // pas deja en plein ecran : au pire ca prend le tout premier tap (menu,
+  // carte...) pour y passer, sans bloquer ni retarder ce clic lui-meme
+  // (aucun preventDefault). Reserve au tactile : sur desktop, "paysage"
+  // decrit juste un ecran large normal, pas une contrainte a corriger.
+  const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  function isLandscapeNow(){ return window.innerWidth > window.innerHeight; }
+  function autoFullscreenOnGesture(){
+    if(!isTouchDevice || isFs() || !isLandscapeNow()) return;
+    requestFs();
+  }
+  document.addEventListener('click', autoFullscreenOnGesture, true);
+  document.addEventListener('touchend', autoFullscreenOnGesture, true);
 })();
 
 // Reglages / langue : popup simple sous l'icone engrenage. La langue
@@ -681,6 +706,7 @@ const I18N = {
     betaLabel: "Closed Beta",
     onlineBetaPrompt: "Mot de passe beta :",
     onlineLobbyTitle: "1v1 en ligne",
+    onlineStatsLine: "{online} en ligne · {queue} en file d'attente",
     onlineNeedsAccountMsg: "Cree un profil (bouton Profil, menu precedent) pour jouer en ligne.",
     onlineQueueBtn: "Recherche rapide",
     onlineCreateBtn: "Creer un code",
@@ -827,6 +853,7 @@ const I18N = {
     betaLabel: "Closed Beta",
     onlineBetaPrompt: "Beta-wachtwoord:",
     onlineLobbyTitle: "1v1 online",
+    onlineStatsLine: "{online} online · {queue} in wachtrij",
     onlineNeedsAccountMsg: "Maak een profiel aan (knop Profiel, vorig menu) om online te spelen.",
     onlineQueueBtn: "Snel zoeken",
     onlineCreateBtn: "Code aanmaken",
@@ -973,6 +1000,7 @@ const I18N = {
     betaLabel: "Closed Beta",
     onlineBetaPrompt: "Haslo beta:",
     onlineLobbyTitle: "1v1 online",
+    onlineStatsLine: "{online} online · {queue} w kolejce",
     onlineNeedsAccountMsg: "Utworz profil (przycisk Profil, poprzednie menu), aby grac online.",
     onlineQueueBtn: "Szybkie wyszukiwanie",
     onlineCreateBtn: "Utworz kod",
@@ -1119,6 +1147,7 @@ const I18N = {
     betaLabel: "Closed Beta",
     onlineBetaPrompt: "Beta password:",
     onlineLobbyTitle: "1v1 online",
+    onlineStatsLine: "{online} online · {queue} in queue",
     onlineNeedsAccountMsg: "Create a profile (Profile button, previous menu) to play online.",
     onlineQueueBtn: "Quick search",
     onlineCreateBtn: "Create a code",
@@ -2566,12 +2595,34 @@ class OnlineLobbyScene extends Phaser.Scene {
     this.errorMsg = '';
     this.lobbyId = null;
     this.inviteCode = null;
+    // Compteur "X en ligne / Y en file d'attente" (voir js/online.js) :
+    // presence live pour "en ligne", sondage ponctuel pour "en file
+    // d'attente" (RLS empeche un flux temps reel sur les lobbies des
+    // autres joueurs, voir get_queue_count() dans schema_online.sql).
+    this.onlineCount = null;
+    this.queueCount = null;
+    if(window.DaniszOnline){
+      window.DaniszOnline.joinPresence(count=>{
+        this.onlineCount = count;
+        if(this.scene.isActive()) this.render();
+      });
+      const refreshQueueCount = ()=>{
+        window.DaniszOnline.getQueueCount().then(n=>{
+          if(!this.scene.isActive()) return;
+          this.queueCount = n;
+          this.render();
+        });
+      };
+      refreshQueueCount();
+      this._queueCountTimer = setInterval(refreshQueueCount, 3000);
+    }
     this.render();
     const onResize = ()=>this.render();
     this.scale.on('resize', onResize);
     this.events.once('shutdown', ()=>{
       this.scale.off('resize', onResize);
-      if(window.DaniszOnline) window.DaniszOnline.stopWatching();
+      if(this._queueCountTimer){ clearInterval(this._queueCountTimer); this._queueCountTimer = null; }
+      if(window.DaniszOnline){ window.DaniszOnline.stopWatching(); window.DaniszOnline.leavePresence(); }
       if(window.__onlineLobbyModeChange) window.__onlineLobbyModeChange(null);
     });
     whenFontsReady(()=>{ if(this.scene.isActive()) this.render(); });
@@ -2725,6 +2776,16 @@ class OnlineLobbyScene extends Phaser.Scene {
         fontFamily:'"VT323"', fontSize:'22px', color:'#e9ddc8', align:'center', wordWrap:{width:Math.min(420,W-100)}
       }).setOrigin(0.5);
       return;
+    }
+
+    // Compteur "X en ligne / Y en file d'attente" : sous le titre, visible
+    // tant qu'on est sur cet ecran a essayer d'obtenir une partie (pas sur
+    // l'ecran transitoire "adversaire trouve"). Rien tant que les deux
+    // valeurs n'ont pas encore ete recues au moins une fois (evite un
+    // "0 en ligne / 0 en file" trompeur pendant l'instant de chargement).
+    if(this.mode!=='matched' && this.onlineCount!==null && this.queueCount!==null){
+      this.add.text(cx, 122, t('onlineStatsLine', {online: this.onlineCount, queue: this.queueCount}),
+        {fontFamily:'"VT323"', fontSize:'17px', color:'#9aa8b0'}).setOrigin(0.5);
     }
 
     if(this.mode==='choice'){

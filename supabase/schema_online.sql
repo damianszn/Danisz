@@ -160,3 +160,23 @@ grant execute on function public.join_invite_lobby(text) to authenticated;
 -- que quelqu'un rejoint sa lobby (postgres_changes cote client), plutot que
 -- d'avoir a re-interroger la table en boucle.
 alter publication supabase_realtime add table public.lobbies;
+
+-- ---- Compteur "X en file d'attente" (ecran de matchmaking) ----
+-- Un client ne peut SELECT que ses propres lobbies (voir la policy plus
+-- haut), donc pas moyen de compter les lobbies en attente des AUTRES
+-- joueurs depuis le client. security definer contourne ca proprement en ne
+-- renvoyant qu'un compte agrege -- aucune ligne, aucune identite exposee.
+-- Ne compte que la file aleatoire publique (code is null) : une lobby avec
+-- un code d'invitation attend un ami precis, pas "n'importe qui".
+create or replace function public.get_queue_count()
+returns integer
+language sql
+security definer
+set search_path = public
+as $$
+  select count(*)::integer from public.lobbies
+  where status = 'waiting' and code is null;
+$$;
+
+revoke all on function public.get_queue_count() from public;
+grant execute on function public.get_queue_count() to authenticated;
