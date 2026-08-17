@@ -710,6 +710,7 @@ const I18N = {
 
     betaLabel: "Closed Beta",
     onlineBetaPrompt: "Mot de passe beta :",
+    lastUpdateLabel: "MAJ",
     onlineLobbyTitle: "1v1 en ligne",
     onlineStatsLine: "{online} en ligne · {queue} en file d'attente",
     onlineNeedsAccountMsg: "Cree un profil (bouton Profil, menu precedent) pour jouer en ligne.",
@@ -857,6 +858,7 @@ const I18N = {
 
     betaLabel: "Closed Beta",
     onlineBetaPrompt: "Beta-wachtwoord:",
+    lastUpdateLabel: "Laatste update",
     onlineLobbyTitle: "1v1 online",
     onlineStatsLine: "{online} online · {queue} in wachtrij",
     onlineNeedsAccountMsg: "Maak een profiel aan (knop Profiel, vorig menu) om online te spelen.",
@@ -1004,6 +1006,7 @@ const I18N = {
 
     betaLabel: "Closed Beta",
     onlineBetaPrompt: "Haslo beta:",
+    lastUpdateLabel: "Ostatnia aktualizacja",
     onlineLobbyTitle: "1v1 online",
     onlineStatsLine: "{online} online · {queue} w kolejce",
     onlineNeedsAccountMsg: "Utworz profil (przycisk Profil, poprzednie menu), aby grac online.",
@@ -1151,6 +1154,7 @@ const I18N = {
 
     betaLabel: "Closed Beta",
     onlineBetaPrompt: "Beta password:",
+    lastUpdateLabel: "Last update",
     onlineLobbyTitle: "1v1 online",
     onlineStatsLine: "{online} online · {queue} in queue",
     onlineNeedsAccountMsg: "Create a profile (Profile button, previous menu) to play online.",
@@ -1933,7 +1937,7 @@ function maybeReportMatchResult(isOnline){
 }
 // Date de derniere mise a jour du jeu, affichee en bulle sur l'ecran de
 // demarrage. A mettre a jour a chaque nouvelle session de modifications.
-const LAST_UPDATE = "17 aout 2026";
+const LAST_UPDATE = "18 aout 2026";
 
 // Attend que les 2 polices web (Press Start 2P / VT323) soient VRAIMENT
 // chargees avant d'appeler cb. document.fonts.ready seul ne suffit pas ici :
@@ -2202,7 +2206,7 @@ class MenuScene extends Phaser.Scene {
 
     // Bulle "derniere mise a jour", coin bas-droit (le bas-centre est deja
     // pris par la marque).
-    const updText = `MAJ ${LAST_UPDATE}`;
+    const updText = `${t('lastUpdateLabel')} ${LAST_UPDATE}`;
     const updSize = 17;
     const probe = this.add.text(0, 0, updText, {fontFamily:'"VT323"', fontSize:updSize+'px'}).setVisible(false);
     const padX = 10, padY = 6;
@@ -4848,7 +4852,17 @@ class MainScene extends Phaser.Scene {
 }
 
 const config = {
-  type: Phaser.AUTO,
+  // Canvas plutot que AUTO (WebGL prioritaire) : ce jeu est purement 2D
+  // (sprites de cartes statiques, texte, quelques tweens simples), aucun
+  // besoin reel de WebGL. Force en Canvas suite a des erreurs internes
+  // Phaser non catchables (deux "Script error." opaques, cote WebGL selon
+  // toute vraisemblance) constatees uniquement sur un vrai telephone
+  // (Nothing Phone 2), jamais reproduites en emulateur ni en sandbox --
+  // signe d'un souci pilote GPU/navigateur specifique plutot qu'un bug de
+  // notre code. Canvas est nettement plus universellement fiable pour ce
+  // niveau de complexite graphique, au prix d'un cout de performance
+  // negligeable ici.
+  type: Phaser.CANVAS,
   parent: 'game-container',
   width: window.innerWidth,
   height: window.innerHeight,
