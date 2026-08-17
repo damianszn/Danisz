@@ -758,8 +758,7 @@ const I18N = {
     diffHardRules: "✋ Main libre, glisse pour reordonner\n🧠 IA avancee, anticipe mieux",
     diffNightmareRules: "✋ Main libre, glisse pour reordonner\n🧠 IA avancee, anticipe mieux\n🙈 Compteurs masques (main adverse + pile)\n🚫 \"Prendre\" impossible si tu as un coup jouable",
 
-    betaLabel: "Closed Beta",
-    onlineBetaPrompt: "Mot de passe beta :",
+    betaLabel: "Beta",
     lastUpdateLabel: "MAJ",
     accountHintBubble: "Cree-toi un compte : le online et le competitif t'y attendent !",
     onlineLobbyTitle: "1v1 en ligne",
@@ -907,8 +906,7 @@ const I18N = {
     diffHardRules: "✋ Vrije handvolgorde, sleep om te herschikken\n🧠 Geavanceerde AI, denkt vooruit",
     diffNightmareRules: "✋ Vrije handvolgorde, sleep om te herschikken\n🧠 Geavanceerde AI, denkt vooruit\n🙈 Tellers verborgen (hand tegenstander + stapel)\n🚫 \"Pakken\" onmogelijk als je kan spelen",
 
-    betaLabel: "Closed Beta",
-    onlineBetaPrompt: "Beta-wachtwoord:",
+    betaLabel: "Beta",
     lastUpdateLabel: "Laatste update",
     accountHintBubble: "Maak een profiel aan: online en competitief wachten op je!",
     onlineLobbyTitle: "1v1 online",
@@ -1056,8 +1054,7 @@ const I18N = {
     diffHardRules: "✋ Wolny uklad reki, przeciagnij by zmienic\n🧠 Zaawansowane AI, planuje z wyprzedzeniem",
     diffNightmareRules: "✋ Wolny uklad reki, przeciagnij by zmienic\n🧠 Zaawansowane AI, planuje z wyprzedzeniem\n🙈 Liczniki ukryte (reka przeciwnika + stos)\n🚫 Nie mozna \"Wziac\", jesli masz mozliwy ruch",
 
-    betaLabel: "Closed Beta",
-    onlineBetaPrompt: "Haslo beta:",
+    betaLabel: "Beta",
     lastUpdateLabel: "Ostatnia aktualizacja",
     accountHintBubble: "Zaloz konto: tryb online i rankingowy juz na Ciebie czekaja!",
     onlineLobbyTitle: "1v1 online",
@@ -1205,8 +1202,7 @@ const I18N = {
     diffHardRules: "✋ Free hand order, drag to reorder\n🧠 Advanced AI, plans ahead",
     diffNightmareRules: "✋ Free hand order, drag to reorder\n🧠 Advanced AI, plans ahead\n🙈 Counters hidden (opponent's hand + pile)\n🚫 Can't \"Take\" if you have a playable move",
 
-    betaLabel: "Closed Beta",
-    onlineBetaPrompt: "Beta password:",
+    betaLabel: "Beta",
     lastUpdateLabel: "Last update",
     accountHintBubble: "Create an account: online and competitive play await!",
     onlineLobbyTitle: "1v1 online",
@@ -2215,7 +2211,7 @@ class MenuScene extends Phaser.Scene {
       y += step;
       this.menuButton(cx, y, btnW, btnH, t('menuVs3'), false, null, {fontSize, subFontSize});
       y += step;
-      this.menuButton(cx, y, btnW, btnH, t('menuOnline'), true, ()=>this.openOnlineBeta(), {
+      this.menuButton(cx, y, btnW, btnH, t('menuOnline'), true, ()=>this.scene.start('online-lobby'), {
         fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('betaLabel'), subtitleColor:'#ffa64d', fontSize, subFontSize
       });
       y += step;
@@ -2250,7 +2246,7 @@ class MenuScene extends Phaser.Scene {
       const row1Y = row0Y + btnH + gapY;
       this.menuButton(col0X, row0Y, btnW, btnH, t('menuVsAI'), true, ()=>this.scene.start('difficulty'), {fontSize});
       this.menuButton(col1X, row0Y, btnW, btnH, t('menuVs3'), false, null, {fontSize, subFontSize});
-      this.menuButton(col0X, row1Y, btnW, btnH, t('menuOnline'), true, ()=>this.openOnlineBeta(), {
+      this.menuButton(col0X, row1Y, btnW, btnH, t('menuOnline'), true, ()=>this.scene.start('online-lobby'), {
         fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('betaLabel'), subtitleColor:'#ffa64d', fontSize, subFontSize
       });
       this.menuButton(col1X, row1Y, btnW, btnH, t('menuFFA'), false, null, {fontSize, subFontSize});
@@ -2308,15 +2304,6 @@ class MenuScene extends Phaser.Scene {
       const hit = this.safeInteractive(this.add.rectangle(x, y, w, h, 0x000000, 0));
       hit.on('pointerdown', ()=>{ sfxClick(); onClick(); });
     }
-  }
-
-  // ---- 1v1 en ligne (beta) : mot de passe temporaire pour eviter que des
-  // joueurs normaux tombent dessus avant que ce soit pret -- juste un
-  // filtre de test, pas une vraie protection. A retirer une fois la feature
-  // prete pour tout le monde. ----
-  openOnlineBeta(){
-    const pwd = window.prompt(t('onlineBetaPrompt'));
-    if(pwd === '6421') this.scene.start('online-lobby');
   }
 }
 

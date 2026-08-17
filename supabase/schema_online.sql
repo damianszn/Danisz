@@ -167,7 +167,10 @@ alter publication supabase_realtime add table public.lobbies;
 -- joueurs depuis le client. security definer contourne ca proprement en ne
 -- renvoyant qu'un compte agrege -- aucune ligne, aucune identite exposee.
 -- Ne compte que la file aleatoire publique (code is null) : une lobby avec
--- un code d'invitation attend un ami precis, pas "n'importe qui".
+-- un code d'invitation attend un ami precis, pas "n'importe qui". Exclut
+-- aussi la propre lobby de l'appelant (joueur1 <> auth.uid()) : sinon un
+-- joueur qui vient de lancer sa propre recherche se compte lui-meme comme
+-- +1, ce qui n'a pas de sens ("X AUTRES joueurs en attente").
 create or replace function public.get_queue_count()
 returns integer
 language sql
@@ -175,7 +178,7 @@ security definer
 set search_path = public
 as $$
   select count(*)::integer from public.lobbies
-  where status = 'waiting' and code is null;
+  where status = 'waiting' and code is null and joueur1 <> auth.uid();
 $$;
 
 revoke all on function public.get_queue_count() from public;
