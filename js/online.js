@@ -86,5 +86,68 @@
     }
   }
 
-  window.DaniszOnline = { joinRandomQueue, leaveQueue, createInviteLobby, joinInviteLobby, watchLobby, stopWatching };
+  /* =========================================================
+     PHASE 2 : synchronisation de partie (une fois la lobby active).
+     Modele HOTE-AUTORITAIRE : joueur1 (l'hote) fait tourner le vrai
+     moteur de regles (le meme que solo vs IA -- l'adversaire distant est
+     traite exactement comme "l'IA", sauf que son coup vient du reseau au
+     lieu d'etre calcule localement). joueur2 (l'invite) n'envoie que des
+     PROPOSITIONS de coup et attend le resultat officiel de l'hote pour
+     animer -- il ne fait jamais tourner playGroup/forceTakePile lui-meme,
+     pour ne jamais risquer de diverger de l'etat de l'hote.
+
+     Canal Realtime "broadcast" (pas postgres_changes, trop lent pour ca)
+     nomme par lobbyId : seuls les 2 joueurs de cette lobby connaissent cet
+     UUID, donc pas de canal partage/devinable entre parties differentes.
+     broadcast.self:false : on ne recoit jamais nos propres messages.
+     ========================================================= */
+  let gameChannel = null;
+
+  // handlers = { onMove(move), onState(payload), onReady() }
+  //   onMove  : recu cote HOTE seulement -- l'invite propose un coup.
+  //   onState : recu cote INVITE seulement -- l'hote diffuse le resultat
+  //             officiel (nouvel etat + le "res" a animer).
+  //   onReady : recu cote HOTE seulement -- l'invite signale qu'il ecoute
+  //             (l'hote peut alors distribuer les cartes et diffuser l'etat
+  //             initial en toute securite, sans risquer que l'invite l'ait
+  //             manque en n'etant pas encore abonne au canal).
+  async function joinGameChannel(lobbyId, handlers){
+    const sb = await getClient();
+    await leaveGameChannel();
+    gameChannel = sb.channel('game-' + lobbyId, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'move' }, ({ payload }) => { if(handlers.onMove) handlers.onMove(payload); })
+      .on('broadcast', { event: 'state' }, ({ payload }) => { if(handlers.onState) handlers.onState(payload); })
+      .on('broadcast', { event: 'ready' }, () => { if(handlers.onReady) handlers.onReady(); });
+    await new Promise(resolve=>{ gameChannel.subscribe(status=>{ if(status==='SUBSCRIBED') resolve(); }); });
+    return gameChannel;
+  }
+
+  // Signale qu'on ecoute -- seul l'invite doit appeler ceci (voir onReady
+  // cote hote ci-dessus).
+  function announceReady(){
+    if(gameChannel) gameChannel.send({ type:'broadcast', event:'ready', payload:{} });
+  }
+
+  // Invite -> hote : "je voudrais faire ce coup". move = {kind, cardIds|cardId}.
+  function sendMove(move){
+    if(gameChannel) gameChannel.send({ type:'broadcast', event:'move', payload: move });
+  }
+
+  // Hote -> invite : resultat officiel (nouvel etat + res a animer).
+  function sendState(payload){
+    if(gameChannel) gameChannel.send({ type:'broadcast', event:'state', payload });
+  }
+
+  async function leaveGameChannel(){
+    if(gameChannel){
+      const sb = await getClient();
+      sb.removeChannel(gameChannel);
+      gameChannel = null;
+    }
+  }
+
+  window.DaniszOnline = {
+    joinRandomQueue, leaveQueue, createInviteLobby, joinInviteLobby, watchLobby, stopWatching,
+    joinGameChannel, announceReady, sendMove, sendState, leaveGameChannel
+  };
 })();

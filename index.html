@@ -609,6 +609,9 @@ const I18N = {
     statusLose: "L'ADVERSAIRE A GAGNE.",
     statusAITurn: "L'ADVERSAIRE JOUE...",
     statusChooseFaceUp: "CHOISIS UNE CARTE A RECUPERER AVEC LE TAS",
+    toastInvalidPlay: "Coup invalide !",
+    toastPendingChoice: "Termine d'abord ton choix.",
+    toastMustPlay: "Tu dois jouer une carte si tu peux.",
     statusSelected: "{n} CARTE(S) SELECTIONNEE(S)",
     statusChoose: "CHOISIS UNE OU PLUSIEURS CARTES",
     refreshToReplay: "Rafraichis la page pour rejouer",
@@ -752,6 +755,9 @@ const I18N = {
     statusLose: "DE TEGENSTANDER HEEFT GEWONNEN.",
     statusAITurn: "TEGENSTANDER SPEELT...",
     statusChooseFaceUp: "KIES EEN KAART OM TE HOUDEN BIJ DE STAPEL",
+    toastInvalidPlay: "Ongeldige zet!",
+    toastPendingChoice: "Maak eerst je keuze af.",
+    toastMustPlay: "Je moet een kaart spelen als je kan.",
     statusSelected: "{n} KAART(EN) GESELECTEERD",
     statusChoose: "KIES EEN OF MEER KAARTEN",
     refreshToReplay: "Ververs de pagina om opnieuw te spelen",
@@ -895,6 +901,9 @@ const I18N = {
     statusLose: "PRZECIWNIK WYGRAL.",
     statusAITurn: "PRZECIWNIK GRA...",
     statusChooseFaceUp: "WYBIERZ KARTE DO ZATRZYMANIA ZE STOSU",
+    toastInvalidPlay: "Nieprawidlowy ruch!",
+    toastPendingChoice: "Dokoncz najpierw swoj wybor.",
+    toastMustPlay: "Musisz zagrac karte, jesli mozesz.",
     statusSelected: "{n} WYBRANYCH KART",
     statusChoose: "WYBIERZ JEDNA LUB WIECEJ KART",
     refreshToReplay: "Odswiez strone, aby zagrac ponownie",
@@ -1038,6 +1047,9 @@ const I18N = {
     statusLose: "THE OPPONENT WON.",
     statusAITurn: "OPPONENT IS PLAYING...",
     statusChooseFaceUp: "CHOOSE A CARD TO KEEP WITH THE PILE",
+    toastInvalidPlay: "Invalid move!",
+    toastPendingChoice: "Finish your choice first.",
+    toastMustPlay: "You must play a card if you can.",
     statusSelected: "{n} CARD(S) SELECTED",
     statusChoose: "CHOOSE ONE OR MORE CARDS",
     refreshToReplay: "Refresh the page to play again",
@@ -1253,6 +1265,20 @@ function createGame(){
   log(state, starter==='player' ? 'logStarterYou' : 'logStarterAI');
 
   return state;
+}
+
+// ---- 1v1 en ligne, cote INVITE : etat placeholder (table vide, aucune
+// carte distribuee) utilise le temps que l'hote envoie la vraie
+// distribution -- meme forme que createGame() pour que layoutAndDraw()
+// puisse s'executer sans plantage avant l'arrivee du premier etat officiel.
+function createEmptyOnlineState(){
+  return {
+    deck: [], discardOut: [], cutBatches: [], pile: [],
+    player: newPlayerState(), ai: newPlayerState(),
+    turn: null, forceMax: null, war: null, skipNext: 0, resetOpen: false,
+    copyEffectiveTop: null, bonusTurnsPlayer: null, bonusTurns: 0,
+    winner: null, resultSubmitted: false, turnCount: 0, log: []
+  };
 }
 
 function log(state, key, params){ state.log.push({key, params:params||{}}); if(state.log.length>60) state.log.shift(); }
@@ -1739,6 +1765,85 @@ function aiTakeTurn(state){
 }
 
 /* =========================================================
+   1v1 EN LIGNE : resolution cote HOTE des coups recus du reseau, et
+   inversion de perspective pour l'ecran de l'INVITE.
+
+   Modele hote-autoritaire (voir js/online.js) : l'hote est la seule
+   source de verite. "player" = l'hote, "ai" = l'adversaire distant (le
+   moteur ne voit litteralement aucune difference avec une partie solo,
+   seule la SOURCE du coup de "ai" change -- reseau plutot qu'IA locale).
+   ========================================================= */
+
+// Coup recu du reseau (invite -> hote) applique via les MEMES fonctions
+// que aiTakeTurn() appellerait -- move = {kind:'faceDown', cardId} |
+// {kind:'take'} | {kind:'takeFaceUp', cardId} | {kind:'play', cardIds:[]}.
+// Retourne null si le coup est invalide/introuvable (carte deja jouee
+// entre-temps, message corrompu...) plutot que de planter : l'appelant
+// traite null comme un res.ok=false classique.
+function networkResolveMove(state, move){
+  if(state.winner || state.turn!=='ai' || !move) return null;
+  if(move.kind==='faceDown'){
+    const card = state.ai.faceDown.find(c=>c.id===move.cardId);
+    return card ? tryFaceDownCard(state, 'ai', card) : null;
+  }
+  if(move.kind==='take'){
+    return forceTakePile(state, 'ai');
+  }
+  if(move.kind==='takeFaceUp'){
+    const card = state.ai.faceUp.find(c=>c.id===move.cardId);
+    return card ? forceTakePile(state, 'ai', card) : null;
+  }
+  if(move.kind==='play'){
+    const zoneInfo = getActiveZoneCards(state.ai);
+    const cards = move.cardIds.map(id=>zoneInfo.cards.find(c=>c.id===id)).filter(Boolean);
+    if(cards.length===0 || cards.length!==move.cardIds.length) return null;
+    return playGroup(state, 'ai', cards);
+  }
+  return null;
+}
+
+// Cles de journal qui existent en paire "toi/adversaire" (voir I18N) :
+// necessaire pour que l'invite lise "L'adversaire pose..." quand c'est en
+// realite L'HOTE qui a joue (state.log est ecrit du point de vue de
+// l'hote, tel quel il serait a l'envers a l'ecran de l'invite).
+const LOG_KEY_PERSPECTIVE_SWAP = {
+  logStarterYou:'logStarterAI', logStarterAI:'logStarterYou',
+  logPlayYou:'logPlayAI', logPlayAI:'logPlayYou',
+  logBonus8You:'logBonus8AI', logBonus8AI:'logBonus8You',
+  logWarDeclareYou:'logWarDeclareAI', logWarDeclareAI:'logWarDeclareYou',
+  logWinYou:'logWinAI', logWinAI:'logWinYou',
+  logTakePileYou:'logTakePileAI', logTakePileAI:'logTakePileYou',
+  logBonusReplayYou:'logBonusReplayAI', logBonusReplayAI:'logBonusReplayYou',
+  logSkipYou:'logSkipAI', logSkipAI:'logSkipYou'
+};
+
+// Un gameState complet est ecrit du point de vue de l'HOTE ("player" =
+// l'hote). L'invite recoit ce meme objet mais doit le voir de SON propre
+// point de vue ("player" = soi-meme) pour pouvoir reutiliser tel quel tout
+// le pipeline de rendu/animation existant (qui suppose toujours que
+// state.player = l'utilisateur local). Cette fonction fait uniquement
+// cette inversion -- purement des donnees, aucun effet de bord.
+function swapStatePerspective(state){
+  return Object.assign({}, state, {
+    player: state.ai,
+    ai: state.player,
+    turn: state.turn==='player' ? 'ai' : (state.turn==='ai' ? 'player' : state.turn),
+    winner: state.winner==='player' ? 'ai' : (state.winner==='ai' ? 'player' : state.winner),
+    bonusTurnsPlayer: state.bonusTurnsPlayer==='player' ? 'ai' : (state.bonusTurnsPlayer==='ai' ? 'player' : state.bonusTurnsPlayer),
+    log: state.log.map(entry=>({ key: LOG_KEY_PERSPECTIVE_SWAP[entry.key] || entry.key, params: entry.params }))
+  });
+}
+
+// Meme inversion pour un "res" (retour de resolvePlay/forceTakePile/
+// tryFaceDownCard) : les seuls champs qui referencent une case
+// player/ai explicitement sont fromZone (n'en contient pas en fait -- ce
+// sont des noms de zone 'hand'/'faceUp'/'faceDown', pas "player"/"ai") et
+// les cartes elles-memes (deja neutres, pas de player/ai dedans). Rien a
+// inverser dans res -- seul le "who" avec lequel animateResult() est
+// appele doit l'etre (voir onlineOnState cote MainScene).
+function swapWho(who){ return who==='player' ? 'ai' : 'player'; }
+
+/* =========================================================
    RENDU PHASER (assets pixel art)
    ========================================================= */
 const CARD_W = 80, CARD_H = 110;
@@ -1777,10 +1882,16 @@ let difficulty = 'normal';
 // fois par partie (garde via gameState.resultSubmitted, remis a false par
 // createGame()). No-op silencieux tant qu'aucun profil n'existe : le mode
 // offline ne depend jamais de ca pour fonctionner (voir js/account.js).
-function maybeReportMatchResult(){
+function maybeReportMatchResult(isOnline){
   if(!gameState.winner || gameState.resultSubmitted) return;
   gameState.resultSubmitted = true;
   if(gameState.winner==='player') sfxVictory(); else sfxDefeat();
+  // 1v1 en ligne : pas encore d'enregistrement de resultat (schema/RPC
+  // dedie a construire, distinct de record_ai_match qui suppose un
+  // adversaire IA -- l'appeler ici avec `difficulty` [perime, jamais mis a
+  // jour pour ce mode] pollueurait le classement solo avec un faux match
+  // IA). Son victoire/defaite seul pour l'instant.
+  if(isOnline) return;
   if(window.DaniszAccount && window.DaniszAccount.hasAccount()){
     window.DaniszAccount.reportAiMatch(difficulty, gameState.winner==='player', gameState.turnCount)
       .catch(e=>console.warn('[Danisz] score report failed', e));
@@ -2507,6 +2618,22 @@ class OnlineLobbyScene extends Phaser.Scene {
     this.render();
   }
 
+  // ---- Appariement confirme : role determine par le CHEMIN emprunte (pas
+  // besoin de requeter qui est joueur1/joueur2 -- voir chaque appelant :
+  // celui qui attendait deja = hote, celui qui vient de rejoindre =
+  // invite). Laisse le message "Adversaire trouve" bref a l'ecran avant
+  // de transferer vers la partie (window.__onlineMatch, lu par
+  // MainScene.create()). ----
+  enterMatchedState(role){
+    this.onlineRole = role;
+    this.setMode('matched');
+    this.time.delayedCall(900, ()=>{
+      if(!this.scene.isActive()) return;
+      window.__onlineMatch = { lobbyId: this.lobbyId, role };
+      this.scene.start('main');
+    });
+  }
+
   startQueue(){
     if(!window.DaniszOnline) return;
     this.errorMsg = '';
@@ -2516,10 +2643,14 @@ class OnlineLobbyScene extends Phaser.Scene {
       if(res.error){ this.errorMsg = t('accountErrorUnknown'); this.setMode('choice'); return; }
       this.lobbyId = res.lobbyId;
       if(res.matched){
-        this.setMode('matched');
+        // On rejoint une lobby qui attendait deja quelqu'un d'autre :
+        // cet autre joueur est donc l'hote, nous sommes l'invite.
+        this.enterMatchedState('guest');
       } else {
         window.DaniszOnline.watchLobby(res.lobbyId, row=>{
-          if(row.status === 'active' && this.scene.isActive()) this.setMode('matched');
+          // On attendait deja : celui qui vient de nous rejoindre est
+          // l'invite, nous restons l'hote.
+          if(row.status === 'active' && this.scene.isActive()) this.enterMatchedState('host');
         });
       }
     });
@@ -2542,7 +2673,9 @@ class OnlineLobbyScene extends Phaser.Scene {
       this.inviteCode = res.code;
       this.setMode('waiting-invite');
       window.DaniszOnline.watchLobby(res.lobbyId, row=>{
-        if(row.status === 'active' && this.scene.isActive()) this.setMode('matched');
+        // Createur de l'invitation = hote ; celui qui rejoint avec le
+        // code = invite.
+        if(row.status === 'active' && this.scene.isActive()) this.enterMatchedState('host');
       });
     });
   }
@@ -2561,7 +2694,9 @@ class OnlineLobbyScene extends Phaser.Scene {
       }
       if(errorEl) errorEl.textContent = '';
       this.lobbyId = res.lobbyId;
-      this.setMode('matched');
+      // On rejoint via un code cree par quelqu'un d'autre : ce createur
+      // est l'hote, nous sommes l'invite.
+      this.enterMatchedState('guest');
     });
   }
 
@@ -2647,11 +2782,31 @@ class MainScene extends Phaser.Scene {
 
   create(){
     if(window.__onSceneChange) window.__onSceneChange('main');
-    gameState = createGame();
     this.spriteByCardId = {};
     this.dragReleasePos = {};
     this.animating = false;
     this.awaitingFaceUpChoice = false;
+    this.toastObjs = [];
+    // 1v1 en ligne (voir js/online.js) : window.__onlineMatch pose par
+    // OnlineLobbyScene juste avant scene.start('main'). role='host' fait
+    // tourner le vrai moteur (comme solo vs IA, "ai" = l'adversaire
+    // distant) ; role='guest' n'est qu'un client passif qui attend l'etat
+    // officiel de l'hote (voir setupOnlineGuest/setupOnlineHost plus bas).
+    this.onlineRole = null;
+    this.onlineLobbyId = null;
+    if(window.__onlineMatch){
+      this.onlineRole = window.__onlineMatch.role;
+      this.onlineLobbyId = window.__onlineMatch.lobbyId;
+      window.__onlineMatch = null;
+    }
+    if(this.onlineRole==='guest'){
+      // Table vide le temps que l'hote distribue -- setupOnlineGuest()
+      // remplace ce placeholder des que le premier etat officiel arrive.
+      gameState = createEmptyOnlineState();
+      this.onlineReceivedFirstState = false;
+    } else {
+      gameState = createGame();
+    }
     // Sans ca, Phaser demarre un "drag" des le moindre micro-mouvement de
     // souris entre l'appui et le relachement (quasi inevitable a la main),
     // et le clic simple se fait avaler par le systeme de drag au lieu de
@@ -2681,7 +2836,52 @@ class MainScene extends Phaser.Scene {
     // APRES ce premier rendu, on redessine pour que le bon style s'applique
     // partout (sinon le canvas reste fige sur la police de secours).
     whenFontsReady(()=>{ if(this.scene.isActive()) this.layoutAndDraw(); });
-    if(gameState.turn==='ai') this.time.delayedCall(700, ()=>this.aiLoop());
+    if(this.onlineRole==='host') this.setupOnlineHost();
+    else if(this.onlineRole==='guest') this.setupOnlineGuest();
+    else if(gameState.turn==='ai') this.time.delayedCall(700, ()=>this.aiLoop());
+    // Se deconnecte proprement du canal de partie en quittant la scene
+    // (retour au menu, refresh...) plutot que de laisser un abonnement
+    // Realtime tourner dans le vide.
+    if(this.onlineRole){
+      this.events.once('shutdown', ()=>{ window.DaniszOnline.leaveGameChannel(); });
+    }
+  }
+
+  // ---- 1v1 en ligne : cote HOTE. Distribue les cartes (deja fait dans
+  // create(), gameState = createGame()) et les envoie a l'invite des qu'il
+  // signale qu'il ecoute (onReady) -- jamais avant, sinon l'invite rate le
+  // tout premier message (les canaux "broadcast" ne sont pas rejouables
+  // pour un abonne qui arrive en retard). Ensuite, relaie chaque coup de
+  // l'invite (onMove) au moteur de regles exactement comme aiTakeTurn()
+  // l'aurait fait, sauf que le coup vient du reseau plutot que d'un calcul
+  // local -- voir networkResolveMove(). ----
+  setupOnlineHost(){
+    this.onlineDealt = false;
+    window.DaniszOnline.joinGameChannel(this.onlineLobbyId, {
+      onReady: ()=>{
+        if(this.onlineDealt) return; // 'ready' redondant (retry de l'invite) : deja distribue, on ignore.
+        this.onlineDealt = true;
+        this.broadcastOnlineState(null);
+      },
+      onMove: (move)=>this.onOpponentMove(move)
+    });
+  }
+
+  // ---- 1v1 en ligne : cote INVITE. N'a pas sa propre partie (gameState
+  // est un placeholder vide, voir create()) -- attend l'etat officiel de
+  // l'hote. Renvoie 'ready' toutes les secondes tant que rien n'est recu
+  // (au cas ou le tout premier message serait parti avant que ce canal-ci
+  // ne soit meme abonne) ; le premier onOnlineState() arrete ce rappel. ----
+  setupOnlineGuest(){
+    window.DaniszOnline.joinGameChannel(this.onlineLobbyId, {
+      onState: (payload)=>this.onOnlineState(payload)
+    }).then(()=>{
+      window.DaniszOnline.announceReady();
+      this.onlineReadyRetryTimer = setInterval(()=>{
+        if(this.onlineReceivedFirstState){ clearInterval(this.onlineReadyRetryTimer); return; }
+        window.DaniszOnline.announceReady();
+      }, 1000);
+    });
   }
 
   // ---- Relance une partie sans recharger la page : reinitialise l'etat de
@@ -2937,6 +3137,13 @@ class MainScene extends Phaser.Scene {
     this.disarmWatchdog();
     this.animating = false;
     this.render();
+    // 1v1 en ligne, cote HOTE : diffuse le resultat a l'invite -- MEME si
+    // gameState.winner est desormais pose (l'invite doit voir la victoire/
+    // defaite finale, pas rester bloque sur l'avant-dernier coup).
+    if(this.onlineRole==='host' && this._onlineLastCtx){
+      this.broadcastOnlineState(this._onlineLastCtx);
+      this._onlineLastCtx = null;
+    }
     if(gameState.winner) return;
     if(gameState.turn==='ai') this.time.delayedCall(500, ()=>this.aiLoop());
   }
@@ -2964,11 +3171,62 @@ class MainScene extends Phaser.Scene {
 
   aiLoop(){
     if(gameState.winner || this.animating) return;
+    // 1v1 en ligne (hote ou invite) : "ai" est un vrai adversaire distant,
+    // jamais une IA locale a faire jouer soi-meme. Hote : attend le coup
+    // reseau (onOpponentMove). Invite : attend le prochain etat officiel
+    // de l'hote (onOnlineState) -- rien a faire ici dans les deux cas.
+    if(this.onlineRole) return;
     this.armAnimating();
     const pileTopBefore = pileTop(gameState);
     const pileSnapshotBefore = [...gameState.pile];
     const res = aiTakeTurn(gameState);
     this.animateResult('ai', res, pileTopBefore, pileSnapshotBefore);
+  }
+
+  // ---- 1v1 en ligne, cote HOTE : coup propose par l'invite (reseau).
+  // Applique exactement comme aiTakeTurn() l'aurait fait (voir
+  // networkResolveMove), puis anime -- le broadcast de l'etat resultant
+  // part tout seul depuis afterAnimation() une fois l'animation finie
+  // (this._onlineLastCtx, arme dans animateResult()). ----
+  onOpponentMove(move){
+    if(this.onlineRole!=='host' || gameState.winner || this.animating || gameState.turn!=='ai') return;
+    this.armAnimating();
+    const pileTopBefore = pileTop(gameState);
+    const pileSnapshotBefore = [...gameState.pile];
+    const res = networkResolveMove(gameState, move);
+    this.animateResult('ai', res, pileTopBefore, pileSnapshotBefore);
+  }
+
+  // ---- 1v1 en ligne, cote HOTE : diffuse l'etat courant a l'invite.
+  // ctx=null pour la toute premiere distribution (rien a animer cote
+  // invite, juste afficher la table) ; sinon {who, res, pileTopBefore,
+  // pileSnapshotBefore} du dernier coup resolu (voir animateResult). ----
+  broadcastOnlineState(ctx){
+    window.DaniszOnline.sendState({
+      newState: gameState,
+      who: ctx ? ctx.who : null,
+      res: ctx ? ctx.res : null,
+      pileTopBefore: ctx ? ctx.pileTopBefore : null,
+      pileSnapshotBefore: ctx ? ctx.pileSnapshotBefore : null
+    });
+  }
+
+  // ---- 1v1 en ligne, cote INVITE : etat officiel recu de l'hote.
+  // swapStatePerspective() re-ecrit l'etat pour que gameState.player
+  // redevienne "moi" (l'hote l'a ecrit de SON point de vue) -- tout le
+  // reste du pipeline de rendu/animation s'applique alors sans aucun
+  // changement, exactement comme en solo. ----
+  onOnlineState(payload){
+    const isFirst = !this.onlineReceivedFirstState;
+    this.onlineReceivedFirstState = true;
+    gameState = swapStatePerspective(payload.newState);
+    if(isFirst || !payload.res){
+      this.initLog();
+      this.layoutAndDraw();
+      return;
+    }
+    this.armAnimating();
+    this.animateResult(swapWho(payload.who), payload.res, payload.pileTopBefore, payload.pileSnapshotBefore);
   }
 
   // ---- Aide : point de depart par defaut quand aucun sprite precis n'existe
@@ -2984,6 +3242,15 @@ class MainScene extends Phaser.Scene {
   // ---- Anime le resultat d'une action (jouer des cartes OU prendre le tas) ----
   animateResult(who, res, pileTopBefore, pileSnapshotBefore){
     if(!res || !res.ok){ this.animating = false; this.render(); return; }
+
+    // 1v1 en ligne, cote HOTE : memorise le contexte de CE coup pour que
+    // afterAnimation() diffuse l'etat resultant a l'invite une fois
+    // l'animation terminee (ne peut pas diffuser ICI : gameState n'a pas
+    // encore fini de bouger a ce stade pour certaines animations, ex.
+    // ramassage du tas).
+    if(this.onlineRole==='host'){
+      this._onlineLastCtx = { who, res, pileTopBefore, pileSnapshotBefore };
+    }
 
     if(res.tookPile){
       sfxShuffle(res.takenCount);
@@ -3406,6 +3673,46 @@ class MainScene extends Phaser.Scene {
       {fontFamily:'"Press Start 2P"', fontSize:'17px', color:'#ffd23f'}).setOrigin(0, 0.5);
   }
 
+  // ---- Toast bref (coup invalide, action en attente...) : bulle centree
+  // qui apparait puis disparait seule apres un court delai, sans bloquer
+  // le jeu. Stocke dans this.toastObjs (voir le Set "preserved" dans
+  // drawAllLandscape/Portrait) pour survivre a un redessin declenche juste
+  // apres l'appel (ex: onPlayClick rappelle render() immediatement apres).
+  // this.W/this.H (pas this.scale.width/height) : coordonnees du monde
+  // virtuel de la camera zoomee de cette scene, pas des pixels ecran reels.
+  showToast(message){
+    if(this.toastObjs.length){
+      if(this.toastTimer) this.toastTimer.remove();
+      this.toastObjs.forEach(o=>o.destroy());
+      this.toastObjs = [];
+    }
+    const W = this.W || 1280, H = this.H || 900;
+    const cx = W/2, y = H*0.5;
+    const fontSize = Math.round(15*(this.fontScale||1));
+    const textOpts = {fontFamily:'"Press Start 2P"', fontSize:fontSize+'px', align:'center', wordWrap:{width:W*0.7}};
+    const measure = this.add.text(0, 0, message, textOpts).setVisible(false);
+    const w = measure.width, h = measure.height;
+    measure.destroy();
+    const padX = 20, padY = 14;
+    const g = this.add.graphics();
+    g.fillStyle(0x2a1010, 0.88);
+    g.fillRoundedRect(cx-w/2-padX, y-h/2-padY, w+padX*2, h+padY*2, 8);
+    g.lineStyle(2, 0xff5f5f, 0.9);
+    g.strokeRoundedRect(cx-w/2-padX, y-h/2-padY, w+padX*2, h+padY*2, 8);
+    const txt = this.add.text(cx, y, message, Object.assign({color:'#ffd8d8'}, textOpts)).setOrigin(0.5);
+    g.setDepth(6000);
+    txt.setDepth(6001);
+    g.setAlpha(0); txt.setAlpha(0);
+    this.tweens.add({ targets:[g, txt], alpha:1, duration:120 });
+    this.toastObjs = [g, txt];
+    this.toastTimer = this.time.delayedCall(1400, ()=>{
+      this.tweens.add({
+        targets:[g, txt], alpha:0, duration:220,
+        onComplete: ()=>{ g.destroy(); txt.destroy(); this.toastObjs = this.toastObjs.filter(o=>o!==g && o!==txt); }
+      });
+    });
+  }
+
   // ---- Bouton rond (place "comme" A/B GBA, mais avec le mot ecrit dedans) :
   // la taille de police s'ajuste automatiquement pour tenir dans le cercle.
   // opts.dim = grise et desactive (ex: "Jouer" quand rien n'est jouable) ;
@@ -3448,7 +3755,7 @@ class MainScene extends Phaser.Scene {
   // Dispatch vers la bonne mise en page selon l'orientation detectee dans
   // layoutAndDraw().
   drawAll(){
-    maybeReportMatchResult();
+    maybeReportMatchResult(!!this.onlineRole);
     if(this.isPortrait) return this.drawAllPortrait();
     return this.drawAllLandscape();
   }
@@ -3457,8 +3764,9 @@ class MainScene extends Phaser.Scene {
     // On detruit tout SAUF les elements persistants du journal (panneau de
     // fond + lignes en cours d'animation), qui gerent leur propre cycle de
     // vie via pushLogLine/syncLog pour un defilement anime plutot qu'un
-    // redessin brutal a chaque tour.
-    const preserved = new Set([this.logPanelBg, ...this.logLines.map(e=>e.obj)]);
+    // redessin brutal a chaque tour -- et le toast d'erreur eventuel (voir
+    // showToast), qui gere aussi son propre cycle de vie (timer).
+    const preserved = new Set([this.logPanelBg, ...this.logLines.map(e=>e.obj), ...this.toastObjs]);
     this.children.list.slice().forEach(child=>{ if(!preserved.has(child)) child.destroy(); });
     this.spriteByCardId = {};
 
@@ -3842,7 +4150,7 @@ class MainScene extends Phaser.Scene {
   // vertical verifie par le calcul avant integration, mais pas encore teste
   // sur un vrai telephone -- des ajustements sont a prevoir. ----
   drawAllPortrait(){
-    const preserved = new Set([this.logPanelBg]);
+    const preserved = new Set([this.logPanelBg, ...this.toastObjs]);
     this.children.list.slice().forEach(child=>{ if(!preserved.has(child)) child.destroy(); });
     this.spriteByCardId = {};
     // Pas de journal en portrait (pas la place) : on vide le panneau et les
@@ -4131,6 +4439,12 @@ class MainScene extends Phaser.Scene {
 
   onPlayerFaceDownClick(card){
     if(gameState.turn!=='player' || gameState.winner || this.animating) return;
+    if(this.onlineRole==='guest'){
+      this.armAnimating();
+      window.DaniszOnline.sendMove({ kind:'faceDown', cardId: card.id });
+      selected = [];
+      return;
+    }
     this.armAnimating();
     const pileTopBefore = pileTop(gameState);
     const pileSnapshotBefore = [...gameState.pile];
@@ -4253,13 +4567,36 @@ class MainScene extends Phaser.Scene {
   }
 
   onPlayClick(){
-    if(selected.length===0 || this.animating || this.awaitingFaceUpChoice) return;
+    if(selected.length===0 || this.animating) return;
+    // Choix de recuperation (face visible) toujours en attente : le
+    // signaler plutot que d'ignorer silencieusement le clic sur "Jouer".
+    if(this.awaitingFaceUpChoice){ this.showToast(t('toastPendingChoice')); return; }
+    // 1v1 en ligne, cote INVITE : jamais de resolution locale (l'hote est
+    // seul autoritaire, voir onOpponentMove) -- juste une verification
+    // immediate pour le retour visuel (toast), puis on envoie et on
+    // attend le resultat officiel (onOnlineState).
+    if(this.onlineRole==='guest'){
+      if(!selected.every(c=>c.rank===selected[0].rank) || !canPlayGroup(gameState, selected[0].rank)){
+        this.showToast(t('toastInvalidPlay'));
+        return;
+      }
+      this.armAnimating();
+      window.DaniszOnline.sendMove({ kind:'play', cardIds: selected.map(c=>c.id) });
+      selected = [];
+      return;
+    }
     this.armAnimating();
     const pileTopBefore = pileTop(gameState);
     const pileSnapshotBefore = [...gameState.pile];
     const res = playGroup(gameState, 'player', [...selected]);
     selected = [];
-    if(!res.ok){ this.disarmWatchdog(); this.animating = false; this.render(); return; }
+    if(!res.ok){
+      this.disarmWatchdog();
+      this.animating = false;
+      this.render();
+      this.showToast(t('toastInvalidPlay'));
+      return;
+    }
     this.animateResult('player', res, pileTopBefore, pileSnapshotBefore);
   }
 
@@ -4284,7 +4621,7 @@ class MainScene extends Phaser.Scene {
       const hasPlayable =
         (pZoneInfo.zone==='hand' && gameState.player.hand.some(c=>canPlayGroup(gameState, c.rank))) ||
         (pZoneInfo.zone==='faceUp' && gameState.player.faceUp.some(c=>canPlayGroup(gameState, c.rank)));
-      if(hasPlayable) return;
+      if(hasPlayable){ this.showToast(t('toastMustPlay')); return; }
     }
     // Phase "decouverte" (face visible) : on doit choisir une carte a
     // recuperer avec le tas avant de valider.
@@ -4292,6 +4629,12 @@ class MainScene extends Phaser.Scene {
       this.awaitingFaceUpChoice = true;
       selected = [];
       this.render();
+      return;
+    }
+    if(this.onlineRole==='guest'){
+      this.armAnimating();
+      window.DaniszOnline.sendMove({ kind:'take' });
+      selected = [];
       return;
     }
     this.armAnimating();
@@ -4305,6 +4648,12 @@ class MainScene extends Phaser.Scene {
   confirmTakePileWithFaceUp(card){
     if(this.animating) return;
     this.awaitingFaceUpChoice = false;
+    if(this.onlineRole==='guest'){
+      this.armAnimating();
+      window.DaniszOnline.sendMove({ kind:'takeFaceUp', cardId: card.id });
+      selected = [];
+      return;
+    }
     this.armAnimating();
     const pileTopBefore = pileTop(gameState);
     const pileSnapshotBefore = [...gameState.pile];
@@ -4338,13 +4687,30 @@ game = new Phaser.Game(config);
 // ResizeObserver selon le navigateur/l'outil d'emulation (deja constate :
 // changer d'orientation dans l'outil "appareils" de Chrome peut laisser le
 // jeu bloque a une taille 0x0, ecran noir, meme une fois #game-container
-// redevenu visible). window.resize, lui, se declenche de facon fiable dans
-// tous les cas (rotation reelle d'un telephone comme changement de taille
-// dans les outils de dev) : on force explicitement une resynchronisation
-// dessus plutot que de compter uniquement sur le ResizeObserver interne.
-window.addEventListener('resize', ()=>{
+// redevenu visible ; confirme aussi sur un vrai telephone -- rotation reelle
+// = elements qui disparaissent jusqu'a un F5).
+//
+// Un seul appel a resize() sur le PREMIER evenement ne suffit pas sur
+// mobile : une vraie rotation declenche souvent PLUSIEURS evenements
+// resize en cascade (le temps que la barre d'adresse du navigateur
+// s'ajuste), et le tout premier peut arriver avec des dimensions encore
+// transitoires. On force donc une resynchronisation a CHAQUE evenement
+// (immediat, au cas ou c'est le bon), plus un rattrapage differe (au cas ou
+// d'autres evenements suivent encore) pour finir sur les dimensions
+// vraiment stabilisees. orientationchange en plus de resize : se declenche
+// specifiquement sur une rotation, un signal supplementaire independant
+// pour ne pas dependre uniquement de resize.
+let __resizeSettleTimer = null;
+function __forceGameResize(){
   if(game && game.scale) game.scale.resize(window.innerWidth, window.innerHeight);
-});
+}
+function __onPossibleResize(){
+  __forceGameResize();
+  clearTimeout(__resizeSettleTimer);
+  __resizeSettleTimer = setTimeout(__forceGameResize, 250);
+}
+window.addEventListener('resize', __onPossibleResize);
+window.addEventListener('orientationchange', __onPossibleResize);
 
 // Pont entre le bouton de langue (DOM, hors Phaser) et la scene active :
 // met a jour la variable globale `lang`, puis redemande a la scene
