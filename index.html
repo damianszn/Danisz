@@ -2794,6 +2794,12 @@ class MainScene extends Phaser.Scene {
     // officiel de l'hote (voir setupOnlineGuest/setupOnlineHost plus bas).
     this.onlineRole = null;
     this.onlineLobbyId = null;
+    // File d'attente pour un coup/etat recu pendant qu'une animation est
+    // deja en cours (voir onOpponentMove/onOnlineState/afterAnimation).
+    this.onlinePendingMove = null;
+    this.onlinePendingState = null;
+    this.onlineSending = false;
+    this._onlineSendWatchdog = null;
     if(window.__onlineMatch){
       this.onlineRole = window.__onlineMatch.role;
       this.onlineLobbyId = window.__onlineMatch.lobbyId;
@@ -3172,6 +3178,22 @@ class MainScene extends Phaser.Scene {
       this.broadcastOnlineState(this._onlineLastCtx);
       this._onlineLastCtx = null;
     }
+    // File d'attente reseau (voir onOpponentMove/onOnlineState) : un coup
+    // ou un etat arrive pendant l'animation qui vient de se terminer est
+    // traite maintenant, dans l'ordre, plutot que d'avoir ete perdu ou
+    // d'avoir plante en percutant celle-ci en plein vol.
+    if(this.onlineRole==='host' && this.onlinePendingMove){
+      const move = this.onlinePendingMove;
+      this.onlinePendingMove = null;
+      if(!gameState.winner && gameState.turn==='ai') this.processOpponentMove(move);
+      return;
+    }
+    if(this.onlineRole==='guest' && this.onlinePendingState){
+      const pending = this.onlinePendingState;
+      this.onlinePendingState = null;
+      this.applyOnlineState(pending);
+      return;
+    }
     if(gameState.winner) return;
     if(gameState.turn==='ai') this.time.delayedCall(500, ()=>this.aiLoop());
   }
@@ -3197,6 +3219,32 @@ class MainScene extends Phaser.Scene {
     if(this._animWatchdog){ this._animWatchdog.remove(); this._animWatchdog = null; }
   }
 
+  // ---- 1v1 en ligne, cote INVITE UNIQUEMENT : marque "coup envoye, en
+  // attente de la reponse officielle de l'hote". Volontairement SEPARE de
+  // this.animating/armAnimating() : ce dernier represente une VRAIE
+  // animation locale en cours, dont la fin (afterAnimation) est ce qui
+  // vide la file onlinePendingState (voir onOnlineState). Reutiliser
+  // this.animating ici pour ce simple "j'attends" causait un vrai blocage
+  // -- aucune animation locale n'est jamais demarree dans ce cas, donc
+  // rien ne declenchait jamais afterAnimation() pour vider la file : l'etat
+  // officiel de l'hote arrivait, se faisait mettre en file (puisque
+  // this.animating semblait "vrai"), et restait coince la indefiniment
+  // (le chien de garde de armAnimating() finissait par reposer animating a
+  // false, mais SANS jamais traiter l'etat mis en file -- ecran fige, ex.
+  // observe apres une guerre ou un enchainement rapide de copies de 8 via
+  // des 3, ou l'invite renvoie un coup avant que le rendu du precedent
+  // n'ait eu le temps d'arriver). ----
+  armOnlineSend(){
+    this.onlineSending = true;
+    if(this._onlineSendWatchdog) this._onlineSendWatchdog.remove();
+    this._onlineSendWatchdog = this.time.delayedCall(4000, ()=>{ this.onlineSending = false; });
+  }
+
+  disarmOnlineSend(){
+    this.onlineSending = false;
+    if(this._onlineSendWatchdog){ this._onlineSendWatchdog.remove(); this._onlineSendWatchdog = null; }
+  }
+
   aiLoop(){
     if(gameState.winner || this.animating) return;
     // 1v1 en ligne (hote ou invite) : "ai" est un vrai adversaire distant,
@@ -3216,8 +3264,22 @@ class MainScene extends Phaser.Scene {
   // networkResolveMove), puis anime -- le broadcast de l'etat resultant
   // part tout seul depuis afterAnimation() une fois l'animation finie
   // (this._onlineLastCtx, arme dans animateResult()). ----
+  // Un coup qui arrive du reseau PENDANT qu'une animation tourne deja
+  // n'est plus perdu : il est mis en attente (this.onlinePendingMove) et
+  // traite des que l'animation en cours se termine (voir afterAnimation).
+  // Avant ce correctif, le coup etait juste ignore -- l'invite restait
+  // bloque a attendre une reponse qui n'arrivait jamais, jusqu'au chien de
+  // garde (4s) : la "latence" ressentie. Traiter les deux animateResult()
+  // en meme temps (sans attendre) plantait aussi parfois (setTexture sur
+  // un sprite qu'un redessin concurrent venait de detruire).
   onOpponentMove(move){
-    if(this.onlineRole!=='host' || gameState.winner || this.animating || gameState.turn!=='ai') return;
+    if(this.onlineRole!=='host' || gameState.winner) return;
+    if(this.animating){ this.onlinePendingMove = move; return; }
+    if(gameState.turn!=='ai') return; // pas son tour (message perime/en double) : ignore.
+    this.processOpponentMove(move);
+  }
+
+  processOpponentMove(move){
     this.armAnimating();
     const pileTopBefore = pileTop(gameState);
     const pileSnapshotBefore = [...gameState.pile];
@@ -3244,7 +3306,19 @@ class MainScene extends Phaser.Scene {
   // redevienne "moi" (l'hote l'a ecrit de SON point de vue) -- tout le
   // reste du pipeline de rendu/animation s'applique alors sans aucun
   // changement, exactement comme en solo. ----
+  // Meme file d'attente que processOpponentMove/onOpponentMove cote hote,
+  // mais dans l'autre sens : un etat qui arrive PENDANT qu'une animation
+  // locale tourne encore est mis en attente (this.onlinePendingState)
+  // plutot que d'ecraser gameState sous les pieds de cette animation --
+  // c'etait la cause du crash "setTexture" (tween encore active dont le
+  // sprite se faisait detruire par un redessin concurrent).
   onOnlineState(payload){
+    if(this.animating){ this.onlinePendingState = payload; return; }
+    this.applyOnlineState(payload);
+  }
+
+  applyOnlineState(payload){
+    this.disarmOnlineSend();
     const isFirst = !this.onlineReceivedFirstState;
     this.onlineReceivedFirstState = true;
     gameState = swapStatePerspective(payload.newState);
@@ -4065,11 +4139,12 @@ class MainScene extends Phaser.Scene {
       // au joueur de reperer lui-meme ce qui est jouable.
       const playable = isHandActive ? canPlayGroup(gameState, c.rank) : true;
       const interactive = isHandActive && (playable || isSel || difficulty!=='easy');
-      // Glisser est toujours actif des que la main est active : soit pour
-      // jouer (si la carte est valide et lachee sur la pile), soit pour
-      // reordonner la main a la main (Normal/Difficile/Cauchemar, voir
-      // onCardDropped) meme si la carte n'est pas jouable dans l'immediat.
-      const dragCfg = isHandActive ? { onDrop: (pointer)=>this.onCardDropped(c, pointer), card: c } : null;
+      // Glisser (pour reordonner) reste possible MEME hors de son tour --
+      // seul le clic (selection/jeu) reste reserve a isHandActive. Le drop
+      // pres de la pile est de toute facon neutralise cote onCardDropped
+      // hors de son tour, donc aucun risque de jouer par ce biais.
+      const canDragHand = pZoneInfo.zone==='hand' && !gameState.winner && !this.animating;
+      const dragCfg = canDragHand ? { onDrop: (pointer)=>this.onCardDropped(c, pointer), card: c } : null;
       const spr = this.addCardSprite(startX + i*spacing, handY, RANK_TO_TEXTURE[c.rank], handScale,
         interactive ? ()=>this.onPlayerCardClick(c) : null, isSel, 0, dragCfg);
       if(difficulty==='easy' && isHandActive && !playable){
@@ -4423,7 +4498,10 @@ class MainScene extends Phaser.Scene {
         const isSel = selected.some(s=>s.id===c.id);
         const playable = isHandActive ? canPlayGroup(gameState, c.rank) : true;
         const interactive = allowInteract && isHandActive && (playable || isSel || difficulty!=='easy');
-        const dragCfg = (allowInteract && isHandActive) ? { onDrop: (pointer)=>this.onCardDropped(c, pointer), card: c } : null;
+        // Glisser (reordonner) reste possible hors tour, voir la remarque
+        // equivalente dans drawAllLandscape / onCardDropped.
+        const canDragHand = allowInteract && pZoneInfo.zone==='hand' && !gameState.winner && !this.animating;
+        const dragCfg = canDragHand ? { onDrop: (pointer)=>this.onCardDropped(c, pointer), card: c } : null;
         const u = n>1 ? (i-(n-1)/2)/half : 0;
         const cardY = rowY - arcHeight*(1-u*u);
         const spr = this.addCardSprite(startX + i*spacing, cardY, RANK_TO_TEXTURE[c.rank], handScale,
@@ -4468,7 +4546,8 @@ class MainScene extends Phaser.Scene {
   onPlayerFaceDownClick(card){
     if(gameState.turn!=='player' || gameState.winner || this.animating) return;
     if(this.onlineRole==='guest'){
-      this.armAnimating();
+      if(this.onlineSending) return;
+      this.armOnlineSend();
       window.DaniszOnline.sendMove({ kind:'faceDown', cardId: card.id });
       selected = [];
       return;
@@ -4550,13 +4629,21 @@ class MainScene extends Phaser.Scene {
   }
 
   onCardDropped(card, pointer){
-    if(gameState.turn!=='player' || gameState.winner || this.animating || this.awaitingFaceUpChoice){
+    // Le reordonnancement de la main (voir reorderHand) est autorise MEME
+    // hors de son propre tour -- ca ne touche jamais que l'ordre local de
+    // gameState.player.hand, aucune regle/reseau n'est impliquee. Seul le
+    // fait de LACHER pres de la pile (donc de tenter de jouer) reste
+    // strictement reserve au tour du joueur : isPlayerTurn force closeEnough
+    // a false hors de son tour, ce qui fait tomber systematiquement dans la
+    // branche reorder ci-dessous, jamais dans la branche "jouer".
+    if(this.animating || this.awaitingFaceUpChoice || gameState.winner){
       this.render();
       return;
     }
+    const isPlayerTurn = gameState.turn==='player';
     const dx = pointer.worldX - this.pileX;
     const dy = pointer.worldY - this.pileY;
-    const closeEnough = Math.sqrt(dx*dx + dy*dy) < this.pileDropRadius;
+    const closeEnough = isPlayerTurn && Math.sqrt(dx*dx + dy*dy) < this.pileDropRadius;
     if(!closeEnough){
       // Pas lache sur la pile : en mode Normal/Difficile/Cauchemar, on
       // permet de reordonner sa main a la main plutot que de juste faire
@@ -4604,11 +4691,12 @@ class MainScene extends Phaser.Scene {
     // immediate pour le retour visuel (toast), puis on envoie et on
     // attend le resultat officiel (onOnlineState).
     if(this.onlineRole==='guest'){
+      if(this.onlineSending) return;
       if(!selected.every(c=>c.rank===selected[0].rank) || !canPlayGroup(gameState, selected[0].rank)){
         this.showToast(t('toastInvalidPlay'));
         return;
       }
-      this.armAnimating();
+      this.armOnlineSend();
       window.DaniszOnline.sendMove({ kind:'play', cardIds: selected.map(c=>c.id) });
       selected = [];
       return;
@@ -4660,7 +4748,8 @@ class MainScene extends Phaser.Scene {
       return;
     }
     if(this.onlineRole==='guest'){
-      this.armAnimating();
+      if(this.onlineSending) return;
+      this.armOnlineSend();
       window.DaniszOnline.sendMove({ kind:'take' });
       selected = [];
       return;
@@ -4677,7 +4766,8 @@ class MainScene extends Phaser.Scene {
     if(this.animating) return;
     this.awaitingFaceUpChoice = false;
     if(this.onlineRole==='guest'){
-      this.armAnimating();
+      if(this.onlineSending) return;
+      this.armOnlineSend();
       window.DaniszOnline.sendMove({ kind:'takeFaceUp', cardId: card.id });
       selected = [];
       return;
