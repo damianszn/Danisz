@@ -13,6 +13,7 @@
 (function(){
   let supabase = null;
   let lobbyWatchChannel = null;
+  let lobbyPollTimer = null;
 
   async function getClient(){
     if(supabase) return supabase;
@@ -66,19 +67,42 @@
   // Utilise par le joueur en ATTENTE seulement (celui qui a matched=false
   // ou qui vient de create_invite_lobby) -- l'autre le sait deja tout de
   // suite via la reponse de join_random_queue/join_invite_lobby.
+  //
+  // Deux filets de securite, constate en usage reel (queue aleatoire ou
+  // les deux joueurs cliquent "chercher" a quelques secondes d'ecart --
+  // avec un code d'invitation, le delai humain pour le transmettre/taper
+  // masquait le probleme) :
+  //   1. On attend que l'abonnement Realtime soit VRAIMENT actif (SUBSCRIBED)
+  //      avant de considerer qu'on ecoute -- sinon un adversaire qui rejoint
+  //      dans cette toute petite fenetre (souscription encore en cours) voit
+  //      son UPDATE tout simplement jamais livre, Realtime ne rejoue pas les
+  //      evenements manques pour un abonnement qui n'etait pas encore pret.
+  //   2. Sondage de secours (toutes les 2.5s) en plus du canal Realtime :
+  //      si jamais Realtime rate quand meme la notification (coupure reseau,
+  //      onglet mis en arriere-plan sur mobile...), on la detecte quand meme
+  //      au prochain sondage plutot que de rester bloque indefiniment.
   async function watchLobby(lobbyId, cb){
     const sb = await getClient();
     await stopWatching();
-    lobbyWatchChannel = sb
-      .channel('lobby-watch-' + lobbyId)
+    let fired = false;
+    const fireOnce = row => { if(fired) return; fired = true; cb(row); };
+    lobbyWatchChannel = sb.channel('lobby-watch-' + lobbyId)
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'lobbies', filter: 'id=eq.' + lobbyId },
-        payload => cb(payload.new))
-      .subscribe();
+        payload => fireOnce(payload.new));
+    await new Promise(resolve=>{
+      lobbyWatchChannel.subscribe(status=>{ if(status==='SUBSCRIBED') resolve(); });
+    });
+    lobbyPollTimer = setInterval(async ()=>{
+      if(fired){ clearInterval(lobbyPollTimer); lobbyPollTimer = null; return; }
+      const { data } = await sb.from('lobbies').select('*').eq('id', lobbyId).maybeSingle();
+      if(data && data.status === 'active') fireOnce(data);
+    }, 2500);
     return lobbyWatchChannel;
   }
 
   async function stopWatching(){
+    if(lobbyPollTimer){ clearInterval(lobbyPollTimer); lobbyPollTimer = null; }
     if(lobbyWatchChannel){
       const sb = await getClient();
       sb.removeChannel(lobbyWatchChannel);
