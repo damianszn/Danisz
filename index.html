@@ -61,6 +61,10 @@
      Chrome/Edge y affichaient juste le code pays en petites lettres dans un
      cadre au lieu du drapeau -- un SVG dessine s'affiche pareil partout. */
   #lang-popup .flag{ width:22px; height:15px; flex:none; border-radius:2px; overflow:hidden; }
+  #lang-popup-divider{ height:1px; margin:4px 6px; background:rgba(215,164,92,0.3); }
+  /* Meme largeur que .flag, pour que le libelle "Son" reste aligne avec les
+     noms de langue au-dessus malgre une icone de forme differente. */
+  .sfx-icon{ width:22px; flex:none; text-align:center; font-size:15px; }
 
   /* Compte joueur (pseudo + high scores Supabase) : meme famille visuelle
      que le popup de langue ci-dessus, mais en haut-DROITE pour ne jamais
@@ -332,6 +336,11 @@
     <svg class="flag" viewBox="0 0 30 20"><rect width="30" height="10" fill="#FFFFFF"/><rect y="10" width="30" height="10" fill="#DC143C"/></svg>
     Polski
   </button>
+  <div id="lang-popup-divider"></div>
+  <button id="sfx-toggle-btn">
+    <span id="sfx-toggle-icon" class="sfx-icon"></span>
+    <span id="sfx-toggle-label"></span>
+  </button>
 </div>
 <div id="account-bar">
   <button id="account-btn">
@@ -518,7 +527,11 @@
   });
   document.addEventListener('click', ()=>{ popup.classList.remove('open'); });
   popup.addEventListener('click', (e)=>e.stopPropagation());
-  document.querySelectorAll('#lang-popup button').forEach(btn=>{
+  // [data-lang] : uniquement les 4 boutons de langue, pas le bouton
+  // coupe-son ajoute plus bas dans le meme popup (qui n'a pas cet
+  // attribut) -- sinon le cliquer appelait __applyLang(undefined) et
+  // corrompait la langue enregistree.
+  document.querySelectorAll('#lang-popup button[data-lang]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       if(window.__applyLang) window.__applyLang(btn.dataset.lang);
       popup.classList.remove('open');
@@ -613,7 +626,6 @@ const I18N = {
     menuOnline: "1v1 joueur",
     menuFFA: "1v3 joueurs",
     comingSoon: "Bientot",
-    turnCounter: "Tour {n}",
     turnsSubtitle: "en {n} tours",
     diffTitle: "Choisis la difficulte",
     diffEasy: "Facile",
@@ -680,6 +692,7 @@ const I18N = {
     onlineErrorOwnLobby: "Tu ne peux pas rejoindre ta propre partie.",
 
     tutorialBtn: "Tutoriel",
+    sfxToggleLabel: "Son",
     tutorialSlide1Title: "Rythme de jeu",
     tutorialSlide1Bullets: "Vous jouez chacun votre tour.\nTu poses une ou plusieurs cartes du meme rang, de valeur egale ou superieure a la derniere carte posee.\nTu ne peux pas (ou ne veux pas) jouer ? Tu ramasses tout le tas.\nApres avoir joue depuis ta main, tu repioches jusqu'a en avoir 3, tant qu'il reste des cartes dans la pioche.",
     tutorialSlide2Title: "Une fois la pioche vide",
@@ -756,7 +769,6 @@ const I18N = {
     menuOnline: "1v1 speler",
     menuFFA: "1v3 spelers",
     comingSoon: "Binnenkort",
-    turnCounter: "Beurt {n}",
     turnsSubtitle: "in {n} beurten",
     diffTitle: "Kies moeilijkheidsgraad",
     diffEasy: "Makkelijk",
@@ -823,6 +835,7 @@ const I18N = {
     onlineErrorOwnLobby: "Je kan niet deelnemen aan je eigen spel.",
 
     tutorialBtn: "Tutorial",
+    sfxToggleLabel: "Geluid",
     tutorialSlide1Title: "Speelritme",
     tutorialSlide1Bullets: "Jullie spelen om de beurt.\nJe legt een of meer kaarten van dezelfde rang, met een waarde gelijk aan of hoger dan de laatst gelegde kaart.\nKun je (of wil je) niet spelen? Dan pak je de hele stapel op.\nNa het spelen vanuit je hand vul je aan tot 3 kaarten, zolang er nog kaarten in de pakstapel zitten.",
     tutorialSlide2Title: "Als de pakstapel leeg is",
@@ -899,7 +912,6 @@ const I18N = {
     menuOnline: "1v1 gracz",
     menuFFA: "1v3 graczy",
     comingSoon: "Wkrotce",
-    turnCounter: "Tura {n}",
     turnsSubtitle: "w {n} tur",
     diffTitle: "Wybierz poziom trudnosci",
     diffEasy: "Latwy",
@@ -966,6 +978,7 @@ const I18N = {
     onlineErrorOwnLobby: "Nie mozesz dolaczyc do wlasnej gry.",
 
     tutorialBtn: "Samouczek",
+    sfxToggleLabel: "Dzwiek",
     tutorialSlide1Title: "Rytm gry",
     tutorialSlide1Bullets: "Gracie na zmiane.\nWykladasz jedna lub wiecej kart tej samej rangi, o wartosci rownej lub wyzszej niz ostatnia wylozona karta.\nNie mozesz (lub nie chcesz) zagrac? Zabierasz caly stos.\nPo zagraniu z reki dobierasz karty do 3, dopoki w talii sa jeszcze karty.",
     tutorialSlide2Title: "Gdy talia sie skonczy",
@@ -1042,7 +1055,6 @@ const I18N = {
     menuOnline: "1v1 online",
     menuFFA: "1v3 players",
     comingSoon: "Coming soon",
-    turnCounter: "Turn {n}",
     turnsSubtitle: "in {n} turns",
     diffTitle: "Choose difficulty",
     diffEasy: "Easy",
@@ -1109,6 +1121,7 @@ const I18N = {
     onlineErrorOwnLobby: "You can't join your own game.",
 
     tutorialBtn: "Tutorial",
+    sfxToggleLabel: "Sound",
     tutorialSlide1Title: "Turn flow",
     tutorialSlide1Bullets: "You each take turns.\nPlay one or more cards of the same rank, of equal or higher value than the last card played.\nCan't (or don't want to) play? You pick up the whole pile.\nAfter playing from your hand, you draw back up to 3, as long as the deck still has cards.",
     tutorialSlide2Title: "Once the deck runs out",
@@ -1131,6 +1144,14 @@ const I18N = {
     tutorialBubble8: "Skips the opponent's turn. Several at once = bonus turns."
   }
 };
+
+// Assainit une valeur perimee/corrompue de shithead_lang (ex: la chaine
+// litterale "undefined", stockee si une valeur invalide a deja ete
+// ecrite par le passe -- localStorage.setItem coerce tout en string).
+// Sans ca, un vieux localStorage corrompu fait planter toute traduction
+// en boucle (I18N[lang] est undefined, t() retombe sur la cle brute
+// partout) sans jamais se corriger tout seul au chargement suivant.
+if(!I18N[lang]) lang = 'fr';
 
 function t(key, params){
   const template = (I18N[lang] && I18N[lang][key]) || key;
@@ -1725,8 +1746,16 @@ const CUT_FAN_MAX = 14; // nombre max de cartes dessinees dans l'eventail de cou
 // Zones detectees sur table.png (coords natives 1280x720), decalees de +TABLE_Y_OFFSET en y
 const TABLE_Y_OFFSET = 90;
 const ZONES = {
-  aiSlots: [ {x:576,y:80}, {x:640,y:80}, {x:704,y:80} ],       // face down/up de l'IA (miroir, plus petit)
-  playerSlots: [ {x:513,y:400}, {x:640,y:400}, {x:766,y:400} ], // face down/up du joueur
+  // y recale (80->113->103, 400->406->412) apres agrandissement des cartes
+  // (voir drawAllLandscape) pour laisser une marge propre avec le bandeau
+  // du dessus/la pile en dessous, sans chevauchement. aiSlots rapprochee du
+  // bandeau du haut pour degager plus d'espace vers la pile en dessous.
+  // x ecarte (576/704 -> 565/715) : a 64 d'ecart la case du milieu/exterieur
+  // se touchaient presque deja (cartes larges pour la place dispo), le
+  // decalage vers la gauche de la face cachee (peekOffsetX) rentrait alors
+  // legerement dans la face visible du voisin de gauche.
+  aiSlots: [ {x:565,y:103}, {x:640,y:103}, {x:715,y:103} ],       // face down/up de l'IA (miroir, plus petit)
+  playerSlots: [ {x:513,y:412}, {x:640,y:412}, {x:766,y:412} ], // face down/up du joueur
   cut:  {x:288, y:248},
   pile: {x:638, y:248},
   deck: {x:924, y:250}
@@ -1751,6 +1780,7 @@ let difficulty = 'normal';
 function maybeReportMatchResult(){
   if(!gameState.winner || gameState.resultSubmitted) return;
   gameState.resultSubmitted = true;
+  if(gameState.winner==='player') sfxVictory(); else sfxDefeat();
   if(window.DaniszAccount && window.DaniszAccount.hasAccount()){
     window.DaniszAccount.reportAiMatch(difficulty, gameState.winner==='player', gameState.turnCount)
       .catch(e=>console.warn('[Danisz] score report failed', e));
@@ -1778,10 +1808,95 @@ function whenFontsReady(cb){
 }
 
 /* =========================================================
+   SFX -- synthetises via Web Audio API, pas de fichiers externes (colle
+   avec l'esthetique 8-bit du jeu, evite tout souci de licence/poids). Le
+   AudioContext est cree paresseusement au tout premier son : les
+   navigateurs le bloquent tant qu'aucun vrai clic utilisateur n'a eu lieu,
+   et le tout premier appel ici vient toujours d'un clic (bouton du menu),
+   donc pas besoin de le debloquer explicitement ailleurs.
+   ========================================================= */
+let audioCtx = null;
+// Coupe-son persistant (reglages, popup langue) : centralise ici plutot que
+// dans chaque fonction sfx* -- toutes passent par getAudioCtx(), un seul
+// point de coupure suffit.
+let sfxMuted = (typeof localStorage!=='undefined' && localStorage.getItem('shithead_sfx_muted')==='1');
+function getAudioCtx(){
+  if(sfxMuted) return null;
+  if(!audioCtx){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return null;
+    audioCtx = new AC();
+  }
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function sfxTone(freq, duration, type, startTime, peak){
+  const ctx = getAudioCtx();
+  if(!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type || 'square';
+  osc.frequency.value = freq;
+  const t0 = ctx.currentTime + (startTime||0);
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.linearRampToValueAtTime(peak||0.15, t0+0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0+duration);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0+duration+0.02);
+}
+// Clic menu : blip bref et net.
+function sfxClick(){ try{ sfxTone(880, 0.05, 'square', 0, 0.07); }catch(e){} }
+// Carte UNIQUE posee : une seule note nette, hauteur fixe (pas de bruit
+// aleatoire genere a chaque appel) -- le meme son exactement a chaque fois,
+// pour rester satisfaisant plutot que de sonner "au hasard".
+function sfxCardPlace(){
+  try{
+    sfxTone(1050, 0.06, 'square', 0, 0.12);
+    sfxTone(680, 0.05, 'triangle', 0.008, 0.05);
+  }catch(e){}
+}
+// Plusieurs cartes deplacees d'un coup (groupe de meme rang, decoupe, ou tas
+// ramasse) : petite serie de notes rapprochees ("trrr"), hauteurs fixes et
+// legerement decroissantes -- deterministe (pas de Math.random) pour que le
+// timbre reste identique a chaque fois. count = nombre de cartes reel,
+// borne pour que le son ne s'etire pas indefiniment sur un gros tas.
+function sfxShuffle(count){
+  try{
+    const n = Math.max(3, Math.min(count||6, 8));
+    for(let i=0; i<n; i++){
+      sfxTone(820 - i*18, 0.045, 'square', i*0.032, 0.09);
+    }
+  }catch(e){}
+}
+// Victoire : petit arpege montant (majeur, franc).
+function sfxVictory(){
+  try{
+    [523.25, 659.25, 783.99, 1046.5].forEach((f,i)=>sfxTone(f, 0.18, 'triangle', i*0.09, 0.13));
+  }catch(e){}
+}
+// Defaite : sequence descendante, plus lente/grave.
+function sfxDefeat(){
+  try{
+    [392.0, 349.23, 293.66, 261.63].forEach((f,i)=>sfxTone(f, 0.28, 'sawtooth', i*0.12, 0.1));
+  }catch(e){}
+}
+
+/* =========================================================
    MENU DE DEMARRAGE
    ========================================================= */
 class MenuScene extends Phaser.Scene {
   constructor(){ super('menu'); }
+
+  // Charge ici (scene TOUJOURS visitee en premier) plutot que dans
+  // MainScene.preload() : le fond en feutre de table doit deja etre
+  // disponible pour les ecrans de menu, qui s'affichent bien avant que
+  // MainScene ne soit jamais chargee. Le TextureManager de Phaser est
+  // partage par toute la partie (game-wide), donc les autres scenes
+  // peuvent ensuite reutiliser 'tableTexture' sans avoir a la recharger.
+  preload(){
+    this.load.image('tableTexture', 'assets/Table Texture.png');
+  }
 
   // ---- Rend un objet interactif de maniere FIABLE : si Phaser echoue a
   // generer automatiquement une zone de clic valide (ca arrive en silence
@@ -1844,6 +1959,10 @@ class MenuScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const cx = W/2;
 
+    // Fond : meme feutre de table tuile que la partie, plutot qu'un aplat
+    // de couleur uni -- coherence visuelle entre le menu et le jeu.
+    this.add.tileSprite(0, 0, W, H, 'tableTexture').setOrigin(0,0);
+
     // Titre : taille proportionnelle a la hauteur dispo, pour ne jamais
     // deborder sur un petit ecran paysage (barre d'adresse mobile qui
     // bouffe une bonne partie de la hauteur reelle).
@@ -1861,49 +1980,80 @@ class MenuScene extends Phaser.Scene {
       // laisse pas assez de place pour le texte des boutons sur un ecran
       // etroit (ca debordait/se chevauchait). Le nouveau mode "1 vs 3" est
       // place juste apres "vs Adversaire" (demande : en-dessous en vertical).
+      //
+      // Tailles/espacements a l'echelle de la hauteur DISPONIBLE (et pas des
+      // valeurs fixes) : sur un petit telephone, la hauteur reelle du
+      // viewport (une fois la barre d'adresse/nav du navigateur deduite)
+      // peut etre bien plus petite que prevu, et le bouton Tutoriel (le
+      // dernier, tout en bas) finissait hors-ecran. `scale` retrecit tout
+      // uniformement (jamais sous 0.6, pour rester tappable) quand l'espace
+      // ideal (5 rangees a 96px) ne tient pas dans l'espace reel.
+      const topY = titleY + titleSize*0.8 + 40;
+      const bottomMargin = 34;
+      const availH = Math.max(220, H - topY - bottomMargin);
+      const idealStep = 96, idealTutGap = 20, idealTutH = 52;
+      const idealTotal = idealStep*4 + idealTutGap + idealTutH;
+      const scale = Math.max(0.6, Math.min(1, availH/idealTotal));
+
       const btnW = Math.min(380, W*0.86);
-      const btnH = 68;
-      const step = 96; // assez pour le sous-titre "Bientot" des boutons desactives
-      let y = titleY + titleSize*0.8 + 50;
-      this.menuButton(cx, y, btnW, btnH, t('menuVsAI'), true, ()=>this.scene.start('difficulty'));
+      const btnH = 68*scale;
+      const step = idealStep*scale;
+      const fontSize = Math.round(18*scale);
+      const subFontSize = Math.round(16*scale);
+      let y = topY + btnH/2;
+      this.menuButton(cx, y, btnW, btnH, t('menuVsAI'), true, ()=>this.scene.start('difficulty'), {fontSize});
       y += step;
-      this.menuButton(cx, y, btnW, btnH, t('menuVs3'), false);
+      this.menuButton(cx, y, btnW, btnH, t('menuVs3'), false, null, {fontSize, subFontSize});
       y += step;
       this.menuButton(cx, y, btnW, btnH, t('menuOnline'), true, ()=>this.openOnlineBeta(), {
-        fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('betaLabel'), subtitleColor:'#ffa64d'
+        fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('betaLabel'), subtitleColor:'#ffa64d', fontSize, subFontSize
       });
       y += step;
-      this.menuButton(cx, y, btnW, btnH, t('menuFFA'), false);
-      y += step + 20; // marge en plus : la derniere case ("1v3 joueurs") est desactivee, avec un sous-titre "Bientot" juste en dessous a ne pas chevaucher
-      this.menuButton(cx, y, Math.min(300, W*0.7), 52, '🎓 '+t('tutorialBtn'), true, ()=>{ if(window.__openTutorial) window.__openTutorial(); });
+      this.menuButton(cx, y, btnW, btnH, t('menuFFA'), false, null, {fontSize, subFontSize});
+      y += step*0.6 + idealTutGap*scale; // un peu moins d'espace avant le tutoriel (bouton plus petit, pas de sous-titre)
+      const tutH = idealTutH*scale;
+      this.menuButton(cx, y, Math.min(300, W*0.7), tutH, '🎓 '+t('tutorialBtn'), true, ()=>{ if(window.__openTutorial) window.__openTutorial(); }, {fontSize: Math.round(fontSize*0.9)});
     } else {
       // Boutons en grille 2 colonnes (utilise la largeur dispo plutot que de
       // tout empiler verticalement, precieux sur un ecran paysage bas) :
       // le nouveau mode "1 vs 3" va juste a droite de "vs Adversaire"
       // (demande : a droite en horizontal), la grille est desormais pleine.
       const btnW = Math.min(320, W*0.4);
-      const btnH = 66;
-      const gapX = 26, gapY = 40;
+      const gapX = 26;
       const gridTop = titleY + titleSize*0.75 + 30;
+      const bottomMargin = 34;
+      // Meme logique de mise a l'echelle que le mode portrait (voir plus
+      // haut) : un telephone en paysage n'a souvent qu'une hauteur reelle de
+      // 350-400px une fois la barre du navigateur deduite, insuffisante pour
+      // la grille + le bouton Tutoriel a taille fixe -- ils finissaient hors
+      // ecran en bas.
+      const availH = Math.max(160, H - gridTop - bottomMargin);
+      const idealBtnH = 66, idealGapY = 40, idealTutGapConst = 60, idealTutH = 48;
+      const idealTotal = 2*idealBtnH + idealGapY + idealTutGapConst + idealTutH/2;
+      const scale = Math.max(0.65, Math.min(1, availH/idealTotal));
+
+      const btnH = idealBtnH*scale, gapY = idealGapY*scale;
+      const fontSize = Math.round(17*scale), subFontSize = Math.round(14*scale);
       const col0X = cx - btnW/2 - gapX/2;
       const col1X = cx + btnW/2 + gapX/2;
       const row0Y = gridTop + btnH/2;
       const row1Y = row0Y + btnH + gapY;
-      this.menuButton(col0X, row0Y, btnW, btnH, t('menuVsAI'), true, ()=>this.scene.start('difficulty'));
-      this.menuButton(col1X, row0Y, btnW, btnH, t('menuVs3'), false);
+      this.menuButton(col0X, row0Y, btnW, btnH, t('menuVsAI'), true, ()=>this.scene.start('difficulty'), {fontSize});
+      this.menuButton(col1X, row0Y, btnW, btnH, t('menuVs3'), false, null, {fontSize, subFontSize});
       this.menuButton(col0X, row1Y, btnW, btnH, t('menuOnline'), true, ()=>this.openOnlineBeta(), {
-        fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('betaLabel'), subtitleColor:'#ffa64d'
+        fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('betaLabel'), subtitleColor:'#ffa64d', fontSize, subFontSize
       });
-      this.menuButton(col1X, row1Y, btnW, btnH, t('menuFFA'), false);
+      this.menuButton(col1X, row1Y, btnW, btnH, t('menuFFA'), false, null, {fontSize, subFontSize});
 
-      // +60 et pas +38 : la case "1v3 joueurs" est desactivee, avec un
-      // sous-titre "Bientot" juste en dessous (y+h/2+16) a ne pas chevaucher.
-      const tutorialY = row1Y + btnH/2 + 60;
-      this.menuButton(cx, tutorialY, Math.min(280, btnW*2+gapX), 48, '🎓 '+t('tutorialBtn'), true, ()=>{ if(window.__openTutorial) window.__openTutorial(); });
+      // +60*scale et pas +38 : la case "1v3 joueurs" est desactivee, avec un
+      // sous-titre "Bientot" juste en dessous a ne pas chevaucher.
+      const tutorialY = row1Y + btnH/2 + idealTutGapConst*scale;
+      const tutH = idealTutH*scale;
+      this.menuButton(cx, tutorialY, Math.min(280, btnW*2+gapX), tutH, '🎓 '+t('tutorialBtn'), true, ()=>{ if(window.__openTutorial) window.__openTutorial(); }, {fontSize: Math.round(fontSize*0.94)});
     }
 
-    // Marque, discrete en bas
-    this.add.text(cx, H-28, 'Hugin Corp™', {fontFamily:'"VT323"', fontSize:'18px', color:'#e9ddc8'}).setOrigin(0.5).setAlpha(0.25);
+    // Marque, discrete, coin bas-gauche.
+    this.add.text(14, H-14, 'Hugin Corp™', {fontFamily:'"VT323"', fontSize:'18px', color:'#e9ddc8'}).setOrigin(0,1).setAlpha(0.25);
 
     // Bulle "derniere mise a jour", coin bas-droit (le bas-centre est deja
     // pris par la marque).
@@ -1934,17 +2084,19 @@ class MenuScene extends Phaser.Scene {
     g.lineStyle(3, stroke, 1);
     g.strokeRoundedRect(x-w/2, y-h/2, w, h, 10);
     this.add.text(x, y, label, {
-      fontFamily:'"Press Start 2P"', fontSize:'18px',
+      fontFamily:'"Press Start 2P"', fontSize:(opts.fontSize||18)+'px',
       color: opts.textColor || (enabled ? '#f2ead9' : '#7c887c')
     }).setOrigin(0.5);
+    const subY = y+h/2+(opts.subGap!==undefined?opts.subGap:16);
+    const subSize = opts.subFontSize || 16;
     if(opts.subtitle){
-      this.add.text(x, y+h/2+16, opts.subtitle, {fontFamily:'"VT323"', fontSize:'16px', color: opts.subtitleColor || '#8a95a0'}).setOrigin(0.5);
+      this.add.text(x, subY, opts.subtitle, {fontFamily:'"VT323"', fontSize:subSize+'px', color: opts.subtitleColor || '#8a95a0'}).setOrigin(0.5);
     } else if(!enabled){
-      this.add.text(x, y+h/2+16, t('comingSoon'), {fontFamily:'"VT323"', fontSize:'16px', color:'#8a95a0'}).setOrigin(0.5);
+      this.add.text(x, subY, t('comingSoon'), {fontFamily:'"VT323"', fontSize:subSize+'px', color:'#8a95a0'}).setOrigin(0.5);
     }
     if(enabled){
       const hit = this.safeInteractive(this.add.rectangle(x, y, w, h, 0x000000, 0));
-      hit.on('pointerdown', onClick);
+      hit.on('pointerdown', ()=>{ sfxClick(); onClick(); });
     }
   }
 
@@ -1996,6 +2148,8 @@ class DifficultyScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const cx = W/2;
     const isPortraitDiff = H > W;
+
+    this.add.tileSprite(0, 0, W, H, 'tableTexture').setOrigin(0,0);
 
     const titleSize = isPortraitDiff
       ? Math.max(22, Math.min(34, Math.round(W*0.05)))
@@ -2053,7 +2207,7 @@ class DifficultyScene extends Phaser.Scene {
     this.add.text(x, y-8, label, {fontFamily:'"Press Start 2P"', fontSize:'17px', color:'#f2ead9'}).setOrigin(0.5);
     this.add.text(x, y+16, sub, {fontFamily:'"VT323"', fontSize:'14px', color:'#c9d6c0'}).setOrigin(0.5);
     const hit = this.safeInteractive(this.add.rectangle(x, y, w, h, 0x000000, 0));
-    hit.on('pointerdown', onClick);
+    hit.on('pointerdown', ()=>{ sfxClick(); onClick(); });
   }
 
   // ---- Fleche "retour", coin haut-gauche du canvas (decalee sous les
@@ -2073,7 +2227,7 @@ class DifficultyScene extends Phaser.Scene {
     // propre boite, setOrigin(0.5) seul ne le compense pas.
     this.add.text(x, y-3.5, '←', {fontFamily:'"Press Start 2P"', fontSize:Math.round(radius*0.85)+'px', color:'#f2ead9'}).setOrigin(0.5);
     const hit = this.safeInteractive(this.add.rectangle(x, y, radius*2, radius*2, 0x000000, 0));
-    hit.on('pointerdown', onClick);
+    hit.on('pointerdown', ()=>{ sfxClick(); onClick(); });
   }
 }
 
@@ -2144,7 +2298,7 @@ class ConfirmScene extends Phaser.Scene {
       align:'center', wordWrap:{width:w-30}
     }).setOrigin(0.5);
     const hit = this.safeInteractive(this.add.rectangle(x, y, w, h, 0x000000, 0));
-    hit.on('pointerdown', onClick);
+    hit.on('pointerdown', ()=>{ sfxClick(); onClick(); });
   }
 
   // ---- Fleche "retour" vers l'ecran de difficulte, meme position/style que
@@ -2163,7 +2317,7 @@ class ConfirmScene extends Phaser.Scene {
     // propre boite, setOrigin(0.5) seul ne le compense pas.
     this.add.text(x, y-3.5, '←', {fontFamily:'"Press Start 2P"', fontSize:Math.round(radius*0.85)+'px', color:'#f2ead9'}).setOrigin(0.5);
     const hit2 = this.safeInteractive(this.add.rectangle(x, y, radius*2, radius*2, 0x000000, 0));
-    hit2.on('pointerdown', onClick);
+    hit2.on('pointerdown', ()=>{ sfxClick(); onClick(); });
   }
 
   drawLeaderboard(x, y, w, h){
@@ -2231,6 +2385,8 @@ class ConfirmScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const cx = W/2;
     const isPortraitConfirm = H > W;
+
+    this.add.tileSprite(0, 0, W, H, 'tableTexture').setOrigin(0,0);
 
     const modeLabelKey = { easy:'diffEasy', normal:'diffNormal', hard:'diffHard', nightmare:'diffNightmare' }[difficulty];
     const bannerSize = isPortraitConfirm
@@ -2328,7 +2484,7 @@ class OnlineLobbyScene extends Phaser.Scene {
     g.strokeCircle(x, y, radius);
     this.add.text(x, y-3.5, '←', {fontFamily:'"Press Start 2P"', fontSize:Math.round(radius*0.85)+'px', color:'#f2ead9'}).setOrigin(0.5);
     const hit = this.safeInteractive(this.add.rectangle(x, y, radius*2, radius*2, 0x000000, 0));
-    hit.on('pointerdown', onClick);
+    hit.on('pointerdown', ()=>{ sfxClick(); onClick(); });
   }
 
   bigButton(x, y, w, h, label, onClick){
@@ -2342,7 +2498,7 @@ class OnlineLobbyScene extends Phaser.Scene {
       align:'center', wordWrap:{width:w-24}
     }).setOrigin(0.5);
     const hit = this.safeInteractive(this.add.rectangle(x, y, w, h, 0x000000, 0));
-    hit.on('pointerdown', onClick);
+    hit.on('pointerdown', ()=>{ sfxClick(); onClick(); });
   }
 
   setMode(mode){
@@ -2417,6 +2573,8 @@ class OnlineLobbyScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const cx = W/2, cy = H/2;
 
+    this.add.tileSprite(0, 0, W, H, 'tableTexture').setOrigin(0,0);
+
     this.backButton(46, 56, 22, ()=>{
       if(window.DaniszOnline){ window.DaniszOnline.leaveQueue(); window.DaniszOnline.stopWatching(); }
       this.scene.start('menu');
@@ -2481,6 +2639,10 @@ class MainScene extends Phaser.Scene {
     for(const [rank, file] of Object.entries(files)){
       this.load.image(RANK_TO_TEXTURE[rank], 'assets/cards/'+file);
     }
+    // 'tableTexture' est deja chargee par MenuScene.preload() (toujours
+    // visitee avant MainScene) -- pas besoin de la recharger ici.
+    // Texture (1200x600) pour les bandeaux (au-dessus/en-dessous du feutre).
+    this.load.image('woodTexture', 'assets/woodbackground.png');
   }
 
   create(){
@@ -2824,6 +2986,7 @@ class MainScene extends Phaser.Scene {
     if(!res || !res.ok){ this.animating = false; this.render(); return; }
 
     if(res.tookPile){
+      sfxShuffle(res.takenCount);
       if(res.fromZone==='faceDown' && res.card){
         // On revele d'abord la carte cachee tentee, sur place, avant le
         // ramassage : sinon le joueur ne voit jamais ce qu'il a sorti.
@@ -2836,6 +2999,12 @@ class MainScene extends Phaser.Scene {
 
     const cards = res.cards || (res.card ? [res.card] : []);
     if(cards.length===0){ this.afterAnimation(); return; }
+
+    // res.replay===true signifie specifiquement une DECOUPE (voir playGroup/
+    // tryFaceDownCard) : le tas entier bouge d'un coup. Meme logique pour un
+    // groupe de plusieurs cartes de meme rang jouees ensemble (preselection).
+    // Une seule carte -> une seule note nette ; plusieurs -> serie "trrr".
+    if(res.replay || cards.length > 1) sfxShuffle(cards.length); else sfxCardPlace();
 
     let remaining = cards.length;
     const onOneDone = ()=>{ remaining--; if(remaining<=0) this.afterAnimation(); };
@@ -3134,9 +3303,15 @@ class MainScene extends Phaser.Scene {
     return spr;
   }
 
-  drawStackedZone(centerX, centerY, faceDownCard, faceUpCard, scale, clickableUp, clickableDown){
+  // peekOffsetX (optionnel) : decale la carte face cachee vers la gauche
+  // pour qu'elle depasse visiblement de sous la carte face visible, plutot
+  // que de rester quasi invisible derriere (seul un mince liseret vertical
+  // de 6*scale la distinguait avant). Uniquement tant que la face visible
+  // est encore la (sinon rien ne la cache, pas besoin de decalage).
+  drawStackedZone(centerX, centerY, faceDownCard, faceUpCard, scale, clickableUp, clickableDown, peekOffsetX=0){
     if(faceDownCard){
-      const spr = this.addCardSprite(centerX, centerY, 'card_back', scale,
+      const dx = faceUpCard ? -peekOffsetX : 0;
+      const spr = this.addCardSprite(centerX + dx, centerY, 'card_back', scale,
         clickableDown ? ()=>this.onPlayerFaceDownClick(faceDownCard) : null);
       this.spriteByCardId[faceDownCard.id] = spr;
     }
@@ -3195,6 +3370,40 @@ class MainScene extends Phaser.Scene {
       this.panel(x, y, w+padX*2, h+padY*2, originX, originY, panelOpts.alpha ?? 0.55);
     }
     return this.label(x, y, str, textOpts);
+  }
+
+  // ---- Compteur de tours : horloge dessinee (rond) + juste le chiffre,
+  // sans le mot "tours" -- le total complet reste visible en fin de partie,
+  // pas besoin de le repeter en HUD. Pas de bulle/fond : le rond + le
+  // chiffre se suffisent a eux-memes.
+  //
+  // Place dans le coin haut-gauche de la TABLE (sous le bandeau brun), pas
+  // a cote des icones DOM (reglages/plein ecran) : plusieurs tentatives
+  // d'alignement pixel-precis avec cette barre DOM (coordonnees fixes,
+  // puis lecture dynamique de sa position ecran reelle) ont echoue sur la
+  // machine de l'utilisateur sans qu'on puisse en observer la cause depuis
+  // cet environnement de dev. En restant entierement dans le systeme de
+  // coordonnees de Phaser (aucune reference a un element DOM), l'alignement
+  // ne peut plus deraper : tout ce qui est dessine ici l'est par la meme
+  // camera, a la meme echelle. x,y = centre du cercle. ----
+  turnBadge(x, y, n){
+    const r = 16;
+    const g = this.add.graphics();
+    // Meme palette que les boutons du jeu (vert fonce + contour vert clair),
+    // plutot que le rond beige plat d'avant qui detonnait avec le reste du HUD.
+    g.fillStyle(0x3f6b3f, 1);
+    g.fillCircle(x, y, r);
+    g.lineStyle(2, 0x8fd18f, 1);
+    g.strokeCircle(x, y, r);
+    g.lineStyle(2.3, 0xe9ddc8, 1);
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x, y - r*0.6);
+    g.moveTo(x, y);
+    g.lineTo(x + r*0.42, y + r*0.12);
+    g.strokePath();
+    this.add.text(x + r + 10, y, String(n),
+      {fontFamily:'"Press Start 2P"', fontSize:'17px', color:'#ffd23f'}).setOrigin(0, 0.5);
   }
 
   // ---- Bouton rond (place "comme" A/B GBA, mais avec le mot ecrit dedans) :
@@ -3280,10 +3489,23 @@ class MainScene extends Phaser.Scene {
       this.logLines.forEach(entry=>{ entry.obj.x = this.logPanelRight - 10; });
     }
 
-    // Fond : juste un bandeau brun en haut (zone main de l'IA), le reste est
-    // le feutre vert de la camera. Pas d'image fixe : que des couleurs, donc
-    // ca s'etire proprement a n'importe quelle taille d'ecran.
-    this.add.rectangle(W/2, 65, W, 130, 0x5a3a30).setOrigin(0.5);
+    // Fond : bandeau brun en haut (zone main de l'IA), feutre de table
+    // tuile en dessous -- texture provisoire (voir preload()), en attendant
+    // un vrai fond. tileSprite plutot qu'une image etiree : reste nette a
+    // n'importe quelle taille d'ecran au lieu d'etre floue/deformee.
+    // Bandeau brun EGALEMENT sous la main du joueur (meme couleur que celui
+    // de l'adversaire en haut), le feutre vert ne restant que sur la zone de
+    // jeu (pile/decoupe/pioche/zones face visible-cachee) entre les deux --
+    // transition nette exactement a HAND_BANNER_Y, juste au-dessus de la
+    // main (voir handY plus bas, ~720, carte pleine taille ~187 de haut).
+    const HAND_BANNER_Y = 575;
+    // woodTexture est une image haute resolution (grain fin) : sans reduction,
+    // le tileSprite l'affiche quasiment a taille reelle et un seul motif
+    // occupe presque tout le bandeau (effet "zoome"). setTileScale() la
+    // reduit pour qu'elle se repete plusieurs fois, comme le feutre.
+    this.add.tileSprite(0, 0, W, 130, 'woodTexture').setOrigin(0,0).setTileScale(0.1);
+    this.add.tileSprite(0, 130, W, HAND_BANNER_Y-130, 'tableTexture').setOrigin(0,0);
+    this.add.tileSprite(0, HAND_BANNER_Y, W, 900-HAND_BANNER_Y, 'woodTexture').setOrigin(0,0).setTileScale(0.1);
 
     // Positions partagees avec les fonctions d'animation (vol de cartes,
     // ramassage du tas...), qui doivent savoir ou est la pile/la main peu
@@ -3297,14 +3519,11 @@ class MainScene extends Phaser.Scene {
     this.aiHandX = W/2;
     this.aiHandOffY = -20;
 
-    // Plus de toggle FR/EN dessine par Phaser : la langue vit desormais
-    // dans la barre d'icones fixe (DOM, hors Phaser, coin haut-gauche a
-    // l'ecran) commune aux trois scenes. Le compteur de tours est pousse
-    // un peu plus bas (52 au lieu de 45) pour rester degage de cette barre
-    // meme au zoom le plus proche de 1 (ou elle occupe le plus d'espace
-    // relatif par rapport au canevas logique).
-    this.label(20, 52, t('turnCounter', {n: gameState.turnCount}),
-      {fontSize:'15px', color:'#8a95a0', originY:0.5});
+    // Compteur de tours, coin haut-droit de la TABLE (sous le bandeau,
+    // zone verifiee libre : journal/eventail adversaire restent dans le
+    // bandeau au-dessus, pile/decoupe/pioche sont bien plus bas -- voir
+    // turnBadge() pour le pourquoi de cet emplacement).
+    this.turnBadge(W-74, 152, gameState.turnCount);
 
     // ---- Bandeau adversaire (au dessus de la table) : main cachee ----
     const aiHandCount = gameState.ai.hand.length;
@@ -3313,14 +3532,16 @@ class MainScene extends Phaser.Scene {
     // les cartes du centre plongent LEGEREMENT vers la table plutot que de
     // remonter), pour que l'eventail de l'adversaire ait aussi un cote
     // "tenu en main".
-    const aiArcHeight = 0.25 * CARD_H * 0.38;
+    const aiCardScale = 0.55;
+    const aiFanSpacing = 35;
+    const aiArcHeight = 0.25 * CARD_H * aiCardScale;
     const aiMaxAngle = 10;
     const aiHalfSpan = (fanCount-1)/2 || 1;
     for(let i=0;i<fanCount;i++){
       const u = fanCount>1 ? (i-(fanCount-1)/2)/aiHalfSpan : 0;
       const y = 50 + aiArcHeight*(1-u*u);
       const angle = aiMaxAngle*u;
-      this.addCardSprite(W/2 - (fanCount-1)*12 + i*24, y, 'card_back', 0.38, null, false, angle);
+      this.addCardSprite(W/2 - (fanCount-1)*aiFanSpacing/2 + i*aiFanSpacing, y, 'card_back', aiCardScale, null, false, angle);
     }
     // Juste le nombre reel de cartes (pas de texte "MAIN ADVERSAIRE :"),
     // colle a GAUCHE de l'eventail visuel (le journal, en haut a droite,
@@ -3328,7 +3549,7 @@ class MainScene extends Phaser.Scene {
     // le chiffre se faisait donc parfois recouvrir). Masque en mode
     // Cauchemar : aucune info de comptage n'est donnee dans ce mode.
     if(difficulty!=='nightmare'){
-      this.label(W/2 - (fanCount-1)*12 - 24 - 14, 50, `${aiHandCount}`,
+      this.label(W/2 - (fanCount-1)*aiFanSpacing/2 - 24 - 14, 50, `${aiHandCount}`,
         {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#e9ddc8', originX:1, originY:0.5});
     }
 
@@ -3337,7 +3558,7 @@ class MainScene extends Phaser.Scene {
       const z = ZONES.aiSlots[i];
       const fd = gameState.ai.faceDown.find(c=>c.slot===i);
       const fu = gameState.ai.faceUp.find(c=>c.slot===i);
-      this.drawStackedZone(cx(z.x), ty(z.y), fd, fu, 0.5, false, false);
+      this.drawStackedZone(cx(z.x), ty(z.y), fd, fu, 0.85, false, false, 9);
     }
 
     // ---- Pile centrale ----
@@ -3459,7 +3680,7 @@ class MainScene extends Phaser.Scene {
       const fu = gameState.player.faceUp.find(c=>c.slot===i);
       const canClickUp = isPlayerTurn && pZoneInfo.zone==='faceUp';
       const canClickDown = isPlayerTurn && pZoneInfo.zone==='faceDown';
-      this.drawStackedZone(cx(z.x), ty(z.y), fd, fu, 1.05, canClickUp, canClickDown);
+      this.drawStackedZone(cx(z.x), ty(z.y), fd, fu, 1.25, canClickUp, canClickDown, 15);
     }
 
     // ---- Main du joueur (sous la table) ----
@@ -3481,7 +3702,7 @@ class MainScene extends Phaser.Scene {
     const N = hand.length;
     const maxHandWidth = W - 100;
     const minSpacing = 22;
-    const baseHandScale = 1.7;
+    const baseHandScale = 1.9;
     let handScale = baseHandScale;
     let spacing = 109;
     if(N>1){
@@ -3562,7 +3783,7 @@ class MainScene extends Phaser.Scene {
         (pZoneInfo.zone==='faceUp' && !gameState.player.faceUp.some(c=>canPlayGroup(gameState, c.rank)))
       );
       if(!this.awaitingFaceUpChoice){
-        this.roundButton(btnX, 420, 42*btnScale, 0x2f8f4e, 0x5fdc7a, t('btnPlay'), ()=>this.onPlayClick(),
+        this.roundButton(btnX, 380, 42*btnScale, 0x2f8f4e, 0x5fdc7a, t('btnPlay'), ()=>this.onPlayClick(),
           { dim: noPlayableMove });
       }
       // "Prendre le tas" n'a aucun sens si la pile est vide (tout est
@@ -3575,7 +3796,7 @@ class MainScene extends Phaser.Scene {
         (difficulty!=='nightmare' || noPlayableMove || this.awaitingFaceUpChoice);
       if(canShowTake){
         const takeWord = this.awaitingFaceUpChoice ? t('btnCancel') : t('btnTake');
-        this.roundButton(btnX, 540, 34*btnScale, 0x9a2f2f, 0xff5f5f, takeWord, ()=>this.onTakeClick(),
+        this.roundButton(btnX, 500, 34*btnScale, 0x9a2f2f, 0xff5f5f, takeWord, ()=>this.onTakeClick(),
           { highlight: noPlayableMove });
       }
     }
@@ -3607,8 +3828,8 @@ class MainScene extends Phaser.Scene {
       // regles + "Distribuer les cartes", meme mode/difficulte) plutot que
       // relancer une partie tout de suite -- utile pour voir son classement
       // mis a jour apres la partie qui vient de se terminer.
-      this.roundButton(W/2-58, 630, 40*(this.fontScale||1), 0x2f8f4e, 0x5fdc7a, t('btnReplay'), ()=>this.restartGame());
-      this.roundButton(W/2+58, 630, 40*(this.fontScale||1), 0x3f6b3f, 0x8fd18f, t('btnBackToMode'), ()=>this.scene.start('confirm'));
+      this.roundButton(W/2-58, 630, 40*(this.fontScale||1), 0x2f8f4e, 0x5fdc7a, t('btnReplay'), ()=>{ sfxClick(); this.restartGame(); });
+      this.roundButton(W/2+58, 630, 40*(this.fontScale||1), 0x3f6b3f, 0x8fd18f, t('btnBackToMode'), ()=>{ sfxClick(); this.scene.start('confirm'); });
     }
   }
 
@@ -3656,14 +3877,16 @@ class MainScene extends Phaser.Scene {
     this.aiHandX = cx;
     this.aiHandOffY = -20;
 
-    // Fond : bandeau brun en haut, comme en paysage.
-    this.add.rectangle(cx, 60, W, 110, 0x5a3a30).setOrigin(0.5);
+    // Fond : bandeau brun en haut, feutre de table tuile entre les deux
+    // bandeaux, bandeau brun a nouveau sous la main (voir le layout
+    // paysage pour le detail) -- meme frontiere que le split 60/40
+    // zone-de-jeu/main utilise plus haut (gameAreaBottom).
+    this.add.tileSprite(0, 0, W, 115, 'woodTexture').setOrigin(0,0).setTileScale(0.1);
+    this.add.tileSprite(0, 115, W, Math.max(0, gameAreaBottom-115), 'tableTexture').setOrigin(0,0);
+    this.add.tileSprite(0, gameAreaBottom, W, Math.max(0, H-gameAreaBottom), 'woodTexture').setOrigin(0,0).setTileScale(0.1);
 
-    // Plus de toggle FR/EN dessine par Phaser (barre d'icones DOM fixe,
-    // commune aux trois scenes) : compteur de tours pousse a 52 pour
-    // rester degage de cette barre.
-    this.label(20, 52, t('turnCounter', {n: gameState.turnCount}),
-      {fontSize:'15px', color:'#8a95a0', originY:0.5});
+    // Compteur de tours (voir le layout paysage pour le detail).
+    this.turnBadge(W-74, 139, gameState.turnCount);
 
     // ---- Bandeau adversaire : eventail + compte reel a gauche ----
     const aiHandCount = gameState.ai.hand.length;
@@ -3686,12 +3909,16 @@ class MainScene extends Phaser.Scene {
 
     // ---- Zone face cachee/visible de l'adversaire (3 slots, spacing reduit) ----
     const aiSlotSpacing = Math.min(95, (W-60)/2.4) * spaceScale;
-    const aiZoneY = posY(0.1915);
+    // 0.1915->0.16 : rapproche de l'eventail adversaire au-dessus (pas du
+    // bandeau directement -- l'eventail occupe deja une bonne partie de cet
+    // espace, l'ecart "au bandeau" mesure a l'oeil comptait aussi cet
+    // eventail par erreur).
+    const aiZoneY = posY(0.16);
     for(let i=0;i<3;i++){
       const x = cx + (i-1)*aiSlotSpacing;
       const fd = gameState.ai.faceDown.find(c=>c.slot===i);
       const fu = gameState.ai.faceUp.find(c=>c.slot===i);
-      this.drawStackedZone(x, aiZoneY, fd, fu, 0.45*spaceScale, false, false);
+      this.drawStackedZone(x, aiZoneY, fd, fu, 0.45*spaceScale, false, false, 10);
     }
 
     // ---- Pile centrale (deck a droite, cut a gauche, plus rapproches
@@ -3774,7 +4001,7 @@ class MainScene extends Phaser.Scene {
       const fu = gameState.player.faceUp.find(c=>c.slot===i);
       const canClickUp = isPlayerTurn && pZoneInfo.zone==='faceUp';
       const canClickDown = isPlayerTurn && pZoneInfo.zone==='faceDown';
-      this.drawStackedZone(x, playerZoneY, fd, fu, 0.75*spaceScale, canClickUp, canClickDown);
+      this.drawStackedZone(x, playerZoneY, fd, fu, 0.75*spaceScale, canClickUp, canClickDown, 15);
     }
 
     // ---- Boutons Jouer/Prendre, cote a cote au-dessus de la main (pas de
@@ -3897,8 +4124,8 @@ class MainScene extends Phaser.Scene {
       // Empiles verticalement en portrait (plus de marge laterale
       // qu'horizontale) : rejouer tout de suite, ou revenir a l'ecran du
       // mode choisi (classement + regles + "Distribuer les cartes").
-      this.roundButton(cx, 730, 36*this.fontScale, 0x2f8f4e, 0x5fdc7a, t('btnReplay'), ()=>this.restartGame());
-      this.roundButton(cx, 730+84*this.fontScale, 36*this.fontScale, 0x3f6b3f, 0x8fd18f, t('btnBackToMode'), ()=>this.scene.start('confirm'));
+      this.roundButton(cx, 730, 36*this.fontScale, 0x2f8f4e, 0x5fdc7a, t('btnReplay'), ()=>{ sfxClick(); this.restartGame(); });
+      this.roundButton(cx, 730+84*this.fontScale, 36*this.fontScale, 0x3f6b3f, 0x8fd18f, t('btnBackToMode'), ()=>{ sfxClick(); this.scene.start('confirm'); });
     }
   }
 
@@ -4103,13 +4330,29 @@ const config = {
 };
 game = new Phaser.Game(config);
 
+// Filet de securite pour le mode RESIZE : Phaser 3.70 se base sur un
+// ResizeObserver pose sur #game-container pour detecter les changements de
+// taille. #game-container passe periodiquement en display:none (ecran
+// "tourne ton telephone", voir plus haut) puis redevient display:block --
+// cette transition-la n'est pas toujours captee de facon fiable par
+// ResizeObserver selon le navigateur/l'outil d'emulation (deja constate :
+// changer d'orientation dans l'outil "appareils" de Chrome peut laisser le
+// jeu bloque a une taille 0x0, ecran noir, meme une fois #game-container
+// redevenu visible). window.resize, lui, se declenche de facon fiable dans
+// tous les cas (rotation reelle d'un telephone comme changement de taille
+// dans les outils de dev) : on force explicitement une resynchronisation
+// dessus plutot que de compter uniquement sur le ResizeObserver interne.
+window.addEventListener('resize', ()=>{
+  if(game && game.scale) game.scale.resize(window.innerWidth, window.innerHeight);
+});
+
 // Pont entre le bouton de langue (DOM, hors Phaser) et la scene active :
 // met a jour la variable globale `lang`, puis redemande a la scene
 // actuellement affichee de se redessiner. On ne sait pas d'avance laquelle
 // des trois est active, donc on les essaie toutes (isActive() renvoie
 // simplement false pour celles qui ne le sont pas).
 window.__applyLang = function(newLang){
-  if(lang===newLang) return;
+  if(!I18N[newLang] || lang===newLang) return;
   lang = newLang;
   try{ localStorage.setItem('shithead_lang', newLang); }catch(e){}
   if(window.__updateLangPopup) window.__updateLangPopup(newLang);
@@ -4127,6 +4370,40 @@ window.__applyLang = function(newLang){
   });
 };
 window.__updateLangPopup(lang);
+</script>
+<script>
+/* =========================================================
+   Coupe-son (popup reglages, sous les langues) : place APRES le script
+   principal expres, pour pouvoir lire/ecrire `sfxMuted` et appeler `t()`
+   directement (bindings globaux partages entre <script> classiques),
+   comme les autres blocs de ce genre plus bas. Le clic ne ferme pas le
+   popup (contrairement aux boutons de langue) : un coupe-son beneficie de
+   voir l'icone changer tout de suite pour confirmer l'etat, plutot que
+   d'avoir a rouvrir le popup pour verifier.
+   ========================================================= */
+(function(){
+  const btn = document.getElementById('sfx-toggle-btn');
+  const icon = document.getElementById('sfx-toggle-icon');
+  const label = document.getElementById('sfx-toggle-label');
+
+  function refresh(){
+    icon.textContent = sfxMuted ? '🔇' : '🔊';
+    label.textContent = t('sfxToggleLabel');
+  }
+
+  btn.addEventListener('click', ()=>{
+    sfxMuted = !sfxMuted;
+    try{ localStorage.setItem('shithead_sfx_muted', sfxMuted ? '1' : '0'); }catch(e){}
+    refresh();
+  });
+
+  refresh();
+  const prevApplyLangSfx = window.__applyLang;
+  window.__applyLang = function(newLang){
+    prevApplyLangSfx(newLang);
+    refresh();
+  };
+})();
 </script>
 <script>
 /* =========================================================
