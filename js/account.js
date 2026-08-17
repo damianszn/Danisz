@@ -156,16 +156,25 @@
     notify();
   }
 
-  async function fetchLeaderboard(limit){
+  // Meilleurs scores (nombre de tours minimum, parties gagnees uniquement)
+  // du joueur CONNECTE, un par difficulte -- affiche dans son panneau
+  // "Your top scores". Une seule requete (toutes ses victoires), reduite
+  // cote client plutot que 4 requetes separees (une par difficulte) : le
+  // volume par joueur reste largement gerable pour un jeu solo/amis.
+  async function fetchMyTopScores(){
+    if(!state.session) return {};
     await init();
     const { data, error } = await supabase
-      .from('profiles')
-      .select('pseudo,victoires,parties_jouees')
-      .order('victoires', { ascending: false })
-      .order('parties_jouees', { ascending: true })
-      .limit(limit || 20);
-    if(error){ console.warn('[DaniszAccount] leaderboard fetch failed', error); return []; }
-    return data;
+      .from('matches')
+      .select('mode, tours')
+      .eq('joueur1', state.session.user.id)
+      .eq('joueur1_gagne', true);
+    if(error){ console.warn('[DaniszAccount] top scores fetch failed', error); return {}; }
+    const best = {};
+    for(const row of data){
+      if(best[row.mode]===undefined || row.tours < best[row.mode]) best[row.mode] = row.tours;
+    }
+    return best;
   }
 
   // Classement par nombre de tours pour un mode/difficulte precis (parties
@@ -204,6 +213,6 @@
   function getState(){ return state; }
   function onChange(fn){ listeners.push(fn); if(ready) fn(state); }
 
-  window.DaniszAccount = { signUp, signIn, signOut, setPseudo, reportAiMatch, fetchLeaderboard, fetchModeLeaderboard, hasAccount, getState, onChange };
+  window.DaniszAccount = { signUp, signIn, signOut, setPseudo, reportAiMatch, fetchMyTopScores, fetchModeLeaderboard, hasAccount, getState, onChange };
   init().catch(e=>console.error('[DaniszAccount] init failed', e));
 })();
