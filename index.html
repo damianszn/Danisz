@@ -7,36 +7,15 @@
 <meta property="og:title" content="Danisz">
 <meta property="og:description" content="Jeu de cartes Shithead, variante Danisz.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🃏</text></svg>">
-<!-- Bandeau d'erreur visible a l'ecran -- diagnostic TEMPORAIRE pour un bug
-     mobile qui ne se reproduit ni en emulateur desktop ni dans cette
-     sandbox, seulement sur un vrai telephone (Nothing Phone 2 signale).
-     Capture TOUT (erreurs JS + rejets de promesse), avant meme le chargement
-     de Phaser/des polices, pour voir un vrai message d'erreur au lieu de
-     deviner. A retirer une fois le bug identifie/corrige. -->
-<div id="js-error-banner" style="display:none; position:fixed; top:0; left:0; right:0; z-index:999999; background:#c0392b; color:#fff; font-family:monospace; font-size:11px; line-height:1.4; padding:8px; max-height:45vh; overflow:auto; white-space:pre-wrap;"></div>
-<script>
-(function(){
-  var seen = 0;
-  function show(msg){
-    seen++;
-    var b = document.getElementById('js-error-banner');
-    if(!b) return;
-    b.style.display = 'block';
-    b.textContent = '[' + seen + '] ' + msg + '\n----------\n' + b.textContent;
-  }
-  window.addEventListener('error', function(e){
-    show((e.message || 'Erreur') + ' @ ' + (e.filename || '?') + ':' + (e.lineno || '?') + ':' + (e.colno || '?'));
-  });
-  window.addEventListener('unhandledrejection', function(e){
-    var r = e.reason;
-    show('Promise rejetee: ' + (r && r.message ? r.message : String(r)));
-  });
-})();
-</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+<!-- crossorigin : sans ca, un throw dans ce script (charge sur un autre
+     domaine) arrive a window.onerror completement vide ("Script error.",
+     sans message/fichier/ligne) -- constate en debuggant un bug mobile qui
+     ne se reproduisait qu'en conditions reelles. jsdelivr envoie les
+     en-tetes CORS necessaires, donc ca ne coute rien. -->
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js" crossorigin="anonymous"></script>
 <script src="js/account.js"></script>
 <script src="js/online.js"></script>
 <style>
