@@ -4890,6 +4890,28 @@ function __onPossibleResize(){
 }
 window.addEventListener('resize', __onPossibleResize);
 window.addEventListener('orientationchange', __onPossibleResize);
+// La barre d'adresse mobile qui se replie APRES le chargement initial (sans
+// vraie rotation ni resize de fenetre) ne declenche pas toujours un
+// evenement 'resize' classique sur window -- seulement visualViewport, sur
+// certains Android/Chrome. Meme chose pour le passage en plein ecran (voir
+// plus haut, auto-plein-ecran sur mobile paysage) : pas garanti de
+// declencher 'resize' non plus sur tous les navigateurs. Sans ca, le jeu
+// reste bloque sur les dimensions (fausses) captees au tout premier rendu
+// jusqu'a un F5 -- exactement le bug "des elements disparaissent" deja vu
+// sur rotation, mais ici au chargement initial ou a l'entree en plein ecran.
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize', __onPossibleResize);
+}
+document.addEventListener('fullscreenchange', __onPossibleResize);
+document.addEventListener('webkitfullscreenchange', __onPossibleResize);
+// Filet de securite supplementaire, independant de tout evenement : sur
+// certains telephones, la barre d'adresse finit de se stabiliser un peu
+// apres le chargement sans qu'AUCUN des evenements ci-dessus ne se
+// declenche de facon fiable. Quelques rattrapages forces les tout premiers
+// instants suffisent a corriger ce cas sans rien casser pour les
+// navigateurs qui n'en ont pas besoin (resize() vers les memes dimensions
+// est un no-op sans effet visible).
+[300, 800, 1500, 3000].forEach(delay => setTimeout(__forceGameResize, delay));
 
 // Pont entre le bouton de langue (DOM, hors Phaser) et la scene active :
 // met a jour la variable globale `lang`, puis redemande a la scene
