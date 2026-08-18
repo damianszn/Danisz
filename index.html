@@ -2912,8 +2912,18 @@ class ConfirmScene extends Phaser.Scene {
       else groups.push({ rank: row.rank, tours: row.tours, pseudos: [row.pseudo] });
     });
     const joiner = ` ${t('leaderboardTieJoiner')} `;
-    const rowStep = Math.max(16, Math.min(34, (h - (listTop-y) - 30) / groups.length));
-    const rowFont = rowStep < 20 ? 15 : rowStep < 26 ? 17 : 19;
+    // Avant, la hauteur de ligne etait plafonnee bas (34px) quelle que soit
+    // la place dispo : avec 5-6 joueurs seulement (la taille reelle de la
+    // communaute pour l'instant), le panneau restait vide aux 2/3 en
+    // dessous. On vise desormais ~70% de la hauteur dispo occupee par le
+    // contenu (`* 0.7`), tout en garantissant de ne jamais deborder
+    // (`availHInner/groups.length`, toujours respecte meme avec un gros
+    // peloton ex-aequo qui etend la liste au-dela de 10 lignes) et sans
+    // devenir absurde quand il n'y a qu'1-2 joueurs (plafond a 76px/ligne).
+    const availHInner = h - (listTop-y) - 30;
+    const targetStep = (availHInner*0.7) / groups.length;
+    const rowStep = Math.max(16, Math.min(availHInner/groups.length, targetStep, 76));
+    const rowFont = Math.max(14, Math.min(34, Math.round(rowStep*0.5)));
     groups.forEach((group, i)=>{
       const ry = listTop + 28 + i*rowStep;
       const rank = group.rank;
