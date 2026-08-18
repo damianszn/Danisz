@@ -2549,13 +2549,9 @@ class MenuScene extends Phaser.Scene {
       // desormais avec l'Elo qu'on retire du "1v1 joueur" casual juste en
       // dessous -- meme file d'attente/lobby que l'online, juste separee
       // (voir ranked dans schema_online.sql PHASE 5).
-      this.menuButton(cx, y, btnW, btnH, t('menuRanked'), true, ()=>this.scene.start('online-lobby', {ranked:true}), {
-        fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('rankedLabel'), subtitleColor:'#ffd23f', fontSize, subFontSize
-      });
+      this.menuButton(cx, y, btnW, btnH, t('menuRanked'), true, ()=>this.scene.start('online-lobby', {ranked:true}), {fontSize, subFontSize});
       y += step;
-      this.menuButton(cx, y, btnW, btnH, t('menuOnline'), true, ()=>this.scene.start('online-lobby', {ranked:false}), {
-        fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('betaLabel'), subtitleColor:'#ffa64d', fontSize, subFontSize
-      });
+      this.menuButton(cx, y, btnW, btnH, t('menuOnline'), true, ()=>this.scene.start('online-lobby', {ranked:false}), {fontSize, subFontSize});
       y += step;
       this.menuButton(cx, y, btnW, btnH, t('menuFFA'), false, null, {fontSize, subFontSize});
       y += step*0.6 + idealTutGap*scale; // un peu moins d'espace avant le tutoriel (bouton plus petit, pas de sous-titre)
@@ -2599,12 +2595,8 @@ class MenuScene extends Phaser.Scene {
       // Voir le meme commentaire en portrait ci-dessus : "1v1 classe" =
       // l'ancien "1v1 en ligne" (meme moteur/matchmaking) avec l'Elo, que
       // l'on retire du "1v1 joueur" casual juste en dessous.
-      this.menuButton(col1X, row0Y, btnW, btnH, t('menuRanked'), true, ()=>this.scene.start('online-lobby', {ranked:true}), {
-        fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('rankedLabel'), subtitleColor:'#ffd23f', fontSize, subFontSize
-      });
-      this.menuButton(col0X, row1Y, btnW, btnH, t('menuOnline'), true, ()=>this.scene.start('online-lobby', {ranked:false}), {
-        fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('betaLabel'), subtitleColor:'#ffa64d', fontSize, subFontSize
-      });
+      this.menuButton(col1X, row0Y, btnW, btnH, t('menuRanked'), true, ()=>this.scene.start('online-lobby', {ranked:true}), {fontSize, subFontSize});
+      this.menuButton(col0X, row1Y, btnW, btnH, t('menuOnline'), true, ()=>this.scene.start('online-lobby', {ranked:false}), {fontSize, subFontSize});
       this.menuButton(col1X, row1Y, btnW, btnH, t('menuFFA'), false, null, {fontSize, subFontSize});
 
       // +60*scale et pas +38 : la case "1v3 joueurs" est desactivee, avec un
