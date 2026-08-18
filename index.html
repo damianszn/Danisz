@@ -4478,7 +4478,16 @@ class MainScene extends Phaser.Scene {
     // redessin brutal a chaque tour -- et le toast d'erreur eventuel (voir
     // showToast), qui gere aussi son propre cycle de vie (timer).
     const preserved = new Set([this.logPanelBg, ...this.logLines.map(e=>e.obj), ...this.toastObjs]);
-    this.children.list.slice().forEach(child=>{ if(!preserved.has(child)) child.destroy(); });
+    // killTweensOf AVANT destroy() : detruire un sprite ne desarme pas ses
+    // tweens en cours (Phaser 3 ne fait pas ce menage tout seul) -- si une
+    // carte est encore en plein vol (flyCardToPile) quand un redessin
+    // complet survient ici (resize/rotation, "Rejouer" pendant que la
+    // derniere animation tourne encore...), son tween continuait de vivre
+    // et son onComplete finissait par appeler setTexture()/destroy() sur un
+    // sprite deja mort -> "Cannot read properties of undefined (reading
+    // 'sys')", plantage qui laissait this.animating coince a true (partie
+    // figee jusqu'a un F5).
+    this.children.list.slice().forEach(child=>{ if(!preserved.has(child)){ this.tweens.killTweensOf(child); child.destroy(); } });
     this.spriteByCardId = {};
 
     // Etirement horizontal : tout ce qui a ete pense pour un canevas
@@ -4879,7 +4888,10 @@ class MainScene extends Phaser.Scene {
   // sur un vrai telephone -- des ajustements sont a prevoir. ----
   drawAllPortrait(){
     const preserved = new Set([this.logPanelBg, ...this.toastObjs]);
-    this.children.list.slice().forEach(child=>{ if(!preserved.has(child)) child.destroy(); });
+    // Voir le meme commentaire dans drawAllLandscape() : killTweensOf avant
+    // destroy(), sinon un tween encore actif sur une carte en plein vol
+    // finit par planter (setTexture sur un sprite deja detruit).
+    this.children.list.slice().forEach(child=>{ if(!preserved.has(child)){ this.tweens.killTweensOf(child); child.destroy(); } });
     this.spriteByCardId = {};
     // Pas de journal en portrait (pas la place) : on vide le panneau et les
     // lignes existantes, mais on garde lastLogCount synchronise pour ne pas
