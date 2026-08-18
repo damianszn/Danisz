@@ -234,11 +234,15 @@
       // 200 lignes brutes a chaque fois.
       if(rows.length >= max+20) break;
     }
-    // Classement "1224" standard (comme un vrai podium de competition) :
-    // deux scores identiques partagent le meme rang, et le rang suivant
-    // saute d'autant -- deux ex-aequo en 2e, le suivant est 4e, pas 3e.
+    // Classement "dense" (1223, pas 1224) : deux scores identiques
+    // partagent le meme rang, mais le rang suivant est juste +1, jamais
+    // saute. Deux ex-aequo en 1er (or) laissent bien l'argent et le bronze
+    // disponibles pour les deux scores suivants -- un classement "1224"
+    // classique (qui saute le rang 2 dans ce cas) ferait perdre l'argent au
+    // 2e groupe simplement parce que le 1er comptait deux personnes, ce qui
+    // n'est pas ce qu'on veut pour l'attribution des medailles.
     rows.forEach((row, i) => {
-      row.rank = (i>0 && row.tours===rows[i-1].tours) ? rows[i-1].rank : i+1;
+      row.rank = (i>0 && row.tours===rows[i-1].tours) ? rows[i-1].rank : (i>0 ? rows[i-1].rank+1 : 1);
     });
     // Coupe a `max` lignes affichees, mais jamais au milieu d'une egalite :
     // si le rang au niveau de la limite se prolonge au-dela, on inclut tout
