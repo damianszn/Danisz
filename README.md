@@ -7,3 +7,5 @@ Card game based on "Shithead" (with variations), 1v1 versus AI, made in Phaser 3
 Kaartspel gebaseerd op "Shithead" (met variaties), 1v1 tegen de AI, gemaakt in Phaser 3.
 
 Gra karciana oparta na "Shithead" (z wariacjami), 1 na 1 z AI, stworzona w Phaser 3.
+
+Human-made cards & textures, Claude-made mechanics and interface.
