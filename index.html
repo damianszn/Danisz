@@ -3322,6 +3322,10 @@ class MainScene extends Phaser.Scene {
     if(window.__onSceneChange) window.__onSceneChange('main');
     this.spriteByCardId = {};
     this.dragReleasePos = {};
+    // Vols "optimistes" en cours (voir startOptimisticFlight) : cote
+    // INVITE, une carte peut deja etre en train de voler vers la pile
+    // avant meme que l'hote ait confirme le coup.
+    this.optimisticFlights = {};
     this.animating = false;
     this.awaitingFaceUpChoice = false;
     this.toastObjs = [];
@@ -3448,11 +3452,13 @@ class MainScene extends Phaser.Scene {
     // comme la toute premiere distribution.
     if(this.onlineRole==='guest'){
       window.DaniszOnline.sendMove({ kind:'rematchRequest' });
+      this.optimisticFlights = {};
       return;
     }
     gameState = createGame();
     this.spriteByCardId = {};
     this.dragReleasePos = {};
+    this.optimisticFlights = {};
     this.animating = false;
     this.awaitingFaceUpChoice = false;
     selected = [];
@@ -3909,16 +3915,33 @@ class MainScene extends Phaser.Scene {
     const cards = res.cards || (res.card ? [res.card] : []);
     if(cards.length===0){ this.afterAnimation(); return; }
 
+    // Cartes deja envolees en optimiste (voir startOptimisticFlight, appele
+    // par l'invite des l'envoi du coup, sans attendre la confirmation de
+    // l'hote) : leur vol visuel est deja en cours ou fini, pas la peine de
+    // rejouer le son une deuxieme fois pour elles.
+    const allOptimistic = cards.length>0 && cards.every(c=>this.optimisticFlights && this.optimisticFlights[c.id]);
+
     // res.replay===true signifie specifiquement une DECOUPE (voir playGroup/
     // tryFaceDownCard) : le tas entier bouge d'un coup. Meme logique pour un
     // groupe de plusieurs cartes de meme rang jouees ensemble (preselection).
     // Une seule carte -> une seule note nette ; plusieurs -> serie "trrr".
-    if(res.replay || cards.length > 1) sfxShuffle(cards.length); else sfxCardPlace();
+    if(!allOptimistic){
+      if(res.replay || cards.length > 1) sfxShuffle(cards.length); else sfxCardPlace();
+    }
 
     let remaining = cards.length;
     const onOneDone = ()=>{ remaining--; if(remaining<=0) this.afterAnimation(); };
 
     cards.forEach((card, i)=>{
+      // Deja en vol (ou arrivee) cote optimiste : ne recree jamais une
+      // deuxieme sprite volante pour la meme carte, on se contente
+      // d'attendre (ou de constater) la fin de ce vol-la.
+      const optimistic = this.optimisticFlights && this.optimisticFlights[card.id];
+      if(optimistic){
+        delete this.optimisticFlights[card.id];
+        if(optimistic.done) onOneDone(); else optimistic.callbacks.push(onOneDone);
+        return;
+      }
       const dragOrigin = this.dragReleasePos[card.id];
       let origin, needsFlip;
       if(dragOrigin){
@@ -4033,6 +4056,52 @@ class MainScene extends Phaser.Scene {
     } else {
       settle();
     }
+  }
+
+  // ---- 1v1 en ligne, cote INVITE : anime le vol main -> pile LOCALEMENT,
+  // tout de suite a l'envoi du coup, sans attendre la confirmation de
+  // l'hote -- c'est CA qui donnait l'impression de latence/carte figee en
+  // l'air (le vol ne demarrait qu'une fois la reponse reseau arrivee,
+  // exposant tout l'aller-retour comme un blocage visuel). L'hote reste
+  // seul a faire autorite : gameState n'est PAS touche ici, seulement du
+  // cosmetique. Reserve aux cartes jouees depuis la main (rang deja connu
+  // et deja face visible, verifie localement par canPlayGroup -- le meme
+  // moteur deterministe que l'hote appliquera, donc fiable tant que c'est
+  // bien son tour) : jamais pour une carte face cachee (issue incertaine
+  // tant que l'hote n'a pas resolu) ni pour ramasser le tas.
+  //
+  // Si la confirmation de l'hote arrive PENDANT ce vol optimiste,
+  // animateResult() (voir plus haut, this.optimisticFlights) le laisse
+  // simplement se terminer au lieu de faire s'envoler une deuxieme fois la
+  // meme carte.
+  startOptimisticFlight(cards){
+    if(!this.optimisticFlights) this.optimisticFlights = {};
+    if(cards.length > 1) sfxShuffle(cards.length); else sfxCardPlace();
+    cards.forEach((card, i)=>{
+      const entry = { done:false, callbacks:[] };
+      this.optimisticFlights[card.id] = entry;
+      const dragOrigin = this.dragReleasePos[card.id];
+      let origin;
+      if(dragOrigin){
+        origin = { x:dragOrigin.x, y:dragOrigin.y, scale:dragOrigin.scale, angle:0, textureKey:RANK_TO_TEXTURE[card.rank] };
+      } else if(this.spriteByCardId[card.id]){
+        origin = this.captureSpriteOrigin(this.spriteByCardId[card.id]);
+      } else {
+        origin = this.fallbackOrigin('player', 'hand');
+      }
+      if(this.spriteByCardId[card.id]){
+        this.safeDestroy(this.spriteByCardId[card.id]);
+        delete this.spriteByCardId[card.id];
+      }
+      this.time.delayedCall(i*90, ()=>{
+        this.flyCardToPile(origin, RANK_TO_TEXTURE[card.rank], false, i, ()=>{
+          entry.done = true;
+          entry.callbacks.forEach(cb=>cb());
+          entry.callbacks = [];
+        });
+      });
+    });
+    this.dragReleasePos = {};
   }
 
   // ---- Ramassage du tas : glisse et s'estompe vers la main du preneur ----
@@ -5261,9 +5330,14 @@ class MainScene extends Phaser.Scene {
         this.showToast(t('toastInvalidPlay'));
         return;
       }
+      const group = [...selected];
       this.armOnlineSend();
-      window.DaniszOnline.sendMove({ kind:'play', cardIds: selected.map(c=>c.id) });
+      window.DaniszOnline.sendMove({ kind:'play', cardIds: group.map(c=>c.id) });
       selected = [];
+      // Vol vers la pile tout de suite, sans attendre la reponse de l'hote
+      // (voir startOptimisticFlight) : sinon toute la latence reseau
+      // s'affiche comme la carte figee en l'air pendant l'attente.
+      this.startOptimisticFlight(group);
       return;
     }
     this.armAnimating();
