@@ -42,16 +42,29 @@
   }
   #ui-bar button:active{ opacity:1; }
 
-  /* Popup de langue, sous l'icone reglages : seule chose du groupe a avoir
-     un fond (pour rester lisible), les icones elles-memes restent nues. */
+  /* Menu reglages, sous l'icone engrenage : seule chose du groupe a avoir
+     un fond (pour rester lisible), les icones elles-memes restent nues.
+     Deux colonnes cote a cote (langues | son + quitter la partie) plutot
+     qu'un unique empilement vertical -- plus clair, et evite une colonne
+     unique interminable une fois "Quitter la partie" ajoutee. */
   #lang-popup{
     display:none;
     position:fixed; top:40px; left:6px; z-index:10001;
     background:rgba(12,20,16,0.9); border:1px solid rgba(215,164,92,0.5);
-    border-radius:6px; padding:4px;
+    border-radius:6px; padding:8px;
     font-family:'Press Start 2P', monospace; font-size:12px;
   }
   #lang-popup.open{ display:block; }
+  #settings-title{
+    font-size:11px; color:#8a95a0; letter-spacing:1px;
+    padding:2px 8px 8px; text-align:center;
+  }
+  #settings-columns{ display:flex; align-items:stretch; }
+  .settings-col{ display:flex; flex-direction:column; }
+  #settings-col-divider{
+    width:1px; align-self:stretch; margin:0 8px;
+    background:rgba(215,164,92,0.3);
+  }
   #lang-popup button{
     display:flex; align-items:center; gap:8px; width:100%; padding:7px 14px; margin:0;
     background:transparent; border:none; text-align:left; white-space:nowrap;
@@ -59,6 +72,7 @@
   }
   #lang-popup button.active{ color:#ffd23f; }
   #lang-popup button:hover{ background:rgba(255,255,255,0.08); }
+  #quit-game-btn:hover{ color:#ff8a7a; background:rgba(255,95,95,0.12); }
   /* Drapeau volontairement plus petit que le nom de la langue a cote : une
      icone d'appoint, pas l'element principal du bouton. */
   /* SVG plutot qu'emoji unicode : Windows n'a jamais fourni de glyphes
@@ -66,9 +80,8 @@
      Chrome/Edge y affichaient juste le code pays en petites lettres dans un
      cadre au lieu du drapeau -- un SVG dessine s'affiche pareil partout. */
   #lang-popup .flag{ width:22px; height:15px; flex:none; border-radius:2px; overflow:hidden; }
-  #lang-popup-divider{ height:1px; margin:4px 6px; background:rgba(215,164,92,0.3); }
-  /* Meme largeur que .flag, pour que le libelle "Son" reste aligne avec les
-     noms de langue au-dessus malgre une icone de forme differente. */
+  /* Meme largeur que .flag, pour que les libelles "Son"/"Quitter" restent
+     alignes avec les noms de langue malgre une icone de forme differente. */
   .sfx-icon{ width:22px; flex:none; text-align:center; font-size:15px; }
 
   /* Compte joueur (pseudo + high scores Supabase) : meme famille visuelle
@@ -368,33 +381,44 @@
   <button id="fullscreen-btn" title="Plein ecran">⛶</button>
 </div>
 <div id="lang-popup">
-  <button id="lang-fr" data-lang="fr">
-    <svg class="flag" viewBox="0 0 30 20"><rect width="10" height="20" fill="#0055A4"/><rect x="10" width="10" height="20" fill="#FFFFFF"/><rect x="20" width="10" height="20" fill="#EF4135"/></svg>
-    Francais
-  </button>
-  <button id="lang-en" data-lang="en">
-    <svg class="flag" viewBox="0 0 30 20">
-      <rect width="30" height="20" fill="#00247D"/>
-      <path d="M0,0 L30,20 M30,0 L0,20" stroke="#FFFFFF" stroke-width="4"/>
-      <path d="M0,0 L30,20 M30,0 L0,20" stroke="#CF142B" stroke-width="1.5"/>
-      <path d="M15,0 V20 M0,10 H30" stroke="#FFFFFF" stroke-width="6"/>
-      <path d="M15,0 V20 M0,10 H30" stroke="#CF142B" stroke-width="3.5"/>
-    </svg>
-    English
-  </button>
-  <button id="lang-nl" data-lang="nl">
-    <svg class="flag" viewBox="0 0 30 20"><rect width="30" height="6.67" fill="#AE1C28"/><rect y="6.67" width="30" height="6.67" fill="#FFFFFF"/><rect y="13.33" width="30" height="6.67" fill="#21468B"/></svg>
-    Nederlands
-  </button>
-  <button id="lang-pl" data-lang="pl">
-    <svg class="flag" viewBox="0 0 30 20"><rect width="30" height="10" fill="#FFFFFF"/><rect y="10" width="30" height="10" fill="#DC143C"/></svg>
-    Polski
-  </button>
-  <div id="lang-popup-divider"></div>
-  <button id="sfx-toggle-btn">
-    <span id="sfx-toggle-icon" class="sfx-icon"></span>
-    <span id="sfx-toggle-label"></span>
-  </button>
+  <div id="settings-title"></div>
+  <div id="settings-columns">
+    <div class="settings-col">
+      <button id="lang-fr" data-lang="fr">
+        <svg class="flag" viewBox="0 0 30 20"><rect width="10" height="20" fill="#0055A4"/><rect x="10" width="10" height="20" fill="#FFFFFF"/><rect x="20" width="10" height="20" fill="#EF4135"/></svg>
+        Francais
+      </button>
+      <button id="lang-en" data-lang="en">
+        <svg class="flag" viewBox="0 0 30 20">
+          <rect width="30" height="20" fill="#00247D"/>
+          <path d="M0,0 L30,20 M30,0 L0,20" stroke="#FFFFFF" stroke-width="4"/>
+          <path d="M0,0 L30,20 M30,0 L0,20" stroke="#CF142B" stroke-width="1.5"/>
+          <path d="M15,0 V20 M0,10 H30" stroke="#FFFFFF" stroke-width="6"/>
+          <path d="M15,0 V20 M0,10 H30" stroke="#CF142B" stroke-width="3.5"/>
+        </svg>
+        English
+      </button>
+      <button id="lang-nl" data-lang="nl">
+        <svg class="flag" viewBox="0 0 30 20"><rect width="30" height="6.67" fill="#AE1C28"/><rect y="6.67" width="30" height="6.67" fill="#FFFFFF"/><rect y="13.33" width="30" height="6.67" fill="#21468B"/></svg>
+        Nederlands
+      </button>
+      <button id="lang-pl" data-lang="pl">
+        <svg class="flag" viewBox="0 0 30 20"><rect width="30" height="10" fill="#FFFFFF"/><rect y="10" width="30" height="10" fill="#DC143C"/></svg>
+        Polski
+      </button>
+    </div>
+    <div id="settings-col-divider"></div>
+    <div class="settings-col">
+      <button id="sfx-toggle-btn">
+        <span id="sfx-toggle-icon" class="sfx-icon"></span>
+        <span id="sfx-toggle-label"></span>
+      </button>
+      <button id="quit-game-btn" style="display:none">
+        <span class="sfx-icon">🚪</span>
+        <span id="quit-game-label"></span>
+      </button>
+    </div>
+  </div>
 </div>
 <div id="account-bar">
   <button id="account-btn">
@@ -603,6 +627,7 @@
   const popup = document.getElementById('lang-popup');
   settingsBtn.addEventListener('click', (e)=>{
     e.stopPropagation();
+    if(window.__refreshSettingsPanel) window.__refreshSettingsPanel();
     popup.classList.toggle('open');
   });
   document.addEventListener('click', ()=>{ popup.classList.remove('open'); });
@@ -779,6 +804,9 @@ const I18N = {
     tutorialBtn: "Tutoriel",
     rulesBtn: "Regles de jeu",
     sfxToggleLabel: "Son",
+    settingsTitle: "Reglages",
+    quitGameBtn: "Quitter la partie",
+    confirmQuitGame: "Quitter la partie en cours ?",
     tutorialSlide1Title: "Rythme de jeu",
     tutorialSlide1Bullets: "Vous jouez chacun votre tour.\nTu poses une ou plusieurs cartes du meme rang, de valeur egale ou superieure a la derniere carte posee.\nTu ne peux pas (ou ne veux pas) jouer ? Tu ramasses tout le tas.\nApres avoir joue depuis ta main, tu repioches jusqu'a en avoir 3, tant qu'il reste des cartes dans la pioche.",
     tutorialSlide2Title: "Une fois la pioche vide",
@@ -928,6 +956,9 @@ const I18N = {
     tutorialBtn: "Tutorial",
     rulesBtn: "Spelregels",
     sfxToggleLabel: "Geluid",
+    settingsTitle: "Instellingen",
+    quitGameBtn: "Spel verlaten",
+    confirmQuitGame: "Huidige partij verlaten?",
     tutorialSlide1Title: "Speelritme",
     tutorialSlide1Bullets: "Jullie spelen om de beurt.\nJe legt een of meer kaarten van dezelfde rang, met een waarde gelijk aan of hoger dan de laatst gelegde kaart.\nKun je (of wil je) niet spelen? Dan pak je de hele stapel op.\nNa het spelen vanuit je hand vul je aan tot 3 kaarten, zolang er nog kaarten in de pakstapel zitten.",
     tutorialSlide2Title: "Als de pakstapel leeg is",
@@ -1077,6 +1108,9 @@ const I18N = {
     tutorialBtn: "Samouczek",
     rulesBtn: "Zasady gry",
     sfxToggleLabel: "Dzwiek",
+    settingsTitle: "Ustawienia",
+    quitGameBtn: "Opusc gre",
+    confirmQuitGame: "Opuscic biezaca gre?",
     tutorialSlide1Title: "Rytm gry",
     tutorialSlide1Bullets: "Gracie na zmiane.\nWykladasz jedna lub wiecej kart tej samej rangi, o wartosci rownej lub wyzszej niz ostatnia wylozona karta.\nNie mozesz (lub nie chcesz) zagrac? Zabierasz caly stos.\nPo zagraniu z reki dobierasz karty do 3, dopoki w talii sa jeszcze karty.",
     tutorialSlide2Title: "Gdy talia sie skonczy",
@@ -1226,6 +1260,9 @@ const I18N = {
     tutorialBtn: "Tutorial",
     rulesBtn: "Rules",
     sfxToggleLabel: "Sound",
+    settingsTitle: "Settings",
+    quitGameBtn: "Quit game",
+    confirmQuitGame: "Quit the current game?",
     tutorialSlide1Title: "Turn flow",
     tutorialSlide1Bullets: "You each take turns.\nPlay one or more cards of the same rank, of equal or higher value than the last card played.\nCan't (or don't want to) play? You pick up the whole pile.\nAfter playing from your hand, you draw back up to 3, as long as the deck still has cards.",
     tutorialSlide2Title: "Once the deck runs out",
@@ -5055,16 +5092,44 @@ window.__updateLangPopup(lang);
   const btn = document.getElementById('sfx-toggle-btn');
   const icon = document.getElementById('sfx-toggle-icon');
   const label = document.getElementById('sfx-toggle-label');
+  const title = document.getElementById('settings-title');
+  const quitBtn = document.getElementById('quit-game-btn');
+  const quitLabel = document.getElementById('quit-game-label');
+  const popup = document.getElementById('lang-popup');
 
   function refresh(){
     icon.textContent = sfxMuted ? '🔇' : '🔊';
     label.textContent = t('sfxToggleLabel');
+    title.textContent = t('settingsTitle');
+    quitLabel.textContent = t('quitGameBtn');
   }
 
   btn.addEventListener('click', ()=>{
     sfxMuted = !sfxMuted;
     try{ localStorage.setItem('shithead_sfx_muted', sfxMuted ? '1' : '0'); }catch(e){}
     refresh();
+  });
+
+  // "Quitter la partie" : seulement visible pendant une VRAIE partie (scene
+  // 'main'), pas depuis le menu/l'ecran de difficulte/le lobby en ligne.
+  // Recalcule a CHAQUE ouverture du popup (appele par settingsBtn, voir plus
+  // haut dans le fichier) plutot que suivi en continu via
+  // window.__onSceneChange -- ce pont est deja enchaine (wrapping) par
+  // plusieurs blocs plus bas dans le fichier, s'y inserer ici l'aurait fait
+  // ecraser silencieusement par le suivant. game.scene.isActive('main') est
+  // toujours a jour au moment du clic, pas besoin de suivi continu.
+  window.__refreshSettingsPanel = function(){
+    refresh();
+    quitBtn.style.display = (game && game.scene && game.scene.isActive('main')) ? 'flex' : 'none';
+  };
+
+  quitBtn.addEventListener('click', ()=>{
+    if(!window.confirm(t('confirmQuitGame'))) return;
+    popup.classList.remove('open');
+    // Quitte proprement une partie en ligne aussi : MainScene nettoie son
+    // canal Realtime sur son propre evenement 'shutdown', declenche
+    // automatiquement par ce scene.start (pas de logique reseau a dupliquer ici).
+    if(game && game.scene) game.scene.start('menu');
   });
 
   refresh();
