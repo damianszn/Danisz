@@ -911,7 +911,7 @@ const I18N = {
 
     betaLabel: "Beta",
     lastUpdateLabel: "MAJ",
-    accountHintBubble: "Cree-toi un compte : le online et le competitif t'y attendent !",
+    accountHintBubble: "Cree-toi un compte : le jeu en ligne et le competitif t'y attendent !",
     onlineLobbyTitle: "1v1 en ligne",
     onlineStatsLine: "{online} en ligne · {queue} en file d'attente",
     onlineNeedsAccountMsg: "Cree un profil (bouton Profil, menu precedent) pour jouer en ligne.",
@@ -1072,7 +1072,7 @@ const I18N = {
 
     betaLabel: "Beta",
     lastUpdateLabel: "Laatste update",
-    accountHintBubble: "Maak een profiel aan: online en competitief wachten op je!",
+    accountHintBubble: "Maak een profiel aan: online spelen en de competitieve modus wachten op je!",
     onlineLobbyTitle: "1v1 online",
     onlineStatsLine: "{online} online · {queue} in wachtrij",
     onlineNeedsAccountMsg: "Maak een profiel aan (knop Profiel, vorig menu) om online te spelen.",
@@ -1233,7 +1233,7 @@ const I18N = {
 
     betaLabel: "Beta",
     lastUpdateLabel: "Ostatnia aktualizacja",
-    accountHintBubble: "Zaloz konto: tryb online i rankingowy juz na Ciebie czekaja!",
+    accountHintBubble: "Zaloz konto: gra przez internet i rywalizacja juz na Ciebie czekaja!",
     onlineLobbyTitle: "1v1 online",
     onlineStatsLine: "{online} online · {queue} w kolejce",
     onlineNeedsAccountMsg: "Utworz profil (przycisk Profil, poprzednie menu), aby grac online.",
@@ -2980,9 +2980,19 @@ class OnlineLobbyScene extends Phaser.Scene {
   enterMatchedState(role){
     this.onlineRole = role;
     this.setMode('matched');
-    this.time.delayedCall(900, ()=>{
+    // Lance la recherche du pseudo adverse tout de suite, en parallele du
+    // court delai cosmetique ci-dessous (pas d'attente supplementaire dans
+    // le cas courant) -- affiche a cote de sa main une fois en jeu (voir
+    // MainScene). Echec silencieux (catch->null) : pas de pseudo affiche
+    // plutot que de bloquer l'entree en partie pour ca.
+    const pseudoPromise = window.DaniszOnline
+      ? window.DaniszOnline.getOpponentPseudo(this.lobbyId).catch(()=>null)
+      : Promise.resolve(null);
+    this.time.delayedCall(900, async ()=>{
       if(!this.scene.isActive()) return;
-      window.__onlineMatch = { lobbyId: this.lobbyId, role };
+      const opponentPseudo = await pseudoPromise;
+      if(!this.scene.isActive()) return;
+      window.__onlineMatch = { lobbyId: this.lobbyId, role, opponentPseudo };
       this.scene.start('main');
     });
   }
@@ -3181,6 +3191,7 @@ class MainScene extends Phaser.Scene {
     if(window.__onlineMatch){
       this.onlineRole = window.__onlineMatch.role;
       this.onlineLobbyId = window.__onlineMatch.lobbyId;
+      this.onlineOpponentPseudo = window.__onlineMatch.opponentPseudo || null;
       window.__onlineMatch = null;
     }
     if(this.onlineRole==='guest'){
@@ -4336,7 +4347,19 @@ class MainScene extends Phaser.Scene {
     // peut deborder assez loin a gauche avec une phrase longue -- a droite
     // le chiffre se faisait donc parfois recouvrir). Masque en mode
     // Cauchemar : aucune info de comptage n'est donnee dans ce mode.
-    if(difficulty!=='nightmare'){
+    // En 1v1 en ligne : le pseudo du vrai adversaire remplace/complete le
+    // simple chiffre, dans le MEME emplacement (deja verifie sans
+    // chevauchement avec l'eventail) plutot qu'une nouvelle etiquette
+    // au-dessus -- cette zone est tres exigue (bord haut des cartes a
+    // quelques px du bord de l'ecran), y ajouter une ligne separee la
+    // faisait chevaucher les cartes. Toujours affiche (meme en Cauchemar,
+    // contrairement au chiffre seul) : savoir qui on affronte n'est pas une
+    // info de triche a masquer.
+    if(this.onlineRole && this.onlineOpponentPseudo){
+      const oppLabel = difficulty!=='nightmare' ? `${this.onlineOpponentPseudo} (${aiHandCount})` : this.onlineOpponentPseudo;
+      this.label(W/2 - (fanCount-1)*aiFanSpacing/2 - 24 - 14, 50, oppLabel,
+        {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#ffd23f', originX:1, originY:0.5});
+    } else if(difficulty!=='nightmare'){
       this.label(W/2 - (fanCount-1)*aiFanSpacing/2 - 24 - 14, 50, `${aiHandCount}`,
         {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#e9ddc8', originX:1, originY:0.5});
     }
@@ -4691,7 +4714,15 @@ class MainScene extends Phaser.Scene {
       const angle = aiMaxAngle*u;
       this.addCardSprite(cx - (fanCount-1)*10*spaceScale + i*20*spaceScale, y, 'card_back', aiScale, null, false, angle);
     }
-    if(difficulty!=='nightmare'){
+    // En 1v1 en ligne : meme principe qu'en paysage (voir la-bas pour le
+    // pourquoi) -- le pseudo remplace/complete le chiffre dans le MEME
+    // emplacement plutot qu'une etiquette separee, cette zone n'a pas de
+    // marge verticale a donner.
+    if(this.onlineRole && this.onlineOpponentPseudo){
+      const oppLabel = difficulty!=='nightmare' ? `${this.onlineOpponentPseudo} (${aiHandCount})` : this.onlineOpponentPseudo;
+      this.label(cx - (fanCount-1)*10*spaceScale - 20*spaceScale - 12, aiFanY, oppLabel,
+        {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#ffd23f', originX:1, originY:0.5});
+    } else if(difficulty!=='nightmare'){
       this.label(cx - (fanCount-1)*10*spaceScale - 20*spaceScale - 12, aiFanY, `${aiHandCount}`,
         {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#e9ddc8', originX:1, originY:0.5});
     }
