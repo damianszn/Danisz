@@ -227,9 +227,27 @@
       if(seen.has(row.joueur1)) continue;
       seen.add(row.joueur1);
       rows.push({ pseudo: row.profiles ? row.profiles.pseudo : '?', tours: row.tours });
-      if(rows.length >= max) break;
+      // Pas de coupe a `max` ici : une egalite pile a la limite doit encore
+      // pouvoir etre detectee plus bas pour etendre le groupe ex-aequo.
+      // Marge large (max+20) pour ne jamais couper un gros peloton ex-aequo
+      // avant meme d'avoir pu le voir, sans pour autant re-parcourir les
+      // 200 lignes brutes a chaque fois.
+      if(rows.length >= max+20) break;
     }
-    return rows;
+    // Classement "1224" standard (comme un vrai podium de competition) :
+    // deux scores identiques partagent le meme rang, et le rang suivant
+    // saute d'autant -- deux ex-aequo en 2e, le suivant est 4e, pas 3e.
+    rows.forEach((row, i) => {
+      row.rank = (i>0 && row.tours===rows[i-1].tours) ? rows[i-1].rank : i+1;
+    });
+    // Coupe a `max` lignes affichees, mais jamais au milieu d'une egalite :
+    // si le rang au niveau de la limite se prolonge au-dela, on inclut tout
+    // le groupe ex-aequo plutot que d'en exclure arbitrairement une partie
+    // (sinon deux joueurs a egalite pourraient se voir attribuer des
+    // medailles differentes selon un simple hasard d'ordre de requete).
+    let cutoff = Math.min(max, rows.length);
+    while(cutoff < rows.length && rows[cutoff].rank === rows[cutoff-1].rank) cutoff++;
+    return rows.slice(0, cutoff);
   }
 
   // Medailles du joueur CONNECTE sur les 4 classements par difficulte
@@ -246,10 +264,11 @@
     const byMode = {};
     let gold = 0, silver = 0, bronze = 0;
     modes.forEach((mode, i) => {
-      const idx = lists[i].findIndex(row => row.pseudo === state.profile.pseudo);
-      if(idx === 0){ byMode[mode] = 'gold'; gold++; }
-      else if(idx === 1){ byMode[mode] = 'silver'; silver++; }
-      else if(idx === 2){ byMode[mode] = 'bronze'; bronze++; }
+      const row = lists[i].find(row => row.pseudo === state.profile.pseudo);
+      const rank = row ? row.rank : null;
+      if(rank === 1){ byMode[mode] = 'gold'; gold++; }
+      else if(rank === 2){ byMode[mode] = 'silver'; silver++; }
+      else if(rank === 3){ byMode[mode] = 'bronze'; bronze++; }
     });
     return { gold, silver, bronze, byMode };
   }

@@ -2877,18 +2877,30 @@ class ConfirmScene extends Phaser.Scene {
 
     // Medaille (podium, rangs 1-3) plutot qu'un simple chiffre -- meme
     // convention que le panneau "Tes meilleurs scores" du profil, voir
-    // fetchMyMedals() dans account.js.
+    // fetchMyMedals() dans account.js. Le rang vient de row.rank (calcule
+    // par fetchModeLeaderboard, classement "1224" -- des ex-aequo partagent
+    // le meme rang/la meme medaille, voir schema_online.sql/account.js) et
+    // non plus de l'index de boucle : deux joueurs a egalite affichent le
+    // meme rang, le suivant saute directement au bon numero.
     const MEDALS = ['🥇','🥈','🥉'];
-    const rowStep = Math.max(24, Math.min(34, (h - (listTop-y) - 30) / 10));
+    // this.leaderboardRows peut depasser 10 lignes quand une egalite
+    // chevauche la limite d'affichage habituelle (fetchModeLeaderboard
+    // etend le groupe complet plutot que de trancher au milieu) -- la
+    // hauteur de ligne s'adapte donc au nombre reel de lignes plutot qu'a
+    // un /10 fixe, pour ne pas deborder du panneau.
+    const rowStep = Math.max(16, Math.min(34, (h - (listTop-y) - 30) / this.leaderboardRows.length));
+    const rowFont = rowStep < 20 ? 15 : rowStep < 26 ? 17 : 19;
     this.leaderboardRows.forEach((row, i)=>{
       const ry = listTop + 28 + i*rowStep;
-      const rankColor = i===0 ? '#ffd23f' : i===1 ? '#c9d6e3' : i===2 ? '#cd8032' : '#9aa8b0';
-      this.add.text(colRankX, ry, i<3 ? MEDALS[i] : `${i+1}`,
-        {fontFamily:'"VT323"', fontSize: (i<3?'21px':'19px'), color:rankColor}).setOrigin(0.5,0);
+      const rank = row.rank;
+      const isPodium = rank<=3;
+      const rankColor = rank===1 ? '#ffd23f' : rank===2 ? '#c9d6e3' : rank===3 ? '#cd8032' : '#9aa8b0';
+      this.add.text(colRankX, ry, isPodium ? MEDALS[rank-1] : `${rank}`,
+        {fontFamily:'"VT323"', fontSize: (isPodium?rowFont+2:rowFont)+'px', color:rankColor}).setOrigin(0.5,0);
       this.add.text(colPseudoX, ry, row.pseudo,
-        {fontFamily:'"VT323"', fontSize:'19px', color:'#e9ddc8'});
+        {fontFamily:'"VT323"', fontSize:rowFont+'px', color:'#e9ddc8'});
       this.add.text(colTurnsX, ry, `${row.tours}`,
-        {fontFamily:'"VT323"', fontSize:'19px', color:'#e9ddc8'}).setOrigin(1,0);
+        {fontFamily:'"VT323"', fontSize:rowFont+'px', color:'#e9ddc8'}).setOrigin(1,0);
     });
   }
 
