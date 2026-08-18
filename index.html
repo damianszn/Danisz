@@ -438,7 +438,7 @@
   </div>
 </div>
 <div id="online-join-panel">
-  <input id="online-join-input" maxlength="6" autocomplete="off" autocapitalize="characters">
+  <input id="online-join-input" maxlength="6" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false">
   <button id="online-join-btn"></button>
   <div id="online-join-error"></div>
 </div>
@@ -5356,6 +5356,19 @@ window.__updateLangPopup(lang);
     scene.joinInvite(code, joinError);
   });
   joinInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') joinBtn.click(); });
+  // Filet de securite pour le copier-coller au clavier tactile : constate
+  // que le code colle pouvait ressortir modifie (autocorrection/clavier
+  // predictif Android qui "corrige" une suite alphanumerique en la
+  // remplacant partiellement, meme avec autocorrect=off/spellcheck=false --
+  // pas toujours respecte par tous les claviers virtuels). Le code genere
+  // (create_invite_lobby, cote serveur) n'est QUE de l'hexadecimal
+  // majuscule sur 6 caracteres -- on filtre donc systematiquement la valeur
+  // a chaque frappe/collage pour ne garder que ca, quoi que le clavier ait
+  // pu essayer d'y ajouter/substituer.
+  joinInput.addEventListener('input', ()=>{
+    const clean = joinInput.value.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 6);
+    if(clean !== joinInput.value) joinInput.value = clean;
+  });
 
   refreshJoinTexts();
   const prevApplyLang2 = window.__applyLang;
