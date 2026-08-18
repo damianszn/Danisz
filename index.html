@@ -5673,7 +5673,19 @@ window.__updateLangPopup(lang);
     const state = window.DaniszAccount ? window.DaniszAccount.getState() : {session:null, profile:null};
     btn.title = t('accountBtnTitle');
     btn.classList.toggle('connected', !!state.profile);
-    btnLabel.textContent = state.profile ? state.profile.pseudo : t('accountMenuLabel');
+    // Connecte : prefixe le pseudo par l'emoji du palier Elo et colore le
+    // texte avec sa couleur (meme convention que le nom de l'adversaire en
+    // 1v1 en ligne et le bloc palier du lobby, voir eloTier() plus haut) --
+    // le palier est ainsi visible d'un coup d'oeil des le menu, pas
+    // seulement une fois en partie.
+    if(state.profile){
+      const tier = eloTier(state.profile.elo);
+      btnLabel.textContent = `${tier.emoji} ${state.profile.pseudo}`;
+      btnLabel.style.color = tier.color;
+    } else {
+      btnLabel.textContent = t('accountMenuLabel');
+      btnLabel.style.color = '';
+    }
     // Bulle d'incitation a se creer un compte : uniquement tant que non
     // connecte, disparait immediatement des que state.profile existe (voir
     // signIn/signUp -- notify() declenche refreshAccountUI() a chaque
