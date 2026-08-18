@@ -756,10 +756,16 @@
   // carte...) pour y passer, sans bloquer ni retarder ce clic lui-meme
   // (aucun preventDefault). Reserve au tactile : sur desktop, "paysage"
   // decrit juste un ecran large normal, pas une contrainte a corriger.
+  // navigator.maxTouchPoints seul ne suffit pas : un PC/laptop a ecran
+  // tactile (courant sous Windows) le declare aussi, et se faisait forcer en
+  // plein ecran au premier clic alors que ce correctif ne visait QUE le vrai
+  // mobile (barre d'adresse qui bouffe la hauteur en paysage). On exige donc
+  // EN PLUS un user-agent mobile reel.
   const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  const isMobileUA = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
   function isLandscapeNow(){ return window.innerWidth > window.innerHeight; }
   function autoFullscreenOnGesture(){
-    if(!isTouchDevice || isFs() || !isLandscapeNow()) return;
+    if(!isTouchDevice || !isMobileUA || isFs() || !isLandscapeNow()) return;
     requestFs();
   }
   document.addEventListener('click', autoFullscreenOnGesture, true);
@@ -955,7 +961,7 @@ const I18N = {
     diffNightmareRules: "✋ Main libre, glisse pour réordonner\n🧠 IA avancée, anticipe mieux\n🙈 Compteurs masqués (main adverse + pile)\n🚫 \"Prendre\" impossible si tu as un coup jouable",
 
     betaLabel: "Beta",
-    lastUpdateLabel: "MAJ",
+    lastUpdateLabel: "Dernière mise à jour :",
     accountHintBubble: "Crée-toi un compte : le jeu en ligne et le compétitif t'y attendent !",
     onlineLobbyTitle: "1v1 en ligne",
     onlineStatsLine: "{online} en ligne · {queue} en file d'attente",
@@ -1131,7 +1137,7 @@ const I18N = {
     diffNightmareRules: "✋ Vrije handvolgorde, sleep om te herschikken\n🧠 Geavanceerde AI, denkt vooruit\n🙈 Tellers verborgen (hand tegenstander + stapel)\n🚫 \"Pakken\" onmogelijk als je kan spelen",
 
     betaLabel: "Beta",
-    lastUpdateLabel: "Laatste update",
+    lastUpdateLabel: "Laatste update:",
     accountHintBubble: "Maak een profiel aan: online spelen en de competitieve modus wachten op je!",
     onlineLobbyTitle: "1v1 online",
     onlineStatsLine: "{online} online · {queue} in wachtrij",
@@ -1307,7 +1313,7 @@ const I18N = {
     diffNightmareRules: "✋ Wolny układ ręki, przeciągnij by zmienić\n🧠 Zaawansowane AI, planuje z wyprzedzeniem\n🙈 Liczniki ukryte (ręka przeciwnika + stos)\n🚫 Nie można \"Wziąć\", jeśli masz możliwy ruch",
 
     betaLabel: "Beta",
-    lastUpdateLabel: "Ostatnia aktualizacja",
+    lastUpdateLabel: "Ostatnia aktualizacja:",
     accountHintBubble: "Załóż konto: gra przez internet i rywalizacja już na Ciebie czekają!",
     onlineLobbyTitle: "1v1 online",
     onlineStatsLine: "{online} online · {queue} w kolejce",
@@ -1483,7 +1489,7 @@ const I18N = {
     diffNightmareRules: "✋ Free hand order, drag to reorder\n🧠 Advanced AI, plans ahead\n🙈 Counters hidden (opponent's hand + pile)\n🚫 Can't \"Take\" if you have a playable move",
 
     betaLabel: "Beta",
-    lastUpdateLabel: "Last update",
+    lastUpdateLabel: "Last update:",
     accountHintBubble: "Create an account: online and competitive play await!",
     onlineLobbyTitle: "1v1 online",
     onlineStatsLine: "{online} online · {queue} in queue",
@@ -2303,7 +2309,7 @@ function maybeReportMatchResult(onlineRole, onlineLobbyId){
 }
 // Date de derniere mise a jour du jeu, affichee en bulle sur l'ecran de
 // demarrage. A mettre a jour a chaque nouvelle session de modifications.
-const LAST_UPDATE = "18 août 2026";
+const LAST_UPDATE = "19/08/2026";
 
 // Attend que les 2 polices web (Press Start 2P / VT323) soient VRAIMENT
 // chargees avant d'appeler cb. document.fonts.ready seul ne suffit pas ici :
@@ -4478,6 +4484,32 @@ class MainScene extends Phaser.Scene {
   // layoutAndDraw().
   drawAll(){
     maybeReportMatchResult(this.onlineRole, this.onlineLobbyId);
+    // drawAllLandscape()/drawAllPortrait() (plus bas) detruisent TOUS les
+    // sprites, y compris une eventuelle carte encore en vol optimiste (voir
+    // startOptimisticFlight) -- et tuent son tween au passage (killTweensOf,
+    // meme raison que le crash setTexture corrige plus haut). Ca veut dire
+    // que son onComplete normal ne se declenchera plus JAMAIS : sans ce
+    // court-circuit ICI, animateResult() (une fois la confirmation de
+    // l'hote arrivee) resterait a attendre indefiniment une notification de
+    // fin qui ne viendra jamais -- observe sur mobile (un simple resize,
+    // tres frequent la-bas, suffit a interrompre le vol) : le tour semblait
+    // fige 1-2 secondes, la carte jouee restait visible dans la main, puis
+    // plusieurs tours s'affichaient d'un coup des qu'un evenement plus tard
+    // relancait enfin un redessin. On resout donc nous-memes chaque vol
+    // optimiste encore en attente juste avant de tout detruire : soit rien
+    // n'attendait dessus (aucun effet), soit animateResult() attendait deja
+    // (optimistic.callbacks), et sa suite s'execute immediatement au lieu
+    // de rester coincee.
+    if(this.optimisticFlights){
+      Object.values(this.optimisticFlights).forEach(entry=>{
+        if(!entry.done){
+          entry.done = true;
+          entry.callbacks.forEach(cb=>cb());
+          entry.callbacks = [];
+        }
+      });
+      this.optimisticFlights = {};
+    }
     if(this.isPortrait) return this.drawAllPortrait();
     return this.drawAllLandscape();
   }
