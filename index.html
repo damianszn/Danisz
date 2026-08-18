@@ -159,9 +159,28 @@
     display:none;
     position:fixed; top:40px; right:6px; z-index:10001;
     background:rgba(12,20,16,0.92); border:1px solid rgba(215,164,92,0.5);
-    border-radius:6px; padding:12px; width:220px; box-sizing:border-box;
+    border-radius:6px; padding:12px; width:260px; box-sizing:border-box;
     font-family:'VT323',monospace; color:#e9ddc8;
+    max-height:82vh; overflow-y:auto;
   }
+  #account-elo-display{ font-size:15px; color:#9aa8b0; margin-bottom:8px; }
+  #account-logged-tabs{ display:flex; gap:4px; margin-bottom:10px; }
+  /* Historique de parties 1v1 en ligne : une ligne compacte par match
+     (adversaire + resultat, puis tours + elo + delta en dessous) plutot
+     qu'un vrai tableau -- le panneau reste etroit, une grille a colonnes
+     fixes aurait tasse le pseudo de l'adversaire (jusqu'a 20 caracteres). */
+  .online-match-row{
+    padding:7px 0; border-bottom:1px solid rgba(215,164,92,0.2);
+    font-size:15px;
+  }
+  .online-match-row:last-child{ border-bottom:none; }
+  .online-match-row .row1{ display:flex; justify-content:space-between; gap:8px; }
+  .online-match-row .opponent{ color:#e9ddc8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .online-match-row .result-win{ color:#5fdc7a; font-weight:bold; }
+  .online-match-row .result-loss{ color:#ff5f5f; font-weight:bold; }
+  .online-match-row .row2{ display:flex; justify-content:space-between; gap:8px; color:#9aa8b0; font-size:13px; margin-top:2px; }
+  .online-match-row .delta-pos{ color:#5fdc7a; }
+  .online-match-row .delta-neg{ color:#ff5f5f; }
   #account-panel.open{ display:block; }
   #account-panel .account-label{ font-size:16px; margin-bottom:8px; }
   #account-panel input{
@@ -534,9 +553,19 @@
   </div>
   <div id="account-logged" style="display:none">
     <div id="account-pseudo-display"></div>
-    <div id="account-stats"></div>
-    <div id="account-topscores-title"></div>
-    <div id="account-topscores"></div>
+    <div id="account-elo-display"></div>
+    <div id="account-logged-tabs">
+      <button id="account-logged-tab-profile" class="account-tab"></button>
+      <button id="account-logged-tab-history" class="account-tab"></button>
+    </div>
+    <div id="account-profile-view">
+      <div id="account-stats"></div>
+      <div id="account-topscores-title"></div>
+      <div id="account-topscores"></div>
+    </div>
+    <div id="account-history-view" style="display:none">
+      <div id="account-history-list"></div>
+    </div>
     <button id="account-signout-btn" class="secondary"></button>
     <button id="account-delete-btn" class="danger"></button>
   </div>
@@ -893,6 +922,14 @@ const I18N = {
     accountErrorConfirmEmail: "Vérifie tes mails pour confirmer ton compte, puis connecte-toi.",
     accountErrorUnknown: "Une erreur est survenue, réessaie.",
     accountStats: "{wins} victoire(s) sur {games} partie(s)",
+    accountEloLabel: "Elo : {elo}",
+    accountTabProfileView: "Profil",
+    accountTabHistory: "Historique",
+    historyWin: "Victoire",
+    historyLoss: "Défaite",
+    historyTours: "{n} tours",
+    historyEloAfter: "{elo} elo",
+    historyEmpty: "Aucune partie en ligne pour l'instant.",
     accountTopScoresTitle: "Tes meilleurs scores",
     leaderboardTitle: "Classement",
     leaderboardLoading: "Chargement...",
@@ -1054,6 +1091,14 @@ const I18N = {
     accountErrorConfirmEmail: "Bevestig je account via de e-mail die je hebt ontvangen en log dan in.",
     accountErrorUnknown: "Er is een fout opgetreden, probeer opnieuw.",
     accountStats: "{wins} overwinning(en) op {games} partij(en)",
+    accountEloLabel: "Elo: {elo}",
+    accountTabProfileView: "Profiel",
+    accountTabHistory: "Geschiedenis",
+    historyWin: "Overwinning",
+    historyLoss: "Nederlaag",
+    historyTours: "{n} beurten",
+    historyEloAfter: "{elo} elo",
+    historyEmpty: "Nog geen online partijen.",
     accountTopScoresTitle: "Jouw beste scores",
     leaderboardTitle: "Klassement",
     leaderboardLoading: "Laden...",
@@ -1215,6 +1260,14 @@ const I18N = {
     accountErrorConfirmEmail: "Sprawdź maila, aby potwierdzić konto, a następnie się zaloguj.",
     accountErrorUnknown: "Wystąpił błąd, spróbuj ponownie.",
     accountStats: "{wins} zwycięstw(o) na {games} gier",
+    accountEloLabel: "Elo: {elo}",
+    accountTabProfileView: "Profil",
+    accountTabHistory: "Historia",
+    historyWin: "Zwycięstwo",
+    historyLoss: "Porażka",
+    historyTours: "{n} tur",
+    historyEloAfter: "{elo} elo",
+    historyEmpty: "Brak rozegranych gier online.",
     accountTopScoresTitle: "Twoje najlepsze wyniki",
     leaderboardTitle: "Ranking",
     leaderboardLoading: "Ładowanie...",
@@ -1376,6 +1429,14 @@ const I18N = {
     accountErrorConfirmEmail: "Check your email to confirm your account, then log in.",
     accountErrorUnknown: "Something went wrong, try again.",
     accountStats: "{wins} win(s) out of {games} game(s)",
+    accountEloLabel: "Elo: {elo}",
+    accountTabProfileView: "Profile",
+    accountTabHistory: "History",
+    historyWin: "Win",
+    historyLoss: "Loss",
+    historyTours: "{n} turns",
+    historyEloAfter: "{elo} elo",
+    historyEmpty: "No online matches yet.",
     accountTopScoresTitle: "Your top scores",
     leaderboardTitle: "Leaderboard",
     leaderboardLoading: "Loading...",
@@ -2166,16 +2227,29 @@ let difficulty = 'normal';
 // fois par partie (garde via gameState.resultSubmitted, remis a false par
 // createGame()). No-op silencieux tant qu'aucun profil n'existe : le mode
 // offline ne depend jamais de ca pour fonctionner (voir js/account.js).
-function maybeReportMatchResult(isOnline){
+function maybeReportMatchResult(onlineRole, onlineLobbyId){
   if(!gameState.winner || gameState.resultSubmitted) return;
   gameState.resultSubmitted = true;
   if(gameState.winner==='player') sfxVictory(); else sfxDefeat();
-  // 1v1 en ligne : pas encore d'enregistrement de resultat (schema/RPC
-  // dedie a construire, distinct de record_ai_match qui suppose un
-  // adversaire IA -- l'appeler ici avec `difficulty` [perime, jamais mis a
-  // jour pour ce mode] pollueurait le classement solo avec un faux match
-  // IA). Son victoire/defaite seul pour l'instant.
-  if(isOnline) return;
+  if(onlineRole){
+    // Elo 1v1 en ligne : seul l'HOTE rapporte le resultat (jamais l'invite,
+    // qui compterait le meme match une deuxieme fois -- voir
+    // report_online_match() dans schema_online.sql pour le detail du
+    // modele de confiance). "player" est TOUJOURS "moi-meme" ici, cote
+    // hote comme cote invite (voir swapStatePerspective) -- pas besoin de
+    // distinguer les deux cotes pour savoir qui a gagne.
+    if(onlineRole==='host' && window.DaniszOnline){
+      window.DaniszOnline.reportMatchResult(onlineLobbyId, gameState.winner==='player', gameState.turnCount)
+        .then(res=>{
+          if(res.ok && window.DaniszAccount) window.DaniszAccount.refreshProfile();
+        })
+        .catch(e=>console.warn('[Danisz] online match report failed', e));
+    }
+    return;
+  }
+  // Distinct de record_ai_match (mode offline vs IA) : `difficulty` n'a pas
+  // de sens pour une partie en ligne, l'appeler ici pollueurait le
+  // classement solo avec un faux match IA.
   if(window.DaniszAccount && window.DaniszAccount.hasAccount()){
     window.DaniszAccount.reportAiMatch(difficulty, gameState.winner==='player', gameState.turnCount)
       .catch(e=>console.warn('[Danisz] score report failed', e));
@@ -4246,7 +4320,7 @@ class MainScene extends Phaser.Scene {
   // Dispatch vers la bonne mise en page selon l'orientation detectee dans
   // layoutAndDraw().
   drawAll(){
-    maybeReportMatchResult(!!this.onlineRole);
+    maybeReportMatchResult(this.onlineRole, this.onlineLobbyId);
     if(this.isPortrait) return this.drawAllPortrait();
     return this.drawAllLandscape();
   }
@@ -5398,6 +5472,12 @@ window.__updateLangPopup(lang);
   const errorBox = document.getElementById('account-error');
   const loggedBox = document.getElementById('account-logged');
   const pseudoDisplay = document.getElementById('account-pseudo-display');
+  const eloDisplay = document.getElementById('account-elo-display');
+  const loggedTabProfile = document.getElementById('account-logged-tab-profile');
+  const loggedTabHistory = document.getElementById('account-logged-tab-history');
+  const profileView = document.getElementById('account-profile-view');
+  const historyView = document.getElementById('account-history-view');
+  const historyList = document.getElementById('account-history-list');
   const statsBox = document.getElementById('account-stats');
   const topScoresTitle = document.getElementById('account-topscores-title');
   const topScoresBox = document.getElementById('account-topscores');
@@ -5462,9 +5542,13 @@ window.__updateLangPopup(lang);
       guestBox.style.display = 'none';
       loggedBox.style.display = 'block';
       pseudoDisplay.textContent = state.profile.pseudo;
+      eloDisplay.textContent = t('accountEloLabel', {elo: state.profile.elo});
+      loggedTabProfile.textContent = t('accountTabProfileView');
+      loggedTabHistory.textContent = t('accountTabHistory');
       statsBox.textContent = t('accountStats', {wins: state.profile.victoires, games: state.profile.parties_jouees});
       topScoresTitle.textContent = t('accountTopScoresTitle');
       ensureTopScores(state.profile);
+      if(loggedTab==='history') ensureHistory(state.profile);
     } else {
       guestBox.style.display = 'block';
       loggedBox.style.display = 'none';
@@ -5622,6 +5706,25 @@ window.__updateLangPopup(lang);
   let topScoresKey = null; // `${profileId}:${parties_jouees}` -- refetch des qu'une nouvelle partie est jouee
   let topScoresData = null;
 
+  // Onglets "Profil" (stats + meilleurs scores, deja existant) /
+  // "Historique" (5 dernieres parties 1v1 en ligne, nouveau) dans le
+  // panneau du joueur CONNECTE -- meme pattern que les onglets
+  // inscription/connexion du panneau invite, juste un deuxieme jeu.
+  let loggedTab = 'profile'; // 'profile' | 'history'
+  function setLoggedTab(tab){
+    loggedTab = tab;
+    loggedTabProfile.classList.toggle('active', tab==='profile');
+    loggedTabHistory.classList.toggle('active', tab==='history');
+    profileView.style.display = tab==='profile' ? 'block' : 'none';
+    historyView.style.display = tab==='history' ? 'block' : 'none';
+    if(tab==='history'){
+      const st = window.DaniszAccount ? window.DaniszAccount.getState() : null;
+      if(st && st.profile) ensureHistory(st.profile);
+    }
+  }
+  loggedTabProfile.addEventListener('click', (e)=>{ e.stopPropagation(); setLoggedTab('profile'); });
+  loggedTabHistory.addEventListener('click', (e)=>{ e.stopPropagation(); setLoggedTab('history'); });
+
   function renderTopScores(){
     topScoresBox.innerHTML = '';
     DIFF_KEYS.forEach(([mode, labelKey])=>{
@@ -5648,6 +5751,80 @@ window.__updateLangPopup(lang);
       if(topScoresKey!==key) return; // profil/partie a change entre-temps, resultat perime
       topScoresData = data;
       renderTopScores();
+    });
+  }
+
+  // Historique des 5 dernieres parties 1v1 en ligne (voir
+  // fetchMyOnlineHistory dans account.js). Cle de cache basee sur l'elo
+  // (pas parties_jouees, qui ne compte que le solo vs IA) : change des
+  // qu'une nouvelle partie en ligne est rapportee, donc l'affichage se
+  // remet a jour tout seul sans logique supplementaire a ecrire.
+  let historyKey = null;
+  let historyData = null;
+
+  function formatMatchRow(m){
+    const row = document.createElement('div');
+    row.className = 'online-match-row';
+
+    const row1 = document.createElement('div');
+    row1.className = 'row1';
+    const opp = document.createElement('span');
+    opp.className = 'opponent';
+    opp.textContent = m.opponentPseudo;
+    const result = document.createElement('span');
+    result.className = m.won ? 'result-win' : 'result-loss';
+    result.textContent = m.won ? t('historyWin') : t('historyLoss');
+    row1.appendChild(opp);
+    row1.appendChild(result);
+
+    const row2 = document.createElement('div');
+    row2.className = 'row2';
+    const turnsSpan = document.createElement('span');
+    turnsSpan.textContent = t('historyTours', {n: m.tours});
+    const eloSpan = document.createElement('span');
+    const deltaSign = m.eloDelta >= 0 ? '+' : '';
+    const deltaClass = m.eloDelta >= 0 ? 'delta-pos' : 'delta-neg';
+    eloSpan.textContent = t('historyEloAfter', {elo: m.myEloAfter}) + ' ';
+    const deltaEl = document.createElement('span');
+    deltaEl.className = deltaClass;
+    deltaEl.textContent = `(${deltaSign}${m.eloDelta})`;
+    eloSpan.appendChild(deltaEl);
+    row2.appendChild(turnsSpan);
+    row2.appendChild(eloSpan);
+
+    row.appendChild(row1);
+    row.appendChild(row2);
+    return row;
+  }
+
+  function renderHistory(){
+    historyList.innerHTML = '';
+    if(historyData===null){
+      const p = document.createElement('div');
+      p.textContent = '…';
+      historyList.appendChild(p);
+      return;
+    }
+    if(historyData.length===0){
+      const p = document.createElement('div');
+      p.textContent = t('historyEmpty');
+      historyList.appendChild(p);
+      return;
+    }
+    historyData.forEach(m=>historyList.appendChild(formatMatchRow(m)));
+  }
+
+  function ensureHistory(profile){
+    const key = profile.id + ':' + profile.elo;
+    if(historyKey===key && historyData!==null){ renderHistory(); return; }
+    historyKey = key;
+    historyData = null;
+    renderHistory();
+    if(!window.DaniszAccount) return;
+    window.DaniszAccount.fetchMyOnlineHistory().then(data=>{
+      if(historyKey!==key) return;
+      historyData = data;
+      renderHistory();
     });
   }
 

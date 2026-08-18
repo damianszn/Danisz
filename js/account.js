@@ -171,6 +171,14 @@
     notify();
   }
 
+  // Recharge le profil (elo notamment) depuis le serveur -- utilise apres
+  // report_online_match() pour que l'elo affiche reflete immediatement le
+  // changement, sans attendre le prochain evenement onAuthStateChange.
+  async function refreshProfile(){
+    await loadProfile();
+    notify();
+  }
+
   // Meilleurs scores (nombre de tours minimum, parties gagnees uniquement)
   // du joueur CONNECTE, un par difficulte -- affiche dans son panneau
   // "Your top scores". Une seule requete (toutes ses victoires), reduite
@@ -224,6 +232,38 @@
     return rows;
   }
 
+  // Historique des 5 dernieres parties 1v1 en ligne du joueur CONNECTE :
+  // adversaire, tours, resultat, elo apres la partie, delta d'elo gagne/
+  // perdu -- affiche dans l'onglet "Historique" du panneau profil. winner
+  // et loser sont deux FK distinctes vers profiles ; PostgREST a besoin du
+  // nom exact de la contrainte pour savoir laquelle utiliser a chaque
+  // embedding (nommage par defaut Postgres : <table>_<colonne>_fkey, voir
+  // schema_online.sql -- aucun nom explicite donne aux contraintes, donc
+  // c'est ce nommage automatique qui s'applique).
+  async function fetchMyOnlineHistory(){
+    if(!state.session) return [];
+    await init();
+    const myId = state.session.user.id;
+    const { data, error } = await supabase
+      .from('online_matches')
+      .select('winner, loser, winner_elo_after, loser_elo_after, winner_elo_before, loser_elo_before, tours, created_at, winner_profile:profiles!online_matches_winner_fkey(pseudo), loser_profile:profiles!online_matches_loser_fkey(pseudo)')
+      .or(`winner.eq.${myId},loser.eq.${myId}`)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    if(error){ console.warn('[DaniszAccount] online history fetch failed', error); return []; }
+    return data.map(row => {
+      const won = row.winner === myId;
+      const opponentPseudo = won
+        ? (row.loser_profile ? row.loser_profile.pseudo : '?')
+        : (row.winner_profile ? row.winner_profile.pseudo : '?');
+      const myEloAfter = won ? row.winner_elo_after : row.loser_elo_after;
+      const eloDelta = won
+        ? (row.winner_elo_after - row.winner_elo_before)
+        : (row.loser_elo_after - row.loser_elo_before);
+      return { opponentPseudo, tours: row.tours, won, myEloAfter, eloDelta, createdAt: row.created_at };
+    });
+  }
+
   function hasAccount(){ return !!(state.session && state.profile); }
   function getState(){ return state; }
   function onChange(fn){ listeners.push(fn); if(ready) fn(state); }
@@ -234,6 +274,6 @@
   // mais etat memoire separe).
   async function getClient(){ await init(); return supabase; }
 
-  window.DaniszAccount = { signUp, signIn, signOut, deleteAccount, setPseudo, reportAiMatch, fetchMyTopScores, fetchModeLeaderboard, hasAccount, getState, onChange, getClient };
+  window.DaniszAccount = { signUp, signIn, signOut, deleteAccount, setPseudo, reportAiMatch, refreshProfile, fetchMyTopScores, fetchModeLeaderboard, fetchMyOnlineHistory, hasAccount, getState, onChange, getClient };
   init().catch(e=>console.error('[DaniszAccount] init failed', e));
 })();

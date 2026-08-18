@@ -82,6 +82,28 @@
     return profile.pseudo;
   }
 
+  // Rapporte le resultat d'une partie 1v1 en ligne terminee -- Elo calcule
+  // et applique cote serveur (voir report_online_match() dans
+  // schema_online.sql), jamais par le client. p_i_won est du point de vue
+  // de L'APPELANT (auth.uid()) : pas besoin de connaitre l'uuid Supabase de
+  // l'adversaire, la fonction le retrouve via la lobby. Seul l'HOTE doit
+  // appeler ceci (voir maybeReportMatchResult dans index.html) -- jamais
+  // l'invite, sinon le meme resultat serait compte deux fois.
+  // { ok:true, eloDelta, myEloAfter } ou { error:'unknown' }.
+  async function reportMatchResult(lobbyId, iWon, tours){
+    const sb = await getClient();
+    const { data, error } = await sb.rpc('report_online_match', {
+      p_lobby_id: lobbyId, p_i_won: iWon, p_tours: tours
+    });
+    if(error){ console.warn('[DaniszOnline] report_online_match failed', error); return { error: 'unknown' }; }
+    const row = data[0];
+    return {
+      ok: true,
+      eloDelta: iWon ? row.elo_delta : -row.elo_delta,
+      myEloAfter: iWon ? row.winner_elo_after : row.loser_elo_after
+    };
+  }
+
   // Ecoute UNE lobby precise (celle qu'on vient de creer) : cb(row) est
   // appele des qu'un adversaire la rejoint (UPDATE -> status='active').
   // Utilise par le joueur en ATTENTE seulement (celui qui a matched=false
@@ -246,7 +268,7 @@
   }
 
   window.DaniszOnline = {
-    joinRandomQueue, leaveQueue, createInviteLobby, joinInviteLobby, watchLobby, stopWatching, getOpponentPseudo,
+    joinRandomQueue, leaveQueue, createInviteLobby, joinInviteLobby, watchLobby, stopWatching, getOpponentPseudo, reportMatchResult,
     joinPresence, leavePresence, getQueueCount,
     joinGameChannel, announceReady, sendMove, sendState, leaveGameChannel
   };

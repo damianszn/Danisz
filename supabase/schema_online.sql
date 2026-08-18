@@ -183,3 +183,116 @@ $$;
 
 revoke all on function public.get_queue_count() from public;
 grant execute on function public.get_queue_count() to authenticated;
+
+/* =========================================================
+   PHASE 4 : Elo + historique des parties 1v1 en ligne.
+   profiles.elo existait deja (colonne prevue des le depart, jamais
+   utilisee jusqu'ici) -- rien a ajouter cote profils, juste la table de
+   log + la fonction qui la remplit et met a jour les deux elo d'un coup.
+   ========================================================= */
+
+create table public.online_matches (
+  id bigint generated always as identity primary key,
+  lobby_id uuid not null references public.lobbies(id) on delete cascade,
+  winner uuid not null references public.profiles(id) on delete cascade,
+  loser uuid not null references public.profiles(id) on delete cascade,
+  winner_elo_before integer not null,
+  loser_elo_before integer not null,
+  winner_elo_after integer not null,
+  loser_elo_after integer not null,
+  tours integer not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.online_matches enable row level security;
+
+-- Chacun ne voit que les parties ou il a joue (gagnant ou perdant) -- pas
+-- de raison d'exposer l'historique complet de tout le monde.
+create policy "players see their own online matches"
+  on public.online_matches for select
+  using (auth.uid() = winner or auth.uid() = loser);
+
+-- Pas de policy insert/update directe : uniquement via report_online_match()
+-- ci-dessous (security definer), meme logique que record_ai_match plus haut
+-- -- un client ne peut pas s'auto-declarer vainqueur en ecrivant une ligne
+-- a la main, ni modifier son propre elo directement.
+
+-- Calcule et applique l'Elo des deux joueurs d'une lobby a la fin d'une
+-- partie 1v1 en ligne, enregistre la ligne d'historique, et renvoie le
+-- resultat pour affichage immediat cote appelant si besoin.
+--
+-- p_i_won est du point de vue de l'APPELANT (auth.uid()) : evite d'avoir a
+-- lui faire connaitre l'uuid Supabase de son adversaire (jamais recupere
+-- cote client jusqu'ici, voir getOpponentPseudo qui ne renvoie que le
+-- pseudo) -- l'adversaire est retrouve ici via la ligne lobbies.
+--
+-- Modele "cote hote uniquement" : seul l'hote (voir js/online.js,
+-- MainScene) appelle cette fonction, jamais l'invite -- eviterait un
+-- double comptage si les deux clients rapportaient chacun le meme
+-- resultat. Coherent avec le reste de l'architecture 1v1 en ligne (l'hote
+-- fait autorite, personne ne valide cote serveur -- "trust the client",
+-- deja le choix assume pour les coups eux-memes, voir plus haut dans ce
+-- fichier).
+--
+-- Formule Elo standard, K=32 (assez reactif pour un petit groupe de
+-- joueurs, pas une ligue competitive) : delta = round(K * (1 - probabilite
+-- de victoire attendue du gagnant avant la partie)). Plancher a 1 point :
+-- meme un gagnant tres favori doit voir *quelque chose* bouger, un delta a
+-- 0 se lirait comme un bug plutot que comme "match totalement attendu".
+create or replace function public.report_online_match(p_lobby_id uuid, p_i_won boolean, p_tours integer)
+returns table(elo_delta integer, winner_elo_after integer, loser_elo_after integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_lobby public.lobbies%rowtype;
+  v_opponent uuid;
+  v_winner uuid;
+  v_loser uuid;
+  v_winner_elo integer;
+  v_loser_elo integer;
+  v_expected double precision;
+  v_delta integer;
+  v_k constant integer := 32;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_lobby from public.lobbies where id = p_lobby_id;
+  if not found then
+    raise exception 'lobby_not_found';
+  end if;
+  if auth.uid() <> v_lobby.joueur1 and auth.uid() <> v_lobby.joueur2 then
+    raise exception 'not_a_participant';
+  end if;
+
+  v_opponent := case when auth.uid() = v_lobby.joueur1 then v_lobby.joueur2 else v_lobby.joueur1 end;
+  if v_opponent is null then
+    raise exception 'no_opponent';
+  end if;
+
+  v_winner := case when p_i_won then auth.uid() else v_opponent end;
+  v_loser := case when p_i_won then v_opponent else auth.uid() end;
+
+  select elo into v_winner_elo from public.profiles where id = v_winner;
+  select elo into v_loser_elo from public.profiles where id = v_loser;
+
+  v_expected := 1.0 / (1.0 + power(10.0, (v_loser_elo - v_winner_elo) / 400.0));
+  v_delta := greatest(1, round(v_k * (1 - v_expected))::integer);
+
+  update public.profiles set elo = elo + v_delta where id = v_winner;
+  update public.profiles set elo = elo - v_delta where id = v_loser;
+
+  insert into public.online_matches
+    (lobby_id, winner, loser, winner_elo_before, loser_elo_before, winner_elo_after, loser_elo_after, tours)
+  values
+    (p_lobby_id, v_winner, v_loser, v_winner_elo, v_loser_elo, v_winner_elo + v_delta, v_loser_elo - v_delta, p_tours);
+
+  return query select v_delta, (v_winner_elo + v_delta), (v_loser_elo - v_delta);
+end;
+$$;
+
+revoke all on function public.report_online_match(uuid, boolean, integer) from public;
+grant execute on function public.report_online_match(uuid, boolean, integer) to authenticated;
