@@ -62,24 +62,25 @@
     return { ok: true, lobbyId: row.lobby_id, opponentId: row.joueur1 };
   }
 
-  // Pseudo de l'AUTRE joueur de cette lobby (celui qui n'est pas nous),
-  // pour l'afficher a cote de sa main une fois la partie lancee -- null en
-  // cas d'echec (lobby pas encore active, reseau...), jamais bloquant :
-  // l'appelant doit simplement ne rien afficher dans ce cas plutot que de
-  // planter la mise en relation.
-  async function getOpponentPseudo(lobbyId){
+  // Pseudo + elo de l'AUTRE joueur de cette lobby (celui qui n'est pas
+  // nous), pour les afficher a cote de sa main une fois la partie lancee
+  // (l'elo sert a colorer son nom selon son palier, voir eloTier() dans
+  // index.html) -- null en cas d'echec (lobby pas encore active,
+  // reseau...), jamais bloquant : l'appelant doit simplement ne rien
+  // afficher dans ce cas plutot que de planter la mise en relation.
+  async function getOpponentInfo(lobbyId){
     const sb = await getClient();
     const { data: { user } } = await sb.auth.getUser();
     if(!user) return null;
     const { data: lobby, error: lobbyErr } = await sb
       .from('lobbies').select('joueur1, joueur2').eq('id', lobbyId).maybeSingle();
-    if(lobbyErr || !lobby) { console.warn('[DaniszOnline] getOpponentPseudo lobby fetch failed', lobbyErr); return null; }
+    if(lobbyErr || !lobby) { console.warn('[DaniszOnline] getOpponentInfo lobby fetch failed', lobbyErr); return null; }
     const opponentId = lobby.joueur1 === user.id ? lobby.joueur2 : lobby.joueur1;
     if(!opponentId) return null;
     const { data: profile, error: profileErr } = await sb
-      .from('profiles').select('pseudo').eq('id', opponentId).maybeSingle();
-    if(profileErr || !profile) { console.warn('[DaniszOnline] getOpponentPseudo profile fetch failed', profileErr); return null; }
-    return profile.pseudo;
+      .from('profiles').select('pseudo, elo').eq('id', opponentId).maybeSingle();
+    if(profileErr || !profile) { console.warn('[DaniszOnline] getOpponentInfo profile fetch failed', profileErr); return null; }
+    return { pseudo: profile.pseudo, elo: profile.elo };
   }
 
   // Rapporte le resultat d'une partie 1v1 en ligne terminee -- Elo calcule
@@ -268,7 +269,7 @@
   }
 
   window.DaniszOnline = {
-    joinRandomQueue, leaveQueue, createInviteLobby, joinInviteLobby, watchLobby, stopWatching, getOpponentPseudo, reportMatchResult,
+    joinRandomQueue, leaveQueue, createInviteLobby, joinInviteLobby, watchLobby, stopWatching, getOpponentInfo, reportMatchResult,
     joinPresence, leavePresence, getQueueCount,
     joinGameChannel, announceReady, sendMove, sendState, leaveGameChannel
   };

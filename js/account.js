@@ -232,6 +232,28 @@
     return rows;
   }
 
+  // Medailles du joueur CONNECTE sur les 4 classements par difficulte
+  // (podium = top 3, un classement par mode) -- affiche dans son panneau
+  // "Tes meilleurs scores". Reutilise fetchModeLeaderboard(mode, 3) tel
+  // quel (deja deduplique un score par joueur) plutot que d'ecrire une
+  // requete dediee : identification par PSEUDO (unique en base, voir
+  // profiles.pseudo unique dans schema.sql) puisque fetchModeLeaderboard
+  // ne renvoie pas d'id joueur.
+  async function fetchMyMedals(){
+    if(!state.session || !state.profile) return { gold: 0, silver: 0, bronze: 0, byMode: {} };
+    const modes = ['easy', 'normal', 'hard', 'nightmare'];
+    const lists = await Promise.all(modes.map(m => fetchModeLeaderboard(m, 3)));
+    const byMode = {};
+    let gold = 0, silver = 0, bronze = 0;
+    modes.forEach((mode, i) => {
+      const idx = lists[i].findIndex(row => row.pseudo === state.profile.pseudo);
+      if(idx === 0){ byMode[mode] = 'gold'; gold++; }
+      else if(idx === 1){ byMode[mode] = 'silver'; silver++; }
+      else if(idx === 2){ byMode[mode] = 'bronze'; bronze++; }
+    });
+    return { gold, silver, bronze, byMode };
+  }
+
   // Historique des 5 dernieres parties 1v1 en ligne du joueur CONNECTE :
   // adversaire, tours, resultat, elo apres la partie, delta d'elo gagne/
   // perdu -- affiche dans l'onglet "Historique" du panneau profil. winner
@@ -274,6 +296,6 @@
   // mais etat memoire separe).
   async function getClient(){ await init(); return supabase; }
 
-  window.DaniszAccount = { signUp, signIn, signOut, deleteAccount, setPseudo, reportAiMatch, refreshProfile, fetchMyTopScores, fetchModeLeaderboard, fetchMyOnlineHistory, hasAccount, getState, onChange, getClient };
+  window.DaniszAccount = { signUp, signIn, signOut, deleteAccount, setPseudo, reportAiMatch, refreshProfile, fetchMyTopScores, fetchModeLeaderboard, fetchMyOnlineHistory, fetchMyMedals, hasAccount, getState, onChange, getClient };
   init().catch(e=>console.error('[DaniszAccount] init failed', e));
 })();

@@ -234,11 +234,12 @@ create policy "players see their own online matches"
 -- deja le choix assume pour les coups eux-memes, voir plus haut dans ce
 -- fichier).
 --
--- Formule Elo standard, K=32 (assez reactif pour un petit groupe de
--- joueurs, pas une ligue competitive) : delta = round(K * (1 - probabilite
--- de victoire attendue du gagnant avant la partie)). Plancher a 1 point :
--- meme un gagnant tres favori doit voir *quelque chose* bouger, un delta a
--- 0 se lirait comme un bug plutot que comme "match totalement attendu".
+-- Formule Elo standard, K=24 (plus mesure que le K=32 initial -- delta
+-- max ~24 sur un match totalement equilibre, plus proche d'une vraie
+-- ligue que d'un simple compteur qui bondit a chaque partie). Plancher a
+-- 1 point : meme un gagnant tres favori doit voir *quelque chose* bouger,
+-- un delta a 0 se lirait comme un bug plutot que comme "match totalement
+-- attendu".
 create or replace function public.report_online_match(p_lobby_id uuid, p_i_won boolean, p_tours integer)
 returns table(elo_delta integer, winner_elo_after integer, loser_elo_after integer)
 language plpgsql
@@ -254,7 +255,7 @@ declare
   v_loser_elo integer;
   v_expected double precision;
   v_delta integer;
-  v_k constant integer := 32;
+  v_k constant integer := 24;
 begin
   if auth.uid() is null then
     raise exception 'not authenticated';

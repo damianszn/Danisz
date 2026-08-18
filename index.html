@@ -561,6 +561,7 @@
     <div id="account-profile-view">
       <div id="account-stats"></div>
       <div id="account-topscores-title"></div>
+      <div id="account-medals-count"></div>
       <div id="account-topscores"></div>
     </div>
     <div id="account-history-view" style="display:none">
@@ -923,6 +924,12 @@ const I18N = {
     accountErrorUnknown: "Une erreur est survenue, réessaie.",
     accountStats: "{wins} victoire(s) sur {games} partie(s)",
     accountEloLabel: "Elo : {elo}",
+    tierNovice: "Novice",
+    tierAmateur: "Amateur",
+    tierVeteran: "Vétéran",
+    tierExpert: "Expert",
+    tierMaster: "Maître",
+    medalsCountLabel: "🥇 {gold} · 🥈 {silver} · 🥉 {bronze}",
     accountTabProfileView: "Profil",
     accountTabHistory: "Historique",
     historyWin: "Victoire",
@@ -1092,6 +1099,12 @@ const I18N = {
     accountErrorUnknown: "Er is een fout opgetreden, probeer opnieuw.",
     accountStats: "{wins} overwinning(en) op {games} partij(en)",
     accountEloLabel: "Elo: {elo}",
+    tierNovice: "Beginner",
+    tierAmateur: "Amateur",
+    tierVeteran: "Veteraan",
+    tierExpert: "Expert",
+    tierMaster: "Meester",
+    medalsCountLabel: "🥇 {gold} · 🥈 {silver} · 🥉 {bronze}",
     accountTabProfileView: "Profiel",
     accountTabHistory: "Geschiedenis",
     historyWin: "Overwinning",
@@ -1261,6 +1274,12 @@ const I18N = {
     accountErrorUnknown: "Wystąpił błąd, spróbuj ponownie.",
     accountStats: "{wins} zwycięstw(o) na {games} gier",
     accountEloLabel: "Elo: {elo}",
+    tierNovice: "Nowicjusz",
+    tierAmateur: "Amator",
+    tierVeteran: "Weteran",
+    tierExpert: "Ekspert",
+    tierMaster: "Mistrz",
+    medalsCountLabel: "🥇 {gold} · 🥈 {silver} · 🥉 {bronze}",
     accountTabProfileView: "Profil",
     accountTabHistory: "Historia",
     historyWin: "Zwycięstwo",
@@ -1430,6 +1449,12 @@ const I18N = {
     accountErrorUnknown: "Something went wrong, try again.",
     accountStats: "{wins} win(s) out of {games} game(s)",
     accountEloLabel: "Elo: {elo}",
+    tierNovice: "Novice",
+    tierAmateur: "Amateur",
+    tierVeteran: "Veteran",
+    tierExpert: "Expert",
+    tierMaster: "Master",
+    medalsCountLabel: "🥇 {gold} · 🥈 {silver} · 🥉 {bronze}",
     accountTabProfileView: "Profile",
     accountTabHistory: "History",
     historyWin: "Win",
@@ -2188,6 +2213,23 @@ function swapStatePerspective(state){
 // appele doit l'etre (voir onlineOnState cote MainScene).
 function swapWho(who){ return who==='player' ? 'ai' : 'player'; }
 
+// Paliers d'Elo -- purement cosmetiques (aucune regle du jeu ne les
+// consulte), un repere de progression plutot qu'un vrai systeme de
+// classement competitif. Couleurs "rarete de loot" RPG classique (gris ->
+// vert -> bleu -> violet -> orange), pour qu'un nom mieux classe saute
+// visuellement aux yeux, notamment celui de l'adversaire en 1v1 en ligne.
+const ELO_TIERS = [
+  { max: 899,      key: 'tierNovice',  emoji: '🌱', color: '#9d9d9d' },
+  { max: 1099,     key: 'tierAmateur', emoji: '⭐', color: '#4caf50' },
+  { max: 1299,     key: 'tierVeteran', emoji: '⚔️', color: '#3fa7ff' },
+  { max: 1499,     key: 'tierExpert',  emoji: '🔥', color: '#b35ff5' },
+  { max: Infinity, key: 'tierMaster',  emoji: '👑', color: '#ff9d3f' }
+];
+function eloTier(elo){
+  for(const tier of ELO_TIERS){ if(elo <= tier.max) return tier; }
+  return ELO_TIERS[ELO_TIERS.length-1];
+}
+
 /* =========================================================
    RENDU PHASER (assets pixel art)
    ========================================================= */
@@ -2833,12 +2875,16 @@ class ConfirmScene extends Phaser.Scene {
     this.add.text(colTurnsX, listTop, t('leaderboardColTurns'),
       {fontFamily:'"VT323"', fontSize:'16px', color:'#9aa8b0'}).setOrigin(1,0);
 
+    // Medaille (podium, rangs 1-3) plutot qu'un simple chiffre -- meme
+    // convention que le panneau "Tes meilleurs scores" du profil, voir
+    // fetchMyMedals() dans account.js.
+    const MEDALS = ['🥇','🥈','🥉'];
     const rowStep = Math.max(24, Math.min(34, (h - (listTop-y) - 30) / 10));
     this.leaderboardRows.forEach((row, i)=>{
       const ry = listTop + 28 + i*rowStep;
-      const rankColor = i===0 ? '#ffd23f' : i<3 ? '#e9ddc8' : '#9aa8b0';
-      this.add.text(colRankX, ry, `${i+1}`,
-        {fontFamily:'"VT323"', fontSize:'19px', color:rankColor}).setOrigin(0.5,0);
+      const rankColor = i===0 ? '#ffd23f' : i===1 ? '#c9d6e3' : i===2 ? '#cd8032' : '#9aa8b0';
+      this.add.text(colRankX, ry, i<3 ? MEDALS[i] : `${i+1}`,
+        {fontFamily:'"VT323"', fontSize: (i<3?'21px':'19px'), color:rankColor}).setOrigin(0.5,0);
       this.add.text(colPseudoX, ry, row.pseudo,
         {fontFamily:'"VT323"', fontSize:'19px', color:'#e9ddc8'});
       this.add.text(colTurnsX, ry, `${row.tours}`,
@@ -3054,19 +3100,24 @@ class OnlineLobbyScene extends Phaser.Scene {
   enterMatchedState(role){
     this.onlineRole = role;
     this.setMode('matched');
-    // Lance la recherche du pseudo adverse tout de suite, en parallele du
-    // court delai cosmetique ci-dessous (pas d'attente supplementaire dans
-    // le cas courant) -- affiche a cote de sa main une fois en jeu (voir
-    // MainScene). Echec silencieux (catch->null) : pas de pseudo affiche
-    // plutot que de bloquer l'entree en partie pour ca.
-    const pseudoPromise = window.DaniszOnline
-      ? window.DaniszOnline.getOpponentPseudo(this.lobbyId).catch(()=>null)
+    // Lance la recherche des infos adverses (pseudo + elo, pour la couleur
+    // de palier) tout de suite, en parallele du court delai cosmetique
+    // ci-dessous (pas d'attente supplementaire dans le cas courant) --
+    // affichees a cote de sa main une fois en jeu (voir MainScene). Echec
+    // silencieux (catch->null) : rien affiche plutot que de bloquer
+    // l'entree en partie pour ca.
+    const opponentInfoPromise = window.DaniszOnline
+      ? window.DaniszOnline.getOpponentInfo(this.lobbyId).catch(()=>null)
       : Promise.resolve(null);
     this.time.delayedCall(900, async ()=>{
       if(!this.scene.isActive()) return;
-      const opponentPseudo = await pseudoPromise;
+      const opponentInfo = await opponentInfoPromise;
       if(!this.scene.isActive()) return;
-      window.__onlineMatch = { lobbyId: this.lobbyId, role, opponentPseudo };
+      window.__onlineMatch = {
+        lobbyId: this.lobbyId, role,
+        opponentPseudo: opponentInfo ? opponentInfo.pseudo : null,
+        opponentElo: opponentInfo ? opponentInfo.elo : null
+      };
       this.scene.start('main');
     });
   }
@@ -3182,6 +3233,19 @@ class OnlineLobbyScene extends Phaser.Scene {
         {fontFamily:'"VT323"', fontSize:'17px', color:'#9aa8b0'}).setOrigin(0.5);
       headerBottom = statsY + 10;
     }
+    // Ton propre palier + elo, juste au-dessus du contenu du mode actif --
+    // "aller en mode online" (choisir de chercher/creer une partie) est
+    // precisement le moment ou ca a du sens de le rappeler.
+    if(this.mode!=='matched'){
+      const myProfile = window.DaniszAccount.getState().profile;
+      if(myProfile){
+        const tier = eloTier(myProfile.elo);
+        const tierY = headerBottom + 20;
+        this.add.text(cx, tierY, `${tier.emoji} ${t(tier.key)} · ${t('accountEloLabel', {elo: myProfile.elo})}`,
+          {fontFamily:'"VT323"', fontSize:'17px', color:tier.color}).setOrigin(0.5);
+        headerBottom = tierY + 10;
+      }
+    }
 
     // Point de depart du contenu du mode actif : centre verticalement
     // (cy) sur un ecran normal/haut, mais jamais plus haut que juste sous
@@ -3266,6 +3330,7 @@ class MainScene extends Phaser.Scene {
       this.onlineRole = window.__onlineMatch.role;
       this.onlineLobbyId = window.__onlineMatch.lobbyId;
       this.onlineOpponentPseudo = window.__onlineMatch.opponentPseudo || null;
+      this.onlineOpponentElo = window.__onlineMatch.opponentElo!=null ? window.__onlineMatch.opponentElo : null;
       window.__onlineMatch = null;
     }
     if(this.onlineRole==='guest'){
@@ -4431,8 +4496,12 @@ class MainScene extends Phaser.Scene {
     // info de triche a masquer.
     if(this.onlineRole && this.onlineOpponentPseudo){
       const oppLabel = difficulty!=='nightmare' ? `${this.onlineOpponentPseudo} (${aiHandCount})` : this.onlineOpponentPseudo;
+      // Couleur = palier d'Elo de l'adversaire (voir eloTier()) : sans son
+      // elo (echec reseau lors de la mise en relation), reste sur le jaune
+      // par defaut plutot que de deviner.
+      const oppColor = this.onlineOpponentElo!=null ? eloTier(this.onlineOpponentElo).color : '#ffd23f';
       this.label(W/2 - (fanCount-1)*aiFanSpacing/2 - 24 - 14, 50, oppLabel,
-        {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#ffd23f', originX:1, originY:0.5});
+        {fontFamily:'"Press Start 2P"', fontSize:'12px', color:oppColor, originX:1, originY:0.5});
     } else if(difficulty!=='nightmare'){
       this.label(W/2 - (fanCount-1)*aiFanSpacing/2 - 24 - 14, 50, `${aiHandCount}`,
         {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#e9ddc8', originX:1, originY:0.5});
@@ -4794,8 +4863,9 @@ class MainScene extends Phaser.Scene {
     // marge verticale a donner.
     if(this.onlineRole && this.onlineOpponentPseudo){
       const oppLabel = difficulty!=='nightmare' ? `${this.onlineOpponentPseudo} (${aiHandCount})` : this.onlineOpponentPseudo;
+      const oppColor = this.onlineOpponentElo!=null ? eloTier(this.onlineOpponentElo).color : '#ffd23f';
       this.label(cx - (fanCount-1)*10*spaceScale - 20*spaceScale - 12, aiFanY, oppLabel,
-        {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#ffd23f', originX:1, originY:0.5});
+        {fontFamily:'"Press Start 2P"', fontSize:'12px', color:oppColor, originX:1, originY:0.5});
     } else if(difficulty!=='nightmare'){
       this.label(cx - (fanCount-1)*10*spaceScale - 20*spaceScale - 12, aiFanY, `${aiHandCount}`,
         {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#e9ddc8', originX:1, originY:0.5});
@@ -5480,6 +5550,7 @@ window.__updateLangPopup(lang);
   const historyList = document.getElementById('account-history-list');
   const statsBox = document.getElementById('account-stats');
   const topScoresTitle = document.getElementById('account-topscores-title');
+  const medalsCountBox = document.getElementById('account-medals-count');
   const topScoresBox = document.getElementById('account-topscores');
 
   // Le bouton compte (icone + "Profil") n'existe que sur l'ecran de menu :
@@ -5542,7 +5613,9 @@ window.__updateLangPopup(lang);
       guestBox.style.display = 'none';
       loggedBox.style.display = 'block';
       pseudoDisplay.textContent = state.profile.pseudo;
-      eloDisplay.textContent = t('accountEloLabel', {elo: state.profile.elo});
+      const myTier = eloTier(state.profile.elo);
+      eloDisplay.textContent = `${myTier.emoji} ${t(myTier.key)} · ` + t('accountEloLabel', {elo: state.profile.elo});
+      eloDisplay.style.color = myTier.color;
       loggedTabProfile.textContent = t('accountTabProfileView');
       loggedTabHistory.textContent = t('accountTabHistory');
       statsBox.textContent = t('accountStats', {wins: state.profile.victoires, games: state.profile.parties_jouees});
@@ -5725,19 +5798,32 @@ window.__updateLangPopup(lang);
   loggedTabProfile.addEventListener('click', (e)=>{ e.stopPropagation(); setLoggedTab('profile'); });
   loggedTabHistory.addEventListener('click', (e)=>{ e.stopPropagation(); setLoggedTab('history'); });
 
+  // Medailles (podium des 4 classements par difficulte, voir
+  // fetchMyMedals dans account.js) : chargees et affichees en meme temps
+  // que les meilleurs scores, meme cle de cache -- un podium peut changer
+  // sans que MES stats bougent (un autre joueur peut me depasser), donc
+  // ce n'est pas un cache parfaitement fiable, mais suffisant pour eviter
+  // de re-fetcher a chaque frappe pendant que le panneau reste ouvert.
+  let medalsData = null;
+
   function renderTopScores(){
     topScoresBox.innerHTML = '';
     DIFF_KEYS.forEach(([mode, labelKey])=>{
       const row = document.createElement('div');
       row.className = 'topscore-row';
       const label = document.createElement('span');
-      label.textContent = t(labelKey);
+      const medal = medalsData && medalsData.byMode[mode];
+      const medalIcon = medal==='gold' ? '🥇' : medal==='silver' ? '🥈' : medal==='bronze' ? '🥉' : '';
+      label.textContent = (medalIcon ? medalIcon+' ' : '') + t(labelKey);
       const value = document.createElement('span');
       const best = topScoresData ? topScoresData[mode] : undefined;
       value.textContent = topScoresData===null ? '…' : (best!=null ? best : '—');
       row.appendChild(label); row.appendChild(value);
       topScoresBox.appendChild(row);
     });
+    medalsCountBox.textContent = medalsData
+      ? t('medalsCountLabel', { gold: medalsData.gold, silver: medalsData.silver, bronze: medalsData.bronze })
+      : '';
   }
 
   function ensureTopScores(profile){
@@ -5745,11 +5831,17 @@ window.__updateLangPopup(lang);
     if(topScoresKey===key){ renderTopScores(); return; }
     topScoresKey = key;
     topScoresData = null;
+    medalsData = null;
     renderTopScores();
     if(!window.DaniszAccount) return;
     window.DaniszAccount.fetchMyTopScores().then(data=>{
       if(topScoresKey!==key) return; // profil/partie a change entre-temps, resultat perime
       topScoresData = data;
+      renderTopScores();
+    });
+    window.DaniszAccount.fetchMyMedals().then(data=>{
+      if(topScoresKey!==key) return;
+      medalsData = data;
       renderTopScores();
     });
   }
