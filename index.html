@@ -777,6 +777,7 @@ const I18N = {
     onlineErrorOwnLobby: "Tu ne peux pas rejoindre ta propre partie.",
 
     tutorialBtn: "Tutoriel",
+    rulesBtn: "Regles de jeu",
     sfxToggleLabel: "Son",
     tutorialSlide1Title: "Rythme de jeu",
     tutorialSlide1Bullets: "Vous jouez chacun votre tour.\nTu poses une ou plusieurs cartes du meme rang, de valeur egale ou superieure a la derniere carte posee.\nTu ne peux pas (ou ne veux pas) jouer ? Tu ramasses tout le tas.\nApres avoir joue depuis ta main, tu repioches jusqu'a en avoir 3, tant qu'il reste des cartes dans la pioche.",
@@ -925,6 +926,7 @@ const I18N = {
     onlineErrorOwnLobby: "Je kan niet deelnemen aan je eigen spel.",
 
     tutorialBtn: "Tutorial",
+    rulesBtn: "Spelregels",
     sfxToggleLabel: "Geluid",
     tutorialSlide1Title: "Speelritme",
     tutorialSlide1Bullets: "Jullie spelen om de beurt.\nJe legt een of meer kaarten van dezelfde rang, met een waarde gelijk aan of hoger dan de laatst gelegde kaart.\nKun je (of wil je) niet spelen? Dan pak je de hele stapel op.\nNa het spelen vanuit je hand vul je aan tot 3 kaarten, zolang er nog kaarten in de pakstapel zitten.",
@@ -1073,6 +1075,7 @@ const I18N = {
     onlineErrorOwnLobby: "Nie mozesz dolaczyc do wlasnej gry.",
 
     tutorialBtn: "Samouczek",
+    rulesBtn: "Zasady gry",
     sfxToggleLabel: "Dzwiek",
     tutorialSlide1Title: "Rytm gry",
     tutorialSlide1Bullets: "Gracie na zmiane.\nWykladasz jedna lub wiecej kart tej samej rangi, o wartosci rownej lub wyzszej niz ostatnia wylozona karta.\nNie mozesz (lub nie chcesz) zagrac? Zabierasz caly stos.\nPo zagraniu z reki dobierasz karty do 3, dopoki w talii sa jeszcze karty.",
@@ -1221,6 +1224,7 @@ const I18N = {
     onlineErrorOwnLobby: "You can't join your own game.",
 
     tutorialBtn: "Tutorial",
+    rulesBtn: "Rules",
     sfxToggleLabel: "Sound",
     tutorialSlide1Title: "Turn flow",
     tutorialSlide1Bullets: "You each take turns.\nPlay one or more cards of the same rank, of equal or higher value than the last card played.\nCan't (or don't want to) play? You pick up the whole pile.\nAfter playing from your hand, you draw back up to 3, as long as the deck still has cards.",
@@ -2218,7 +2222,16 @@ class MenuScene extends Phaser.Scene {
       this.menuButton(cx, y, btnW, btnH, t('menuFFA'), false, null, {fontSize, subFontSize});
       y += step*0.6 + idealTutGap*scale; // un peu moins d'espace avant le tutoriel (bouton plus petit, pas de sous-titre)
       const tutH = idealTutH*scale;
-      this.menuButton(cx, y, Math.min(300, W*0.7), tutH, '🎓 '+t('tutorialBtn'), true, ()=>{ if(window.__openTutorial) window.__openTutorial(); }, {fontSize: Math.round(fontSize*0.9)});
+      // Deux boutons cote a cote a la place de l'unique bouton "Tutoriel"
+      // d'avant : "Regles du jeu" (l'ancien contenu, renomme -- c'est un
+      // recapitulatif des regles, pas un vrai tutoriel interactif) et
+      // "Tutoriel" (grise pour l'instant, reserve a une future partie
+      // guidee avec explications/cartes predefinies).
+      const tutGapX = 14*scale;
+      const tutBtnW = (btnW - tutGapX)/2;
+      const tutFontSize = Math.round(fontSize*0.72);
+      this.menuButton(cx - tutBtnW/2 - tutGapX/2, y, tutBtnW, tutH, '📖 '+t('rulesBtn'), true, ()=>{ if(window.__openTutorial) window.__openTutorial(); }, {fontSize: tutFontSize});
+      this.menuButton(cx + tutBtnW/2 + tutGapX/2, y, tutBtnW, tutH, '🎓 '+t('tutorialBtn'), false, null, {fontSize: tutFontSize});
     } else {
       // Boutons en grille 2 colonnes (utilise la largeur dispo plutot que de
       // tout empiler verticalement, precieux sur un ecran paysage bas) :
@@ -2255,7 +2268,15 @@ class MenuScene extends Phaser.Scene {
       // sous-titre "Bientot" juste en dessous a ne pas chevaucher.
       const tutorialY = row1Y + btnH/2 + idealTutGapConst*scale;
       const tutH = idealTutH*scale;
-      this.menuButton(cx, tutorialY, Math.min(280, btnW*2+gapX), tutH, '🎓 '+t('tutorialBtn'), true, ()=>{ if(window.__openTutorial) window.__openTutorial(); }, {fontSize: Math.round(fontSize*0.94)});
+      // Deux boutons cote a cote (voir la meme remarque en portrait
+      // ci-dessus) : "Regles du jeu" (ancien contenu renomme) + "Tutoriel"
+      // (grise, futur mode guide).
+      const tutRowW = btnW*2 + gapX;
+      const tutGapX = 14*scale;
+      const tutBtnW = (tutRowW - tutGapX)/2;
+      const tutFontSize = Math.round(fontSize*0.78);
+      this.menuButton(cx - tutBtnW/2 - tutGapX/2, tutorialY, tutBtnW, tutH, '📖 '+t('rulesBtn'), true, ()=>{ if(window.__openTutorial) window.__openTutorial(); }, {fontSize: tutFontSize});
+      this.menuButton(cx + tutBtnW/2 + tutGapX/2, tutorialY, tutBtnW, tutH, '🎓 '+t('tutorialBtn'), false, null, {fontSize: tutFontSize});
     }
 
     // Marque, discrete, coin bas-gauche.
