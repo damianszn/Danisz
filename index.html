@@ -191,6 +191,24 @@
     border:1px solid rgba(215,164,92,0.5); border-radius:4px; color:#e9ddc8;
     font-family:'VT323',monospace; font-size:15px; cursor:pointer;
   }
+  /* Suppression de compte : visuellement distincte (rouge, discrete) d'un
+     simple bouton "secondary" comme deconnexion -- une action destructive
+     et irreversible ne doit pas se confondre avec elle au premier coup d'oeil. */
+  #account-panel button.danger{
+    width:100%; margin-top:14px; padding:6px; background:transparent;
+    border:1px solid rgba(255,95,95,0.4); border-radius:4px; color:#c96a6a;
+    font-family:'VT323',monospace; font-size:14px; cursor:pointer; opacity:0.8;
+  }
+  #account-panel button.danger:hover{ opacity:1; border-color:rgba(255,95,95,0.7); color:#ff8a7a; }
+  /* Case a cocher de consentement (RGPD) avant l'inscription : minuscule,
+     alignee avec le texte, le lien vers la politique de confidentialite
+     ouvre l'overlay dedie plutot que de quitter la page. */
+  #account-consent-label{
+    display:flex; align-items:flex-start; gap:7px; margin:2px 0 10px;
+    font-size:13px; color:#9aa8b0; line-height:1.3; cursor:pointer;
+  }
+  #account-consent-label input{ width:auto; margin:2px 0 0; flex:none; }
+  #account-consent-text a{ color:#8fd18f; }
   #account-tabs{ display:flex; gap:4px; margin-bottom:10px; }
   .account-tab{
     flex:1; padding:6px 0; background:transparent;
@@ -262,6 +280,42 @@
     color:#e9ddc8; font-size:24px; cursor:pointer; line-height:1; opacity:0.8;
   }
   #tutorial-close-btn:hover{ opacity:1; }
+
+  /* Politique de confidentialite : meme habillage overlay que le tutoriel
+     (fond sombre + modale centree scrollable), plus adapte a un pave de
+     texte legal qu'a un popup court. */
+  #privacy-overlay{
+    display:none;
+    position:fixed; inset:0; z-index:15000;
+    background:rgba(0,0,0,0.65);
+    align-items:center; justify-content:center;
+  }
+  #privacy-overlay.open{ display:flex; }
+  #privacy-modal{
+    position:relative;
+    background:#152018; border:1px solid rgba(215,164,92,0.5); border-radius:10px;
+    width:min(560px, 92vw); max-height:88vh; overflow-y:auto;
+    padding:26px 24px 22px; box-sizing:border-box;
+    color:#e9ddc8; font-family:'VT323',monospace; font-size:16px; line-height:1.4;
+  }
+  #privacy-close-btn{
+    position:absolute; top:12px; right:14px; background:transparent; border:none;
+    color:#e9ddc8; font-size:24px; cursor:pointer; line-height:1; opacity:0.8;
+  }
+  #privacy-close-btn:hover{ opacity:1; }
+  #privacy-title{
+    font-family:'Press Start 2P', monospace; font-size:16px; color:#ffd23f;
+    margin:0 0 14px; padding-right:24px;
+  }
+  #privacy-modal h3{
+    font-family:'Press Start 2P', monospace; font-size:12px; color:#8fd18f;
+    margin:18px 0 8px;
+  }
+  #privacy-modal p{ margin:0 0 10px; }
+  #privacy-modal ul{ margin:0 0 10px; padding-left:20px; }
+  #privacy-modal li{ margin-bottom:6px; }
+  #privacy-lang-note{ font-style:italic; color:#9aa8b0; font-size:14px; }
+
   .tutorial-slide{ display:none; min-height:280px; }
   .tutorial-slide.active{ display:block; }
   .tutorial-slide-title{
@@ -458,6 +512,10 @@
         <input id="account-password-confirm-input" type="password" autocomplete="new-password">
         <button type="button" class="pwd-toggle" data-for="account-password-confirm-input">👁</button>
       </div>
+      <label id="account-consent-label">
+        <input type="checkbox" id="account-consent-checkbox">
+        <span id="account-consent-text"></span>
+      </label>
       <button id="account-signup-btn" class="primary"></button>
     </div>
     <div id="account-signin-fields" style="display:none">
@@ -480,6 +538,7 @@
     <div id="account-topscores-title"></div>
     <div id="account-topscores"></div>
     <button id="account-signout-btn" class="secondary"></button>
+    <button id="account-delete-btn" class="danger"></button>
   </div>
 </div>
 <div id="online-join-panel">
@@ -590,6 +649,45 @@
   <div class="icon">📱</div>
   <div class="msg">TOURNE TON TELEPHONE</div>
   <div class="msg-sub">Trop de cartes pour tenir a l'ecran en vertical -- passe en paysage.</div>
+</div>
+<div id="privacy-overlay">
+  <div id="privacy-modal">
+    <button id="privacy-close-btn">&times;</button>
+    <h2 id="privacy-title"></h2>
+    <p id="privacy-lang-note"></p>
+    <p>Cette page explique quelles donnees sont collectees quand tu crees un compte sur Danisz, pourquoi, et comment les supprimer.</p>
+
+    <h3>Donnees collectees</h3>
+    <ul>
+      <li>Ton adresse email et ton mot de passe -- le mot de passe n'est jamais stocke en clair : c'est Supabase, notre prestataire d'authentification, qui le hache.</li>
+      <li>Le pseudo que tu choisis.</li>
+      <li>Tes statistiques de jeu (parties jouees, victoires, nombre de tours par partie gagnee).</li>
+      <li>En 1v1 en ligne : un identifiant temporaire de partie, le temps de mettre deux joueurs en relation.</li>
+    </ul>
+
+    <h3>Pourquoi</h3>
+    <ul>
+      <li>Creer et retrouver ton compte.</li>
+      <li>Afficher les classements (pseudo + meilleur score, publics).</li>
+      <li>Faire fonctionner le matchmaking du mode en ligne.</li>
+    </ul>
+
+    <h3>Qui heberge ca</h3>
+    <p>Supabase (base de donnees, authentification), sur son infrastructure cloud. Aucune donnee n'est vendue ni partagee avec un tiers en dehors de ca.</p>
+
+    <h3>Stockage dans ton navigateur</h3>
+    <p>Un jeton de session (pour rester connecte), ta langue choisie, ta preference son. Rien de tout ca ne sert a du suivi publicitaire.</p>
+
+    <h3>Combien de temps</h3>
+    <p>Tant que ton compte existe.</p>
+
+    <h3>Tes droits</h3>
+    <ul>
+      <li><strong>Consultation</strong> : tes donnees s'affichent dans ton profil (pseudo, stats).</li>
+      <li><strong>Rectification / question</strong> : contacte-moi directement.</li>
+      <li><strong>Suppression definitive</strong> : bouton "Supprimer mon compte" dans le panneau Profil -- effet immediat et irreversible sur ton compte et toutes tes statistiques.</li>
+    </ul>
+  </div>
 </div>
 <script>
 // Bouton plein ecran : sur mobile, la barre d'adresse et la barre de
@@ -779,12 +877,17 @@ const I18N = {
     accountSignupBtn: "Creer un compte",
     accountSigninBtn: "Se connecter",
     accountSignoutBtn: "Se deconnecter",
+    accountDeleteBtn: "Supprimer mon compte",
+    confirmDeleteAccount: "Supprimer definitivement ton compte et toutes tes statistiques ? Cette action est irreversible.",
+    accountConsentPrefix: "J'accepte la",
+    accountConsentLinkText: "politique de confidentialite",
     accountWorking: "Un instant...",
     accountErrorLength: "Le pseudo doit faire entre 3 et 20 caracteres.",
     accountErrorPseudoTaken: "Ce pseudo est deja pris.",
     accountErrorEmailTaken: "Un compte existe deja avec cet email.",
     accountErrorWeakPassword: "Le mot de passe doit faire au moins 6 caracteres.",
     accountErrorPasswordMismatch: "Les mots de passe ne correspondent pas.",
+    accountErrorConsentRequired: "Merci d'accepter la politique de confidentialite pour continuer.",
     accountErrorInvalidEmail: "Adresse email invalide.",
     accountErrorInvalidCredentials: "Email ou mot de passe incorrect.",
     accountErrorConfirmEmail: "Verifie tes mails pour confirmer ton compte, puis connecte-toi.",
@@ -828,6 +931,8 @@ const I18N = {
     rulesBtn: "Regles de jeu",
     sfxToggleLabel: "Son",
     settingsTitle: "Reglages",
+    privacyTitle: "Politique de confidentialite",
+    privacyLangNote: "Cette page est disponible en francais uniquement pour le moment.",
     quitGameBtn: "Quitter la partie",
     confirmQuitGame: "Quitter la partie en cours ?",
     tutorialSlide1Title: "Rythme de jeu",
@@ -933,12 +1038,17 @@ const I18N = {
     accountSignupBtn: "Account aanmaken",
     accountSigninBtn: "Inloggen",
     accountSignoutBtn: "Uitloggen",
+    accountDeleteBtn: "Account verwijderen",
+    confirmDeleteAccount: "Je account en alle statistieken definitief verwijderen? Dit kan niet ongedaan worden gemaakt.",
+    accountConsentPrefix: "Ik ga akkoord met het",
+    accountConsentLinkText: "privacybeleid",
     accountWorking: "Een moment...",
     accountErrorLength: "De bijnaam moet 3 tot 20 tekens lang zijn.",
     accountErrorPseudoTaken: "Deze bijnaam is al bezet.",
     accountErrorEmailTaken: "Er bestaat al een account met dit e-mailadres.",
     accountErrorWeakPassword: "Het wachtwoord moet minstens 6 tekens lang zijn.",
     accountErrorPasswordMismatch: "De wachtwoorden komen niet overeen.",
+    accountErrorConsentRequired: "Accepteer het privacybeleid om door te gaan.",
     accountErrorInvalidEmail: "Ongeldig e-mailadres.",
     accountErrorInvalidCredentials: "E-mail of wachtwoord onjuist.",
     accountErrorConfirmEmail: "Bevestig je account via de e-mail die je hebt ontvangen en log dan in.",
@@ -982,6 +1092,8 @@ const I18N = {
     rulesBtn: "Spelregels",
     sfxToggleLabel: "Geluid",
     settingsTitle: "Instellingen",
+    privacyTitle: "Privacybeleid",
+    privacyLangNote: "Deze pagina is momenteel enkel in het Frans beschikbaar.",
     quitGameBtn: "Spel verlaten",
     confirmQuitGame: "Huidige partij verlaten?",
     tutorialSlide1Title: "Speelritme",
@@ -1087,12 +1199,17 @@ const I18N = {
     accountSignupBtn: "Utworz konto",
     accountSigninBtn: "Zaloguj sie",
     accountSignoutBtn: "Wyloguj sie",
+    accountDeleteBtn: "Usun moje konto",
+    confirmDeleteAccount: "Trwale usunac Twoje konto i wszystkie statystyki? Tej czynnosci nie mozna cofnac.",
+    accountConsentPrefix: "Akceptuje",
+    accountConsentLinkText: "polityke prywatnosci",
     accountWorking: "Chwileczke...",
     accountErrorLength: "Pseudonim musi miec od 3 do 20 znakow.",
     accountErrorPseudoTaken: "Ten pseudonim jest juz zajety.",
     accountErrorEmailTaken: "Konto z tym adresem email juz istnieje.",
     accountErrorWeakPassword: "Haslo musi miec co najmniej 6 znakow.",
     accountErrorPasswordMismatch: "Hasla nie sa identyczne.",
+    accountErrorConsentRequired: "Zaakceptuj polityke prywatnosci, aby kontynuowac.",
     accountErrorInvalidEmail: "Nieprawidlowy adres email.",
     accountErrorInvalidCredentials: "Nieprawidlowy email lub haslo.",
     accountErrorConfirmEmail: "Sprawdz maila, aby potwierdzic konto, a nastepnie sie zaloguj.",
@@ -1136,6 +1253,8 @@ const I18N = {
     rulesBtn: "Zasady gry",
     sfxToggleLabel: "Dzwiek",
     settingsTitle: "Ustawienia",
+    privacyTitle: "Polityka prywatnosci",
+    privacyLangNote: "Ta strona jest obecnie dostepna tylko w jezyku francuskim.",
     quitGameBtn: "Opusc gre",
     confirmQuitGame: "Opuscic biezaca gre?",
     tutorialSlide1Title: "Rytm gry",
@@ -1241,12 +1360,17 @@ const I18N = {
     accountSignupBtn: "Create account",
     accountSigninBtn: "Log in",
     accountSignoutBtn: "Log out",
+    accountDeleteBtn: "Delete my account",
+    confirmDeleteAccount: "Permanently delete your account and all stats? This can't be undone.",
+    accountConsentPrefix: "I agree to the",
+    accountConsentLinkText: "privacy policy",
     accountWorking: "One moment...",
     accountErrorLength: "The nickname must be 3 to 20 characters long.",
     accountErrorPseudoTaken: "This nickname is already taken.",
     accountErrorEmailTaken: "An account already exists with this email.",
     accountErrorWeakPassword: "The password must be at least 6 characters long.",
     accountErrorPasswordMismatch: "Passwords don't match.",
+    accountErrorConsentRequired: "Please accept the privacy policy to continue.",
     accountErrorInvalidEmail: "Invalid email address.",
     accountErrorInvalidCredentials: "Incorrect email or password.",
     accountErrorConfirmEmail: "Check your email to confirm your account, then log in.",
@@ -1290,6 +1414,8 @@ const I18N = {
     rulesBtn: "Rules",
     sfxToggleLabel: "Sound",
     settingsTitle: "Settings",
+    privacyTitle: "Privacy Policy",
+    privacyLangNote: "This page is currently only available in French.",
     quitGameBtn: "Quit game",
     confirmQuitGame: "Quit the current game?",
     tutorialSlide1Title: "Turn flow",
@@ -2345,8 +2471,12 @@ class MenuScene extends Phaser.Scene {
       this.menuButton(cx + tutBtnW/2 + tutGapX/2, tutorialY, tutBtnW, tutH, '🎓 '+t('tutorialBtn'), false, null, {fontSize: tutFontSize});
     }
 
-    // Marque, discrete, coin bas-gauche.
-    this.add.text(14, H-14, 'Hugin Corp™', {fontFamily:'"VT323"', fontSize:'18px', color:'#e9ddc8'}).setOrigin(0,1).setAlpha(0.25);
+    // Marque, discrete, coin bas-gauche -- double comme lien discret vers la
+    // politique de confidentialite (voir #privacy-overlay), le seul autre
+    // acces etant le lien de consentement a l'inscription.
+    const markText = this.add.text(14, H-14, 'Hugin Corp™', {fontFamily:'"VT323"', fontSize:'18px', color:'#e9ddc8'}).setOrigin(0,1).setAlpha(0.25);
+    this.safeInteractive(markText);
+    markText.on('pointerdown', ()=>{ if(window.__openPrivacyPolicy) window.__openPrivacyPolicy(); });
 
     // Bulle "derniere mise a jour", coin bas-droit (le bas-centre est deja
     // pris par la marque).
@@ -5203,6 +5333,9 @@ window.__updateLangPopup(lang);
   const needsPseudoInput = document.getElementById('account-needspseudo-input');
   const needsPseudoBtn = document.getElementById('account-needspseudo-btn');
   const signoutBtn = document.getElementById('account-signout-btn');
+  const deleteBtn = document.getElementById('account-delete-btn');
+  const consentCheckbox = document.getElementById('account-consent-checkbox');
+  const consentText = document.getElementById('account-consent-text');
   const errorBox = document.getElementById('account-error');
   const loggedBox = document.getElementById('account-logged');
   const pseudoDisplay = document.getElementById('account-pseudo-display');
@@ -5264,6 +5397,8 @@ window.__updateLangPopup(lang);
     needsPseudoInput.placeholder = t('accountPseudoPlaceholder');
     needsPseudoBtn.textContent = t('accountSignupBtn');
     signoutBtn.textContent = t('accountSignoutBtn');
+    deleteBtn.textContent = t('accountDeleteBtn');
+    consentText.innerHTML = t('accountConsentPrefix') + ' <a href="#" id="account-consent-link">' + t('accountConsentLinkText') + '</a>.';
     if(state.profile){
       guestBox.style.display = 'none';
       loggedBox.style.display = 'block';
@@ -5334,11 +5469,23 @@ window.__updateLangPopup(lang);
     if(!window.DaniszAccount) return;
     errorBox.textContent = '';
     if(passwordInput.value !== passwordConfirmInput.value){ showError('passwordMismatch'); return; }
+    // Consentement RGPD explicite, case decochee par defaut : obligatoire
+    // avant toute creation de compte (donc avant tout traitement des
+    // donnees saisies au-dessus).
+    if(!consentCheckbox.checked){ showError('consentRequired'); return; }
     const result = await withBusyButton(signupBtn, 'accountWorking', ()=>
       window.DaniszAccount.signUp(pseudoInput.value, emailInput.value, passwordInput.value));
     if(result.error){ showError(result.error); return; }
-    pseudoInput.value = ''; emailInput.value = ''; passwordInput.value = ''; passwordConfirmInput.value = '';
+    pseudoInput.value = ''; emailInput.value = ''; passwordInput.value = ''; passwordConfirmInput.value = ''; consentCheckbox.checked = false;
     refreshAccountUI();
+  });
+  // Delegation (plutot qu'un listener direct sur le lien) : le lien est
+  // recree a chaque refreshAccountUI() (innerHTML), un listener direct
+  // serait perdu des le premier changement de langue.
+  consentText.addEventListener('click', (e)=>{
+    if(e.target.id!=='account-consent-link') return;
+    e.preventDefault();
+    if(window.__openPrivacyPolicy) window.__openPrivacyPolicy();
   });
   [pseudoInput, emailInput, passwordInput, passwordConfirmInput].forEach(el=>{
     el.addEventListener('keydown', (e)=>{ if(e.key==='Enter') signupBtn.click(); });
@@ -5374,6 +5521,22 @@ window.__updateLangPopup(lang);
     e.stopPropagation();
     if(!window.DaniszAccount) return;
     await window.DaniszAccount.signOut();
+    setGuestMode('signup');
+    refreshAccountUI();
+  });
+
+  // Suppression definitive du compte (droit a l'effacement RGPD) : double
+  // confirmation textuelle (pas juste OK/Annuler) vu que c'est irreversible
+  // et supprime aussi les stats/parties associees (cascade cote SQL, voir
+  // delete_user() dans schema.sql).
+  deleteBtn.addEventListener('click', async (e)=>{
+    e.stopPropagation();
+    if(!window.DaniszAccount) return;
+    if(!window.confirm(t('confirmDeleteAccount'))) return;
+    errorBox.textContent = '';
+    const result = await withBusyButton(deleteBtn, 'accountWorking', ()=>
+      window.DaniszAccount.deleteAccount());
+    if(result.error){ showError(result.error); return; }
     setGuestMode('signup');
     refreshAccountUI();
   });
@@ -5589,6 +5752,43 @@ window.__updateLangPopup(lang);
   const prevApplyLang3 = window.__applyLang;
   window.__applyLang = function(newLang){
     prevApplyLang3(newLang);
+    if(overlay.classList.contains('open')) refreshTexts();
+  };
+})();
+</script>
+<script>
+/* =========================================================
+   Politique de confidentialite (overlay DOM, voir #privacy-overlay plus
+   haut) : ouverte depuis le lien de consentement de l'inscription
+   (window.__openPrivacyPolicy) ou depuis la marque "Hugin Corp" du menu
+   (voir MenuScene, appelle la meme fonction). Le corps du texte reste en
+   francais uniquement pour l'instant (contenu long-forme, pas juste des
+   libelles d'UI) -- une note s'affiche si la langue active n'est pas le
+   francais plutot que de laisser croire a une traduction manquante par erreur.
+   ========================================================= */
+(function(){
+  const overlay = document.getElementById('privacy-overlay');
+  const closeBtn = document.getElementById('privacy-close-btn');
+  const title = document.getElementById('privacy-title');
+  const langNote = document.getElementById('privacy-lang-note');
+
+  function refreshTexts(){
+    title.textContent = t('privacyTitle');
+    langNote.textContent = lang==='fr' ? '' : t('privacyLangNote');
+    langNote.style.display = lang==='fr' ? 'none' : 'block';
+  }
+
+  closeBtn.addEventListener('click', ()=>overlay.classList.remove('open'));
+  overlay.addEventListener('click', (e)=>{ if(e.target === overlay) overlay.classList.remove('open'); });
+
+  window.__openPrivacyPolicy = function(){
+    refreshTexts();
+    overlay.classList.add('open');
+  };
+
+  const prevApplyLang4 = window.__applyLang;
+  window.__applyLang = function(newLang){
+    prevApplyLang4(newLang);
     if(overlay.classList.contains('open')) refreshTexts();
   };
 })();

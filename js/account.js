@@ -141,6 +141,21 @@
     notify();
   }
 
+  // Suppression definitive du compte (droit a l'effacement RGPD) : appelle
+  // une fonction serveur qui supprime la ligne auth.users -- profiles/
+  // matches/lobbies suivent automatiquement via leurs FK "on delete cascade"
+  // (voir delete_user() dans supabase/schema.sql), un seul point d'entree
+  // suffit. { ok:true } ou { error: 'unknown' }.
+  async function deleteAccount(){
+    if(!supabase || !state.session) return { error: 'unknown' };
+    const { error } = await supabase.rpc('delete_user');
+    if(error){ console.warn('[DaniszAccount] delete account failed', error); return { error: 'unknown' }; }
+    state.session = null;
+    state.profile = null;
+    notify();
+    return { ok: true };
+  }
+
   // No-op silencieux si aucun profil (mode invite) : le mode offline ne doit
   // jamais dependre de ca pour fonctionner.
   async function reportAiMatch(mode, won, turns){
@@ -219,6 +234,6 @@
   // mais etat memoire separe).
   async function getClient(){ await init(); return supabase; }
 
-  window.DaniszAccount = { signUp, signIn, signOut, setPseudo, reportAiMatch, fetchMyTopScores, fetchModeLeaderboard, hasAccount, getState, onChange, getClient };
+  window.DaniszAccount = { signUp, signIn, signOut, deleteAccount, setPseudo, reportAiMatch, fetchMyTopScores, fetchModeLeaderboard, hasAccount, getState, onChange, getClient };
   init().catch(e=>console.error('[DaniszAccount] init failed', e));
 })();

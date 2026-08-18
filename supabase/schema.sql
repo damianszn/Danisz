@@ -104,3 +104,30 @@ $$;
 
 revoke all on function public.record_ai_match(text, boolean, integer) from public;
 grant execute on function public.record_ai_match(text, boolean, integer) to authenticated;
+
+-- ---- Suppression de compte (droit a l'effacement RGPD) ----
+-- Supprime la ligne auth.users du joueur connecte. profiles (FK vers
+-- auth.users, on delete cascade) et par extension matches/lobbies (FK vers
+-- profiles, on delete cascade elles aussi -- voir schema_online.sql) suivent
+-- automatiquement : un seul point d'entree suffit, pas besoin de nettoyer
+-- chaque table a la main. security definer + proprietaire du role qui
+-- execute ce script (typiquement postgres, qui a les droits sur le schema
+-- auth) : un role authentifie normal n'a pas le droit d'ecrire dans auth
+-- directement, cette fonction lui prete ceux du proprietaire pour ce seul
+-- geste, strictement limite a auth.uid() (jamais un id fourni par le client).
+create or replace function public.delete_user()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+
+revoke all on function public.delete_user() from public;
+grant execute on function public.delete_user() to authenticated;
