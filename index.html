@@ -892,9 +892,10 @@ const I18N = {
     takenLabel: "+{n} carte(s)",
     takenLabelBig: "+{n} carte(s) !",
     menuVsAI: "1v1 offline",
-    menuVs3: "1v3 offline",
+    menuRanked: "1v1 classé",
+    rankedLabel: "Elo",
     menuOnline: "1v1 joueur",
-    menuFFA: "1v3 joueurs",
+    menuFFA: "1v1v1v1",
     comingSoon: "Bientôt",
     turnsSubtitle: "en {n} tours",
     diffTitle: "Choisis la difficulte",
@@ -1068,9 +1069,10 @@ const I18N = {
     takenLabel: "+{n} kaart(en)",
     takenLabelBig: "+{n} kaart(en)!",
     menuVsAI: "1v1 offline",
-    menuVs3: "1v3 offline",
+    menuRanked: "1v1 ranked",
+    rankedLabel: "Elo",
     menuOnline: "1v1 speler",
-    menuFFA: "1v3 spelers",
+    menuFFA: "1v1v1v1",
     comingSoon: "Binnenkort",
     turnsSubtitle: "in {n} beurten",
     diffTitle: "Kies moeilijkheidsgraad",
@@ -1244,9 +1246,10 @@ const I18N = {
     takenLabel: "+{n} kart",
     takenLabelBig: "+{n} kart!",
     menuVsAI: "1v1 offline",
-    menuVs3: "1v3 offline",
+    menuRanked: "1v1 rankingowe",
+    rankedLabel: "Elo",
     menuOnline: "1v1 gracz",
-    menuFFA: "1v3 graczy",
+    menuFFA: "1v1v1v1",
     comingSoon: "Wkrótce",
     turnsSubtitle: "w {n} tur",
     diffTitle: "Wybierz poziom trudnosci",
@@ -1420,9 +1423,10 @@ const I18N = {
     takenLabel: "+{n} card(s)",
     takenLabelBig: "+{n} card(s)!",
     menuVsAI: "1v1 offline",
-    menuVs3: "1v3 offline",
+    menuRanked: "1v1 ranked",
+    rankedLabel: "Elo",
     menuOnline: "1v1 online",
-    menuFFA: "1v3 players",
+    menuFFA: "1v1v1v1",
     comingSoon: "Coming soon",
     turnsSubtitle: "in {n} turns",
     diffTitle: "Choose difficulty",
@@ -2286,7 +2290,7 @@ let difficulty = 'normal';
 // fois par partie (garde via gameState.resultSubmitted, remis a false par
 // createGame()). No-op silencieux tant qu'aucun profil n'existe : le mode
 // offline ne depend jamais de ca pour fonctionner (voir js/account.js).
-function maybeReportMatchResult(onlineRole, onlineLobbyId){
+function maybeReportMatchResult(onlineRole, onlineLobbyId, onlineRanked){
   if(!gameState.winner || gameState.resultSubmitted) return;
   gameState.resultSubmitted = true;
   if(gameState.winner==='player') sfxVictory(); else sfxDefeat();
@@ -2297,7 +2301,10 @@ function maybeReportMatchResult(onlineRole, onlineLobbyId){
     // modele de confiance). "player" est TOUJOURS "moi-meme" ici, cote
     // hote comme cote invite (voir swapStatePerspective) -- pas besoin de
     // distinguer les deux cotes pour savoir qui a gagne.
-    if(onlineRole==='host' && window.DaniszOnline){
+    // onlineRanked=false ("1v1 en ligne" casual) : on ne rapporte rien du
+    // tout, ni Elo ni historique -- report_online_match() refuserait de
+    // toute facon cote serveur (voir schema_online.sql PHASE 5).
+    if(onlineRole==='host' && onlineRanked && window.DaniszOnline){
       window.DaniszOnline.reportMatchResult(onlineLobbyId, gameState.winner==='player', gameState.turnCount)
         .then(res=>{
           if(res.ok && window.DaniszAccount) window.DaniszAccount.refreshProfile();
@@ -2538,9 +2545,15 @@ class MenuScene extends Phaser.Scene {
       let y = topY + btnH/2;
       this.menuButton(cx, y, btnW, btnH, t('menuVsAI'), true, ()=>this.scene.start('difficulty'), {fontSize});
       y += step;
-      this.menuButton(cx, y, btnW, btnH, t('menuVs3'), false, null, {fontSize, subFontSize});
+      // "1v1 classe" = l'ancien "1v1 en ligne" (meme matchmaking/moteur),
+      // desormais avec l'Elo qu'on retire du "1v1 joueur" casual juste en
+      // dessous -- meme file d'attente/lobby que l'online, juste separee
+      // (voir ranked dans schema_online.sql PHASE 5).
+      this.menuButton(cx, y, btnW, btnH, t('menuRanked'), true, ()=>this.scene.start('online-lobby', {ranked:true}), {
+        fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('rankedLabel'), subtitleColor:'#ffd23f', fontSize, subFontSize
+      });
       y += step;
-      this.menuButton(cx, y, btnW, btnH, t('menuOnline'), true, ()=>this.scene.start('online-lobby'), {
+      this.menuButton(cx, y, btnW, btnH, t('menuOnline'), true, ()=>this.scene.start('online-lobby', {ranked:false}), {
         fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('betaLabel'), subtitleColor:'#ffa64d', fontSize, subFontSize
       });
       y += step;
@@ -2583,8 +2596,13 @@ class MenuScene extends Phaser.Scene {
       const row0Y = gridTop + btnH/2;
       const row1Y = row0Y + btnH + gapY;
       this.menuButton(col0X, row0Y, btnW, btnH, t('menuVsAI'), true, ()=>this.scene.start('difficulty'), {fontSize});
-      this.menuButton(col1X, row0Y, btnW, btnH, t('menuVs3'), false, null, {fontSize, subFontSize});
-      this.menuButton(col0X, row1Y, btnW, btnH, t('menuOnline'), true, ()=>this.scene.start('online-lobby'), {
+      // Voir le meme commentaire en portrait ci-dessus : "1v1 classe" =
+      // l'ancien "1v1 en ligne" (meme moteur/matchmaking) avec l'Elo, que
+      // l'on retire du "1v1 joueur" casual juste en dessous.
+      this.menuButton(col1X, row0Y, btnW, btnH, t('menuRanked'), true, ()=>this.scene.start('online-lobby', {ranked:true}), {
+        fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('rankedLabel'), subtitleColor:'#ffd23f', fontSize, subFontSize
+      });
+      this.menuButton(col0X, row1Y, btnW, btnH, t('menuOnline'), true, ()=>this.scene.start('online-lobby', {ranked:false}), {
         fill:0x8a4a1f, stroke:0xffa64d, subtitle:t('betaLabel'), subtitleColor:'#ffa64d', fontSize, subFontSize
       });
       this.menuButton(col1X, row1Y, btnW, btnH, t('menuFFA'), false, null, {fontSize, subFontSize});
@@ -3054,9 +3072,15 @@ class OnlineLobbyScene extends Phaser.Scene {
     return obj;
   }
 
-  create(){
+  // data.ranked : passe par MenuScene.scene.start('online-lobby', {ranked}) --
+  // distingue "1v1 classe" (Elo, this.ranked=true) de "1v1 en ligne" (casual,
+  // this.ranked=false), meme moteur/matchmaking, deux files/pools separes
+  // (voir schema_online.sql PHASE 5). Phaser passe `data` a create() meme
+  // sans init() defini.
+  create(data){
     if(window.__onSceneChange) window.__onSceneChange('online-lobby');
     this.cameras.main.setBackgroundColor(0x2e4928);
+    this.ranked = !!(data && data.ranked);
     // 'choice' | 'searching' | 'waiting-invite' | 'matched'
     this.mode = 'choice';
     if(window.__onlineLobbyModeChange) window.__onlineLobbyModeChange('choice');
@@ -3067,6 +3091,8 @@ class OnlineLobbyScene extends Phaser.Scene {
     // presence live pour "en ligne", sondage ponctuel pour "en file
     // d'attente" (RLS empeche un flux temps reel sur les lobbies des
     // autres joueurs, voir get_queue_count() dans schema_online.sql).
+    // getQueueCount(this.ranked) : compte uniquement la file du MEME mode,
+    // jamais l'autre (classe et casual ne partagent pas leur file d'attente).
     this.onlineCount = null;
     this.queueCount = null;
     if(window.DaniszOnline){
@@ -3075,7 +3101,7 @@ class OnlineLobbyScene extends Phaser.Scene {
         if(this.scene.isActive()) this.render();
       });
       const refreshQueueCount = ()=>{
-        window.DaniszOnline.getQueueCount().then(n=>{
+        window.DaniszOnline.getQueueCount(this.ranked).then(n=>{
           if(!this.scene.isActive()) return;
           this.queueCount = n;
           this.render();
@@ -3160,7 +3186,7 @@ class OnlineLobbyScene extends Phaser.Scene {
       const opponentInfo = await opponentInfoPromise;
       if(!this.scene.isActive()) return;
       window.__onlineMatch = {
-        lobbyId: this.lobbyId, role,
+        lobbyId: this.lobbyId, role, ranked: this.ranked,
         opponentPseudo: opponentInfo ? opponentInfo.pseudo : null,
         opponentElo: opponentInfo ? opponentInfo.elo : null
       };
@@ -3172,7 +3198,7 @@ class OnlineLobbyScene extends Phaser.Scene {
     if(!window.DaniszOnline) return;
     this.errorMsg = '';
     this.setMode('searching');
-    window.DaniszOnline.joinRandomQueue().then(res=>{
+    window.DaniszOnline.joinRandomQueue(this.ranked).then(res=>{
       if(!this.scene.isActive()) return;
       if(res.error){ this.errorMsg = t('accountErrorUnknown'); this.setMode('choice'); return; }
       this.lobbyId = res.lobbyId;
@@ -3200,7 +3226,7 @@ class OnlineLobbyScene extends Phaser.Scene {
     if(!window.DaniszOnline) return;
     this.errorMsg = '';
     this.setMode('searching');
-    window.DaniszOnline.createInviteLobby().then(res=>{
+    window.DaniszOnline.createInviteLobby(this.ranked).then(res=>{
       if(!this.scene.isActive()) return;
       if(res.error){ this.errorMsg = t('accountErrorUnknown'); this.setMode('choice'); return; }
       this.lobbyId = res.lobbyId;
@@ -3228,6 +3254,11 @@ class OnlineLobbyScene extends Phaser.Scene {
       }
       if(errorEl) errorEl.textContent = '';
       this.lobbyId = res.lobbyId;
+      // Le mode (classe/casual) est celui choisi par le CREATEUR du code,
+      // pas necessairement l'ecran sur lequel on se trouvait en le tapant
+      // -- on aligne this.ranked sur la valeur authoritaire renvoyee par
+      // le serveur avant d'entrer en partie.
+      this.ranked = res.ranked;
       // On rejoint via un code cree par quelqu'un d'autre : ce createur
       // est l'hote, nous sommes l'invite.
       this.enterMatchedState('guest');
@@ -3255,7 +3286,7 @@ class OnlineLobbyScene extends Phaser.Scene {
     // actif (cy-relatif, lui) des que l'ecran est assez court.
     const titleSize = Math.max(18, Math.min(30, Math.round(H*0.08)));
     const titleY = Math.max(30, Math.min(70, H*0.13));
-    this.add.text(cx, titleY, t('onlineLobbyTitle'), {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px', color:'#e9ddc8'}).setOrigin(0.5);
+    this.add.text(cx, titleY, t(this.ranked ? 'menuRanked' : 'onlineLobbyTitle'), {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px', color:'#e9ddc8'}).setOrigin(0.5);
 
     const hasAccount = window.DaniszAccount && window.DaniszAccount.hasAccount();
     if(!hasAccount){
@@ -3281,8 +3312,10 @@ class OnlineLobbyScene extends Phaser.Scene {
     }
     // Ton propre palier + elo, juste au-dessus du contenu du mode actif --
     // "aller en mode online" (choisir de chercher/creer une partie) est
-    // precisement le moment ou ca a du sens de le rappeler.
-    if(this.mode!=='matched'){
+    // precisement le moment ou ca a du sens de le rappeler. Uniquement en
+    // classe : le rappeler sur l'ecran casual laisserait croire que ce
+    // match-la a un impact sur l'Elo, alors que ce mode n'y touche plus.
+    if(this.mode!=='matched' && this.ranked){
       const myProfile = window.DaniszAccount.getState().profile;
       if(myProfile){
         const tier = eloTier(myProfile.elo);
@@ -3379,6 +3412,11 @@ class MainScene extends Phaser.Scene {
     if(window.__onlineMatch){
       this.onlineRole = window.__onlineMatch.role;
       this.onlineLobbyId = window.__onlineMatch.lobbyId;
+      // "1v1 classe" (Elo) vs "1v1 en ligne" (casual, aucun impact Elo) --
+      // choisi sur l'ecran de lobby, voir OnlineLobbyScene.ranked. Gate le
+      // rapport de resultat (maybeReportMatchResult) et l'affichage du
+      // palier/couleur de l'adversaire plus bas.
+      this.onlineRanked = !!window.__onlineMatch.ranked;
       this.onlineOpponentPseudo = window.__onlineMatch.opponentPseudo || null;
       this.onlineOpponentElo = window.__onlineMatch.opponentElo!=null ? window.__onlineMatch.opponentElo : null;
       window.__onlineMatch = null;
@@ -4500,7 +4538,7 @@ class MainScene extends Phaser.Scene {
   // Dispatch vers la bonne mise en page selon l'orientation detectee dans
   // layoutAndDraw().
   drawAll(){
-    maybeReportMatchResult(this.onlineRole, this.onlineLobbyId);
+    maybeReportMatchResult(this.onlineRole, this.onlineLobbyId, this.onlineRanked);
     // drawAllLandscape()/drawAllPortrait() (plus bas) detruisent TOUS les
     // sprites, y compris une eventuelle carte encore en vol optimiste (voir
     // startOptimisticFlight) -- et tuent son tween au passage (killTweensOf,
@@ -4646,10 +4684,11 @@ class MainScene extends Phaser.Scene {
     // info de triche a masquer.
     if(this.onlineRole && this.onlineOpponentPseudo){
       const oppLabel = difficulty!=='nightmare' ? `${this.onlineOpponentPseudo} (${aiHandCount})` : this.onlineOpponentPseudo;
-      // Couleur = palier d'Elo de l'adversaire (voir eloTier()) : sans son
-      // elo (echec reseau lors de la mise en relation), reste sur le jaune
-      // par defaut plutot que de deviner.
-      const oppColor = this.onlineOpponentElo!=null ? eloTier(this.onlineOpponentElo).color : '#ffd23f';
+      // Couleur = palier d'Elo de l'adversaire (voir eloTier()), UNIQUEMENT
+      // en mode classe -- en "1v1 en ligne" casual, l'Elo ne joue plus aucun
+      // role, le colorer laisserait croire au contraire. Jaune par defaut
+      // dans tous les autres cas (casual, ou echec reseau du fetch de l'elo).
+      const oppColor = (this.onlineRanked && this.onlineOpponentElo!=null) ? eloTier(this.onlineOpponentElo).color : '#ffd23f';
       this.label(W/2 - (fanCount-1)*aiFanSpacing/2 - 24 - 14, 50, oppLabel,
         {fontFamily:'"Press Start 2P"', fontSize:'12px', color:oppColor, originX:1, originY:0.5});
     } else if(difficulty!=='nightmare'){

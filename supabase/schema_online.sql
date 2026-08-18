@@ -297,3 +297,204 @@ $$;
 
 revoke all on function public.report_online_match(uuid, boolean, integer) from public;
 grant execute on function public.report_online_match(uuid, boolean, integer) to authenticated;
+
+/* =========================================================
+   PHASE 5 : separer "1v1 en ligne" (desormais casual, aucun impact sur
+   l'Elo) de "1v1 classe" (nouveau, c'est litteralement l'ancien "1v1 en
+   ligne" avec Elo -- meme moteur, meme lobby/matchmaking, juste un flag).
+   Chaque lobby porte donc maintenant son propre statut classe/casual, et
+   les deux modes ont chacun leur PROPRE file d'attente/pool de lobbies :
+   un joueur en classe ne doit jamais se faire appairer avec un joueur en
+   casual, sinon l'un des deux aurait une attente sur l'issue du match
+   (impact Elo ou non) differente de la realite.
+
+   Signatures changees (nouveau parametre) : DROP necessaire avant de
+   recreer, sinon Postgres garde l'ancienne ET la nouvelle en parallele
+   (surcharge de fonction) au lieu de remplacer -- meme situation que
+   record_ai_match(text, boolean) -> record_ai_match(text, boolean,
+   integer) documentee en tete de schema.sql.
+   ========================================================= */
+
+alter table public.lobbies add column ranked boolean not null default true;
+
+drop function if exists public.join_random_queue();
+drop function if exists public.create_invite_lobby();
+drop function if exists public.get_queue_count();
+drop function if exists public.join_invite_lobby(text);
+
+create or replace function public.join_random_queue(p_ranked boolean default true)
+returns table(lobby_id uuid, opponent_joined boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_existing public.lobbies%rowtype;
+  v_new_id uuid;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_existing from public.lobbies
+    where status = 'waiting' and code is null and joueur1 <> v_uid and ranked = p_ranked
+    order by created_at asc
+    limit 1
+    for update skip locked;
+
+  if found then
+    update public.lobbies set joueur2 = v_uid, status = 'active' where id = v_existing.id;
+    return query select v_existing.id, true;
+    return;
+  end if;
+
+  delete from public.lobbies where joueur1 = v_uid and status = 'waiting' and code is null and ranked = p_ranked;
+
+  insert into public.lobbies (joueur1, status, ranked) values (v_uid, 'waiting', p_ranked) returning id into v_new_id;
+  return query select v_new_id, false;
+end;
+$$;
+
+create or replace function public.create_invite_lobby(p_ranked boolean default true)
+returns table(lobby_id uuid, code text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_code text;
+  v_id uuid;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  delete from public.lobbies where joueur1 = v_uid and status = 'waiting';
+
+  v_code := upper(substr(md5(random()::text), 1, 6));
+  insert into public.lobbies (joueur1, status, code, ranked) values (v_uid, 'waiting', v_code, p_ranked) returning id into v_id;
+  return query select v_id, v_code;
+end;
+$$;
+
+-- Renvoie desormais aussi `ranked`, tire de la lobby elle-meme (choisi par
+-- le createur du code, jamais par celui qui rejoint avec) : le client
+-- invite doit savoir dans quel mode il vient d'entrer.
+create or replace function public.join_invite_lobby(p_code text)
+returns table(lobby_id uuid, joueur1 uuid, ranked boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_lobby public.lobbies%rowtype;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_lobby from public.lobbies
+    where code = upper(p_code) and status = 'waiting'
+    for update;
+
+  if not found then
+    raise exception 'lobby_not_found';
+  end if;
+  if v_lobby.joueur1 = v_uid then
+    raise exception 'cannot_join_own_lobby';
+  end if;
+
+  update public.lobbies set joueur2 = v_uid, status = 'active' where id = v_lobby.id;
+  return query select v_lobby.id, v_lobby.joueur1, v_lobby.ranked;
+end;
+$$;
+
+create or replace function public.get_queue_count(p_ranked boolean default true)
+returns integer
+language sql
+security definer
+set search_path = public
+as $$
+  select count(*)::integer from public.lobbies
+  where status = 'waiting' and code is null and joueur1 <> auth.uid() and ranked = p_ranked;
+$$;
+
+revoke all on function public.join_random_queue(boolean) from public;
+revoke all on function public.create_invite_lobby(boolean) from public;
+revoke all on function public.join_invite_lobby(text) from public;
+revoke all on function public.get_queue_count(boolean) from public;
+grant execute on function public.join_random_queue(boolean) to authenticated;
+grant execute on function public.create_invite_lobby(boolean) to authenticated;
+grant execute on function public.join_invite_lobby(text) to authenticated;
+grant execute on function public.get_queue_count(boolean) to authenticated;
+
+-- Garde-fou cote serveur : refuse de reporter un resultat (donc de toucher
+-- a l'Elo) pour une lobby casual (ranked=false). Le client normal n'appelle
+-- deja jamais ca en casual (voir maybeReportMatchResult dans index.html),
+-- mais un client modifie ne doit pas pouvoir forcer un gain/perte d'Elo en
+-- passant par le mode casual -- meme logique de defense que le reste de ce
+-- fichier (l'Elo est TOUJOURS calcule/applique cote serveur, jamais fourni
+-- par le client).
+create or replace function public.report_online_match(p_lobby_id uuid, p_i_won boolean, p_tours integer)
+returns table(elo_delta integer, winner_elo_after integer, loser_elo_after integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_lobby public.lobbies%rowtype;
+  v_opponent uuid;
+  v_winner uuid;
+  v_loser uuid;
+  v_winner_elo integer;
+  v_loser_elo integer;
+  v_expected double precision;
+  v_delta integer;
+  v_k constant integer := 24;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_lobby from public.lobbies where id = p_lobby_id;
+  if not found then
+    raise exception 'lobby_not_found';
+  end if;
+  if auth.uid() <> v_lobby.joueur1 and auth.uid() <> v_lobby.joueur2 then
+    raise exception 'not_a_participant';
+  end if;
+  if not v_lobby.ranked then
+    raise exception 'not_ranked';
+  end if;
+
+  v_opponent := case when auth.uid() = v_lobby.joueur1 then v_lobby.joueur2 else v_lobby.joueur1 end;
+  if v_opponent is null then
+    raise exception 'no_opponent';
+  end if;
+
+  v_winner := case when p_i_won then auth.uid() else v_opponent end;
+  v_loser := case when p_i_won then v_opponent else auth.uid() end;
+
+  select elo into v_winner_elo from public.profiles where id = v_winner;
+  select elo into v_loser_elo from public.profiles where id = v_loser;
+
+  v_expected := 1.0 / (1.0 + power(10.0, (v_loser_elo - v_winner_elo) / 400.0));
+  v_delta := greatest(1, round(v_k * (1 - v_expected))::integer);
+
+  update public.profiles set elo = elo + v_delta where id = v_winner;
+  update public.profiles set elo = elo - v_delta where id = v_loser;
+
+  insert into public.online_matches
+    (lobby_id, winner, loser, winner_elo_before, loser_elo_before, winner_elo_after, loser_elo_after, tours)
+  values
+    (p_lobby_id, v_winner, v_loser, v_winner_elo, v_loser_elo, v_winner_elo + v_delta, v_loser_elo - v_delta, p_tours);
+
+  return query select v_delta, (v_winner_elo + v_delta), (v_loser_elo - v_delta);
+end;
+$$;
+
+revoke all on function public.report_online_match(uuid, boolean, integer) from public;
+grant execute on function public.report_online_match(uuid, boolean, integer) to authenticated;

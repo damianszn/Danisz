@@ -25,9 +25,12 @@
   // { ok:true, lobbyId, matched:boolean } ou { error:'unknown' }
   // matched=true si on a rejoint quelqu'un qui attendait deja ; false si
   // on est maintenant soi-meme en attente (watchLobby() pour la suite).
-  async function joinRandomQueue(){
+  // ranked distingue le mode "1v1 classe" (Elo) du "1v1 en ligne" (casual,
+  // aucun impact Elo) -- chacun a sa propre file, jamais melangees (voir
+  // schema_online.sql PHASE 5).
+  async function joinRandomQueue(ranked){
     const sb = await getClient();
-    const { data, error } = await sb.rpc('join_random_queue');
+    const { data, error } = await sb.rpc('join_random_queue', { p_ranked: !!ranked });
     if(error){ console.warn('[DaniszOnline] join_random_queue failed', error); return { error: 'unknown' }; }
     const row = data[0];
     return { ok: true, lobbyId: row.lobby_id, matched: row.opponent_joined };
@@ -40,15 +43,17 @@
   }
 
   // { ok:true, lobbyId, code } ou { error:'unknown' }
-  async function createInviteLobby(){
+  async function createInviteLobby(ranked){
     const sb = await getClient();
-    const { data, error } = await sb.rpc('create_invite_lobby');
+    const { data, error } = await sb.rpc('create_invite_lobby', { p_ranked: !!ranked });
     if(error){ console.warn('[DaniszOnline] create_invite_lobby failed', error); return { error: 'unknown' }; }
     const row = data[0];
     return { ok: true, lobbyId: row.lobby_id, code: row.code };
   }
 
-  // { ok:true, lobbyId, opponentId } ou { error:'notFound'|'ownLobby'|'unknown' }
+  // { ok:true, lobbyId, opponentId, ranked } ou { error:'notFound'|'ownLobby'|'unknown' }
+  // ranked vient de la lobby elle-meme (choisi par le createur du code) --
+  // pas de parametre a fournir en rejoignant, seulement en le lisant.
   async function joinInviteLobby(code){
     const sb = await getClient();
     const { data, error } = await sb.rpc('join_invite_lobby', { p_code: (code || '').trim() });
@@ -59,7 +64,7 @@
       return { error: 'unknown' };
     }
     const row = data[0];
-    return { ok: true, lobbyId: row.lobby_id, opponentId: row.joueur1 };
+    return { ok: true, lobbyId: row.lobby_id, opponentId: row.joueur1, ranked: !!row.ranked };
   }
 
   // Pseudo + elo de l'AUTRE joueur de cette lobby (celui qui n'est pas
@@ -199,11 +204,12 @@
   }
 
   // Nombre de joueurs actuellement en file d'attente aleatoire publique
-  // (hors lobbies a code d'invitation). 0 en cas d'erreur reseau, plutot
-  // que de casser l'affichage pour un simple compteur secondaire.
-  async function getQueueCount(){
+  // (hors lobbies a code d'invitation) DU MEME MODE (ranked). 0 en cas
+  // d'erreur reseau, plutot que de casser l'affichage pour un simple
+  // compteur secondaire.
+  async function getQueueCount(ranked){
     const sb = await getClient();
-    const { data, error } = await sb.rpc('get_queue_count');
+    const { data, error } = await sb.rpc('get_queue_count', { p_ranked: !!ranked });
     if(error){ console.warn('[DaniszOnline] get_queue_count failed', error); return 0; }
     return data || 0;
   }
