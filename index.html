@@ -2780,14 +2780,42 @@ class ConfirmScene extends Phaser.Scene {
 
     const rulesKey = { easy:'diffEasyRules', normal:'diffNormalRules', hard:'diffHardRules', nightmare:'diffNightmareRules' }[difficulty];
     const bullets = t(rulesKey).split('\n');
-    let by = titleY + 40;
-    bullets.forEach(line=>{
-      // Hauteur mesuree plutot qu'un pas fixe : a cette taille de police, une
-      // regle un peu longue (Cauchemar) peut se retrouver sur 2 lignes, un
-      // pas fixe l'aurait fait chevaucher la suivante.
-      const txt = this.add.text(x+22, by, line,
-        {fontFamily:'"VT323"', fontSize:'24px', color:'#e9ddc8', wordWrap:{width:w-44}});
-      by += txt.height + 12;
+    const bulletsTop = titleY + 40;
+    const availH = (y+h) - bulletsTop - 10;
+
+    // Le nombre/longueur des regles varie enormement selon la difficulte
+    // (Cauchemar en a nettement plus que Facile) alors que le panneau a une
+    // hauteur FIXE (decidee par la mise en page globale, pas par le contenu
+    // des regles) -- a taille de police fixe, Cauchemar debordait du
+    // panneau et venait chevaucher le bouton "Distribuer les cartes" juste
+    // en dessous. On mesure la hauteur reelle (wordWrap compris) a la
+    // taille ideale, et on retrecit progressivement jusqu'a tenir dans
+    // l'espace dispo, comme le fait deja le panneau de journal en partie
+    // (voir pushLogLine) pour la largeur.
+    let fontSize = 24, lineGap = 12;
+    const measure = (fs, gap)=>{
+      let total = 0;
+      const heights = bullets.map(line=>{
+        const probe = this.add.text(0, 0, line, {fontFamily:'"VT323"', fontSize:fs+'px', wordWrap:{width:w-44}}).setVisible(false);
+        const hh = probe.height;
+        probe.destroy();
+        total += hh + gap;
+        return hh;
+      });
+      return { total, heights };
+    };
+    let measured = measure(fontSize, lineGap);
+    while(measured.total > availH && fontSize > 14){
+      fontSize -= 2;
+      lineGap = Math.max(6, lineGap - 1);
+      measured = measure(fontSize, lineGap);
+    }
+
+    let by = bulletsTop;
+    bullets.forEach((line, i)=>{
+      this.add.text(x+22, by, line,
+        {fontFamily:'"VT323"', fontSize:fontSize+'px', color:'#e9ddc8', wordWrap:{width:w-44}});
+      by += measured.heights[i] + lineGap;
     });
   }
 
