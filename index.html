@@ -1762,12 +1762,10 @@ function resolvePlay(state, who, cards){
   // isolee (sinon jouer 2x 3 ensemble redeclencherait l'effet deux fois).
   let effectiveRank = rank;
   let copyBelowRank = null;
-  let isCopy3 = false;
   if(rank === '3'){
     if(wasWarActive){
       effectiveRank = 'A';
       copyBelowRank = 'A';
-      isCopy3 = true;
     } else {
       const below = state.pile[state.pile.length-1-count];
       if(below){
@@ -1775,33 +1773,32 @@ function resolvePlay(state, who, cards){
         if(br === '3'){
           br = prevCopyEffectiveTop || null;
         }
-        if(br){ effectiveRank = br; copyBelowRank = br; isCopy3 = true; }
+        if(br){ effectiveRank = br; copyBelowRank = br; }
       }
     }
   }
-  cards.forEach(c => { c.effectiveRank = effectiveRank; c.isCopy3 = isCopy3; });
+  cards.forEach(c => { c.effectiveRank = effectiveRank; });
 
   // Coupe si 4 (ou plus) cartes consecutives en fin de pile partagent le meme
-  // rang effectif : que ce soit 4 vraies cartes posees d'un coup, un
-  // enchainement etale sur plusieurs tours, ou une suite de 3 identiques
-  // completee par UN SEUL 3-copie (regle : "you can only do it with one
-  // copy, you can't play more than one 3 that way") -- ET ce 3 doit etre la
-  // toute derniere carte de la suite (celle qui la COMPLETE), pas une carte
-  // inseree au milieu qu'une vraie carte suivante finirait par completer
-  // "par coincidence" (ex : K, K, 3, K ne doit pas couper). Cette coupe est
-  // prioritaire sur tout, y compris pendant une guerre : un 3 qui complete
-  // un carre d'As coupe et met fin a la guerre du meme coup.
-  let tail = 0, copy3Count = 0, copy3PositionValid = true;
+  // rang effectif : 4 vraies cartes posees d'un coup, un enchainement etale
+  // sur plusieurs tours, ou une suite de 3 qui copient (en chaine ou non)
+  // ce meme rang -- des que la chaine de copies atteint 4, elle coupe
+  // exactement comme n'importe quelle autre suite de 4, la copie n'a pas
+  // besoin de "s'arreter" avant : le fait de couper la retire du jeu de
+  // toute facon. Anciennement limite a UN SEUL 3-copie en position finale
+  // (4 3 d'affilee, chacun copiant le meme rang par enchainement, ne
+  // coupait pas) -- restriction signalee comme un bug par un joueur reel
+  // (4x 3 sur la pile, aucune coupe) et retiree : seule la longueur de la
+  // suite au meme rang effectif compte desormais, peu importe combien de
+  // ces cartes sont des 3. Cette coupe est prioritaire sur tout, y compris
+  // pendant une guerre : un 3 qui complete un carre d'As coupe et met fin a
+  // la guerre du meme coup.
+  let tail = 0;
   for(let i=state.pile.length-1; i>=0; i--){
     if(state.pile[i].effectiveRank !== effectiveRank) break;
-    const backwardIndex = tail; // 0 = la toute derniere carte jouee
     tail++;
-    if(state.pile[i].isCopy3){
-      copy3Count++;
-      if(backwardIndex !== 0) copy3PositionValid = false;
-    }
   }
-  if(tail >= 4 && copy3Count <= 1 && copy3PositionValid){ return cutPile(state, who, true); }
+  if(tail >= 4){ return cutPile(state, who, true); }
 
   if(rank === '3' && wasWarActive){
     log(state, 'logCopy3War');
