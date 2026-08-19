@@ -498,3 +498,81 @@ $$;
 
 revoke all on function public.report_online_match(uuid, boolean, integer) from public;
 grant execute on function public.report_online_match(uuid, boolean, integer) to authenticated;
+
+
+/* =========================================================
+   PHASE 6 : les parties casual ("1v1 en ligne") apparaissent maintenant
+   aussi dans l'historique (onglet "Historique" du profil), avec un tag
+   pour les distinguer du classe -- seul l'Elo restait exclu du casual,
+   pas le suivi "contre qui j'ai joue, gagne ou perdu, en combien de tours".
+   online_matches porte donc desormais son propre flag `ranked` (copie de
+   celui de la lobby au moment du report, pas une simple jointure : la
+   lobby peut theoriquement disparaitre plus tard, la ligne d'historique,
+   elle, doit rester lisible independamment).
+   ========================================================= */
+
+alter table public.online_matches add column ranked boolean not null default true;
+
+-- Meme signature qu'avant (create or replace suffit, pas de drop) : la
+-- seule chose qui change est que le cas casual n'est plus refuse, il est
+-- juste traite sans toucher a l'Elo (delta force a 0, elo_after = elo_before).
+create or replace function public.report_online_match(p_lobby_id uuid, p_i_won boolean, p_tours integer)
+returns table(elo_delta integer, winner_elo_after integer, loser_elo_after integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_lobby public.lobbies%rowtype;
+  v_opponent uuid;
+  v_winner uuid;
+  v_loser uuid;
+  v_winner_elo integer;
+  v_loser_elo integer;
+  v_expected double precision;
+  v_delta integer;
+  v_k constant integer := 24;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_lobby from public.lobbies where id = p_lobby_id;
+  if not found then
+    raise exception 'lobby_not_found';
+  end if;
+  if auth.uid() <> v_lobby.joueur1 and auth.uid() <> v_lobby.joueur2 then
+    raise exception 'not_a_participant';
+  end if;
+
+  v_opponent := case when auth.uid() = v_lobby.joueur1 then v_lobby.joueur2 else v_lobby.joueur1 end;
+  if v_opponent is null then
+    raise exception 'no_opponent';
+  end if;
+
+  v_winner := case when p_i_won then auth.uid() else v_opponent end;
+  v_loser := case when p_i_won then v_opponent else auth.uid() end;
+
+  select elo into v_winner_elo from public.profiles where id = v_winner;
+  select elo into v_loser_elo from public.profiles where id = v_loser;
+
+  if v_lobby.ranked then
+    v_expected := 1.0 / (1.0 + power(10.0, (v_loser_elo - v_winner_elo) / 400.0));
+    v_delta := greatest(1, round(v_k * (1 - v_expected))::integer);
+    update public.profiles set elo = elo + v_delta where id = v_winner;
+    update public.profiles set elo = elo - v_delta where id = v_loser;
+  else
+    v_delta := 0;
+  end if;
+
+  insert into public.online_matches
+    (lobby_id, winner, loser, winner_elo_before, loser_elo_before, winner_elo_after, loser_elo_after, tours, ranked)
+  values
+    (p_lobby_id, v_winner, v_loser, v_winner_elo, v_loser_elo, v_winner_elo + v_delta, v_loser_elo - v_delta, p_tours, v_lobby.ranked);
+
+  return query select v_delta, (v_winner_elo + v_delta), (v_loser_elo - v_delta);
+end;
+$$;
+
+revoke all on function public.report_online_match(uuid, boolean, integer) from public;
+grant execute on function public.report_online_match(uuid, boolean, integer) to authenticated;

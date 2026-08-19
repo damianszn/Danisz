@@ -181,6 +181,7 @@
   .online-match-row .row2{ display:flex; justify-content:space-between; gap:8px; color:#9aa8b0; font-size:13px; margin-top:2px; }
   .online-match-row .delta-pos{ color:#5fdc7a; }
   .online-match-row .delta-neg{ color:#ff5f5f; }
+  .online-match-row .mode-tag{ color:#8a95a0; }
   #account-panel.open{ display:block; }
   #account-panel .account-label{ font-size:16px; margin-bottom:8px; }
   #account-panel input{
@@ -2301,10 +2302,12 @@ function maybeReportMatchResult(onlineRole, onlineLobbyId, onlineRanked){
     // modele de confiance). "player" est TOUJOURS "moi-meme" ici, cote
     // hote comme cote invite (voir swapStatePerspective) -- pas besoin de
     // distinguer les deux cotes pour savoir qui a gagne.
-    // onlineRanked=false ("1v1 en ligne" casual) : on ne rapporte rien du
-    // tout, ni Elo ni historique -- report_online_match() refuserait de
-    // toute facon cote serveur (voir schema_online.sql PHASE 5).
-    if(onlineRole==='host' && onlineRanked && window.DaniszOnline){
+    // onlineRanked=false ("1v1 en ligne" casual) : on rapporte quand meme
+    // (contre qui, gagne/perdu, en combien de tours -- pour l'onglet
+    // "Historique"), mais report_online_match() cote serveur laisse l'Elo
+    // totalement intact dans ce cas (delta force a 0, voir schema_online.sql
+    // PHASE 6) -- seul l'Elo restait exclu du casual, pas le suivi.
+    if(onlineRole==='host' && window.DaniszOnline){
       window.DaniszOnline.reportMatchResult(onlineLobbyId, gameState.winner==='player', gameState.turnCount)
         .then(res=>{
           if(res.ok && window.DaniszAccount) window.DaniszAccount.refreshProfile();
@@ -6021,7 +6024,7 @@ window.__updateLangPopup(lang);
     historyView.style.display = tab==='history' ? 'block' : 'none';
     if(tab==='history'){
       const st = window.DaniszAccount ? window.DaniszAccount.getState() : null;
-      if(st && st.profile) ensureHistory(st.profile);
+      if(st && st.profile) ensureHistory(st.profile, true);
     }
   }
   loggedTabProfile.addEventListener('click', (e)=>{ e.stopPropagation(); setLoggedTab('profile'); });
@@ -6101,17 +6104,27 @@ window.__updateLangPopup(lang);
     const row2 = document.createElement('div');
     row2.className = 'row2';
     const turnsSpan = document.createElement('span');
-    turnsSpan.textContent = t('historyTours', {n: m.tours});
-    const eloSpan = document.createElement('span');
-    const deltaSign = m.eloDelta >= 0 ? '+' : '';
-    const deltaClass = m.eloDelta >= 0 ? 'delta-pos' : 'delta-neg';
-    eloSpan.textContent = t('historyEloAfter', {elo: m.myEloAfter}) + ' ';
-    const deltaEl = document.createElement('span');
-    deltaEl.className = deltaClass;
-    deltaEl.textContent = `(${deltaSign}${m.eloDelta})`;
-    eloSpan.appendChild(deltaEl);
+    // Tag classe/casual d'un cote, tours + Elo (si classe) de l'autre :
+    // le casual n'a plus rien a montrer cote Elo (delta toujours 0, voir
+    // report_online_match() PHASE 6), mais reste dans l'historique -- le
+    // tag est ce qui permet de distinguer les deux au premier coup d'oeil.
+    const modeTag = document.createElement('span');
+    modeTag.className = 'mode-tag';
+    modeTag.textContent = t(m.ranked ? 'menuRanked' : 'menuOnline');
+    turnsSpan.textContent = t('historyTours', {n: m.tours}) + ' · ';
+    turnsSpan.appendChild(modeTag);
     row2.appendChild(turnsSpan);
-    row2.appendChild(eloSpan);
+    if(m.ranked){
+      const eloSpan = document.createElement('span');
+      const deltaSign = m.eloDelta >= 0 ? '+' : '';
+      const deltaClass = m.eloDelta >= 0 ? 'delta-pos' : 'delta-neg';
+      eloSpan.textContent = t('historyEloAfter', {elo: m.myEloAfter}) + ' ';
+      const deltaEl = document.createElement('span');
+      deltaEl.className = deltaClass;
+      deltaEl.textContent = `(${deltaSign}${m.eloDelta})`;
+      eloSpan.appendChild(deltaEl);
+      row2.appendChild(eloSpan);
+    }
 
     row.appendChild(row1);
     row.appendChild(row2);
@@ -6135,9 +6148,16 @@ window.__updateLangPopup(lang);
     historyData.forEach(m=>historyList.appendChild(formatMatchRow(m)));
   }
 
-  function ensureHistory(profile){
+  // force=true (voir setLoggedTab, quand l'utilisateur clique explicitement
+  // sur l'onglet) : re-fetch toujours. La cle elo seule ne suffit plus pour
+  // detecter "une nouvelle partie a ete jouee" depuis que le mode casual
+  // (1v1 en ligne) apparait aussi dans l'historique sans jamais toucher
+  // l'elo -- sans ce forcage, rouvrir l'onglet apres une partie casual
+  // montrerait encore l'ancienne liste tant que l'elo n'a pas change pour
+  // une AUTRE raison (une partie classee).
+  function ensureHistory(profile, force){
     const key = profile.id + ':' + profile.elo;
-    if(historyKey===key && historyData!==null){ renderHistory(); return; }
+    if(!force && historyKey===key && historyData!==null){ renderHistory(); return; }
     historyKey = key;
     historyData = null;
     renderHistory();

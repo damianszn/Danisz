@@ -291,7 +291,7 @@
     const myId = state.session.user.id;
     const { data, error } = await supabase
       .from('online_matches')
-      .select('winner, loser, winner_elo_after, loser_elo_after, winner_elo_before, loser_elo_before, tours, created_at, winner_profile:profiles!online_matches_winner_fkey(pseudo), loser_profile:profiles!online_matches_loser_fkey(pseudo)')
+      .select('winner, loser, winner_elo_after, loser_elo_after, winner_elo_before, loser_elo_before, tours, created_at, ranked, winner_profile:profiles!online_matches_winner_fkey(pseudo), loser_profile:profiles!online_matches_loser_fkey(pseudo)')
       .or(`winner.eq.${myId},loser.eq.${myId}`)
       .order('created_at', { ascending: false })
       .limit(5);
@@ -305,7 +305,7 @@
       const eloDelta = won
         ? (row.winner_elo_after - row.winner_elo_before)
         : (row.loser_elo_after - row.loser_elo_before);
-      return { opponentPseudo, tours: row.tours, won, myEloAfter, eloDelta, createdAt: row.created_at };
+      return { opponentPseudo, tours: row.tours, won, myEloAfter, eloDelta, ranked: row.ranked, createdAt: row.created_at };
     });
   }
 
