@@ -155,6 +155,29 @@
   @media (prefers-reduced-motion: reduce){
     #account-hint-bubble{ animation:none; }
   }
+
+  /* Bulle boutique : meme design cartoon que la bulle "cree-toi un compte"
+     (fond vif, contour epais, rebond), mais TOUJOURS visible (pas
+     conditionnee a un etat de connexion) et sans pointe -- elle EST le
+     bouton, elle ne pointe pas vers un autre. Position calee sur le bord
+     GAUCHE du titre "Danisz" (dessine sur le canvas, coordonnees inconnues
+     d'ici sans pont, voir window.__setShopBubblePos) plutot qu'une valeur
+     fixe, pour ne jamais le chevaucher quelle que soit la taille d'ecran. */
+  #shop-bubble{
+    box-sizing:border-box;
+    position:fixed; top:44px; left:8px; z-index:9999; /* repli avant le tout premier rendu */
+    width:56px; height:56px;
+    display:flex; align-items:center; justify-content:center;
+    background:#ffd23f; color:#1a1008;
+    border:3px solid #1a1008; border-radius:50%;
+    font-size:26px; line-height:1;
+    box-shadow:0 4px 0 rgba(0,0,0,0.35);
+    cursor:pointer;
+    animation: hint-bounce 1.6s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce){
+    #shop-bubble{ animation:none; }
+  }
   #account-panel{
     display:none;
     position:fixed; top:40px; right:6px; z-index:10001;
@@ -366,6 +389,79 @@
   #privacy-modal p{ margin:0 0 10px; }
   #privacy-modal ul{ margin:0 0 10px; padding-left:20px; }
   #privacy-modal li{ margin-bottom:6px; }
+
+  /* Boutique : meme habillage overlay que le tutoriel/la politique de
+     confidentialite. Seule la section "Bannieres" est fonctionnelle pour
+     l'instant (aucun asset externe requis, juste des emojis) -- "Cartes"
+     et "Fonds" restent des sections "Bientot" tant qu'il n'y a pas de
+     vraies images a proposer. */
+  #shop-overlay, #personalize-overlay{
+    display:none;
+    position:fixed; inset:0; z-index:15000;
+    background:rgba(0,0,0,0.65);
+    align-items:center; justify-content:center;
+  }
+  #shop-overlay.open, #personalize-overlay.open{ display:flex; }
+  #shop-modal, #personalize-modal{
+    position:relative;
+    background:#152018; border:1px solid rgba(215,164,92,0.5); border-radius:10px;
+    width:min(640px, 92vw); max-height:88vh; overflow-y:auto;
+    padding:26px 24px 22px; box-sizing:border-box;
+    color:#e9ddc8; font-family:'VT323',monospace;
+  }
+  #shop-close-btn, #personalize-close-btn{
+    position:absolute; top:12px; right:14px; background:transparent; border:none;
+    color:#e9ddc8; font-size:24px; cursor:pointer; line-height:1; opacity:0.8;
+  }
+  #shop-close-btn:hover, #personalize-close-btn:hover{ opacity:1; }
+  #shop-title, #personalize-title{
+    font-family:'Press Start 2P', monospace; font-size:16px; color:#ffd23f;
+    margin:0 0 6px; padding-right:24px;
+  }
+  #shop-currency{ font-size:18px; color:#e9ddc8; margin-bottom:16px; }
+  #shop-currency .coin{ color:#ffd23f; }
+  #shop-modal h3, #personalize-modal h3{
+    font-family:'Press Start 2P', monospace; font-size:12px; color:#8fd18f;
+    margin:20px 0 10px;
+  }
+  #shop-modal h3:first-of-type, #personalize-modal h3:first-of-type{ margin-top:0; }
+  #personalize-empty-msg{ font-size:16px; color:#9aa8b0; margin-bottom:10px; }
+  #shop-guest-msg{ font-size:16px; color:#9aa8b0; margin-bottom:10px; }
+  #shop-msg{ font-size:14px; color:#ff8a7a; min-height:18px; margin-bottom:6px; }
+  .shop-banner-grid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:10px;
+  }
+  .shop-banner-card{
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:10px 6px; border-radius:8px;
+    border:1px solid rgba(215,164,92,0.4); background:rgba(255,255,255,0.03);
+  }
+  /* Une seule ligne (pas de retour a la ligne) : une banniere/carte trop
+     etroite forcait "Nom du joueur" a se couper en 2, ce qui ecrasait le
+     petit badge colore au lieu de simplement montrer le rendu attendu.
+     white-space:nowrap + police plus petite plutot qu'une carte plus large
+     (deja elargie ci-dessus a 190px, mais un pseudo REEL peut etre plus
+     long que le placeholder "Nom du joueur" -- ne jamais dependre de la
+     largeur pour empecher le retour a la ligne). */
+  .shop-banner-preview{
+    font-size:16px; padding:4px 10px; border-radius:6px; line-height:1.3;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; box-sizing:border-box;
+  }
+  /* Vignette (Ace du deck) pour un jeu de cartes : image plutot que texte,
+     meme carte hauteur/largeur que l'asset source (80x110) mise a l'echelle. */
+  .shop-banner-preview img{ width:56px; height:77px; display:block; }
+  .shop-banner-card.shop-item-disabled{ opacity:0.55; }
+  .shop-banner-card.shop-item-disabled .shop-banner-btn{ cursor:default; }
+  .shop-banner-price{ font-size:15px; color:#9aa8b0; }
+  .shop-banner-btn{
+    width:100%; padding:6px 4px; margin-top:2px;
+    background:#2f8f4e; border:1px solid #5fdc7a; border-radius:4px;
+    color:#1a1008; font-family:'VT323',monospace; font-size:15px; cursor:pointer;
+  }
+  .shop-banner-btn:disabled{ opacity:0.55; cursor:default; }
+  .shop-banner-btn.equipped{ background:#8a4a1f; border-color:#ffa64d; color:#f2ead9; }
+  .shop-banner-btn.unequip{ background:transparent; border-color:rgba(215,164,92,0.5); color:#e9ddc8; }
+  .shop-soon{ font-size:15px; color:#8a95a0; margin-bottom:10px; }
   #privacy-lang-note{ font-style:italic; color:#9aa8b0; font-size:14px; }
 
   .tutorial-slide{ display:none; min-height:280px; }
@@ -546,7 +642,7 @@
   </button>
 </div>
 <div id="account-hint-bubble"></div>
-<div id="account-panel">
+<div id="shop-bubble" title="Boutique">🛒</div><div id="account-panel">
   <div id="account-guest">
     <div class="account-label" id="account-guest-label"></div>
     <div id="account-tabs">
@@ -596,6 +692,7 @@
       <div id="account-topscores-title"></div>
       <div id="account-medals-count"></div>
       <div id="account-topscores"></div>
+      <button id="account-personalize-btn" class="secondary"></button>
     </div>
     <div id="account-history-view" style="display:none">
       <div id="account-history-list"></div>
@@ -752,6 +849,38 @@
     </ul>
   </div>
 </div>
+<div id="shop-overlay">
+  <div id="shop-modal">
+    <button id="shop-close-btn">&times;</button>
+    <h2 id="shop-title"></h2>
+    <div id="shop-currency"></div>
+    <div id="shop-guest-msg" style="display:none"></div>
+    <div id="shop-msg"></div>
+    <div id="shop-body">
+      <h3 id="shop-section-banners"></h3>
+      <div id="shop-banner-grid" class="shop-banner-grid"></div>
+      <h3 id="shop-section-cards"></h3>
+      <div id="shop-deck-grid" class="shop-banner-grid"></div>
+      <h3 id="shop-section-bg"></h3>
+      <div id="shop-bg-grid" class="shop-banner-grid"></div>
+      <div id="shop-bg-soon" class="shop-soon"></div>
+    </div>
+  </div>
+</div>
+<div id="personalize-overlay">
+  <div id="personalize-modal">
+    <button id="personalize-close-btn">&times;</button>
+    <h2 id="personalize-title"></h2>
+    <div id="personalize-body">
+      <h3 id="personalize-section-banners"></h3>
+      <div id="personalize-banner-grid" class="shop-banner-grid"></div>
+      <h3 id="personalize-section-cards"></h3>
+      <div id="personalize-deck-grid" class="shop-banner-grid"></div>
+      <h3 id="personalize-section-bg"></h3>
+      <div id="personalize-bg-grid" class="shop-banner-grid"></div>
+    </div>
+  </div>
+</div>
 <script>
 // Bouton plein ecran : sur mobile, la barre d'adresse et la barre de
 // navigation Android bouffent une bonne partie de la hauteur reelle. Le
@@ -864,6 +993,18 @@ const RANK_TO_TEXTURE = {
   '7':'card_7', '8':'card_8', '9':'card_9', '10':'card_10',
   'J':'card_J', 'Q':'card_Q', 'K':'card_K', 'A':'card_A'
 };
+// Nom de fichier par rang, partage entre le deck par defaut (assets/cards/)
+// et chaque deck de la boutique (assets/cards/decks/<id>/<lettre suit>/) --
+// meme convention de nommage des deux cotes.
+const RANK_TO_FILE = {
+  '2':'2.png','3':'3.png','4':'4.png','5':'5.png','6':'6.png','7':'7.png',
+  '8':'8.png','9':'9.png','10':'10.png','J':'11-J.png','Q':'12-Q.png',
+  'K':'13-K.png','A':'14-A.png'
+};
+// Lettre de dossier par suit, utilisee pour les decks de la boutique (voir
+// assets/cards/decks/) -- le deck par defaut n'a pas cette distinction (une
+// seule image par rang, le suit n'y est jamais affiche, voir plus haut).
+const SUIT_LETTER = { '♠':'S', '♥':'H', '♦':'D', '♣':'C' };
 
 /* =========================================================
    TRADUCTIONS (FR/EN)
@@ -933,6 +1074,34 @@ const I18N = {
     menuOnline: "1v1 joueur",
     menuFFA: "1v1v1v1",
     comingSoon: "Bientôt",
+    shopTitle: "Boutique",
+    shopCurrencyLabel: "{n} pièce(s)",
+    shopGuestMsg: "Connecte-toi pour accéder à la boutique",
+    shopSectionBanners: "Bannières",
+    shopSectionCards: "Cartes",
+    shopSectionBg: "Fonds de jeu",
+    shopBuyBtn: "Acheter",
+    shopEquipBtn: "Équiper",
+    shopEquippedLabel: "Équipée",
+    shopUnequipBtn: "Retirer",
+    shopComingSoonMsg: "Bientôt disponible.",
+    shopNotEnough: "Pas assez de pièces.",
+    shopAlreadyOwned: "Déjà possédée.",
+    shopError: "Une erreur est survenue.",
+    shopBannerPreviewName: "Joueur",
+    shopSoonBtn: "Bientôt",
+    deckNameDeckerBw: "Noir & Blanc",
+    deckNameKerenel: "Pixel Classique",
+    deckNameDefaultGreen: "Éclat Vert",
+    deckNameDefaultGold: "Éclat Doré",
+    deckNameCards2Sobre: "Sobre",
+    bgNameBlackWhite: "Noir & Blanc",
+    toastDansEarned: "+{n} dan(s) 🪙",
+    accountPersonalizeBtn: "🎨 Personnalisations",
+    personalizeTitle: "Personnalisations",
+    personalizeNoBanner: "Aucune",
+    personalizeDefaultDeck: "Deck par défaut",
+    personalizeDefaultBg: "Fond par défaut",
     turnsSubtitle: "en {n} tours",
     diffTitle: "Choisis la difficulte",
     diffEasy: "Facile",
@@ -1111,6 +1280,34 @@ const I18N = {
     menuOnline: "1v1 speler",
     menuFFA: "1v1v1v1",
     comingSoon: "Binnenkort",
+    shopTitle: "Winkel",
+    shopCurrencyLabel: "{n} munt(en)",
+    shopGuestMsg: "Log in om naar de winkel te gaan",
+    shopSectionBanners: "Banieren",
+    shopSectionCards: "Kaarten",
+    shopSectionBg: "Achtergronden",
+    shopBuyBtn: "Kopen",
+    shopEquipBtn: "Uitrusten",
+    shopEquippedLabel: "Uitgerust",
+    shopUnequipBtn: "Verwijderen",
+    shopComingSoonMsg: "Binnenkort beschikbaar.",
+    shopNotEnough: "Niet genoeg munten.",
+    shopAlreadyOwned: "Al in bezit.",
+    shopError: "Er is een fout opgetreden.",
+    shopBannerPreviewName: "Spelernaam",
+    shopSoonBtn: "Binnenkort",
+    deckNameDeckerBw: "Zwart & Wit",
+    deckNameKerenel: "Klassiek Pixel",
+    deckNameDefaultGreen: "Groene Gloed",
+    deckNameDefaultGold: "Gouden Gloed",
+    deckNameCards2Sobre: "Sober",
+    bgNameBlackWhite: "Zwart & Wit",
+    toastDansEarned: "+{n} dan(s) 🪙",
+    accountPersonalizeBtn: "🎨 Personalisatie",
+    personalizeTitle: "Personalisatie",
+    personalizeNoBanner: "Geen",
+    personalizeDefaultDeck: "Standaarddeck",
+    personalizeDefaultBg: "Standaardachtergrond",
     turnsSubtitle: "in {n} beurten",
     diffTitle: "Kies moeilijkheidsgraad",
     diffEasy: "Makkelijk",
@@ -1289,6 +1486,34 @@ const I18N = {
     menuOnline: "1v1 gracz",
     menuFFA: "1v1v1v1",
     comingSoon: "Wkrótce",
+    shopTitle: "Sklep",
+    shopCurrencyLabel: "{n} monet(y)",
+    shopGuestMsg: "Zaloguj się, aby wejść do sklepu",
+    shopSectionBanners: "Banery",
+    shopSectionCards: "Karty",
+    shopSectionBg: "Tła",
+    shopBuyBtn: "Kup",
+    shopEquipBtn: "Załóż",
+    shopEquippedLabel: "Założony",
+    shopUnequipBtn: "Zdejmij",
+    shopComingSoonMsg: "Wkrótce dostępne.",
+    shopNotEnough: "Za mało monet.",
+    shopAlreadyOwned: "Już posiadany.",
+    shopError: "Wystąpił błąd.",
+    shopBannerPreviewName: "Nazwa gracza",
+    shopSoonBtn: "Wkrótce",
+    deckNameDeckerBw: "Czarno-białe",
+    deckNameKerenel: "Klasyczny Pixel",
+    deckNameDefaultGreen: "Zielony Blask",
+    deckNameDefaultGold: "Złoty Blask",
+    deckNameCards2Sobre: "Skromne",
+    bgNameBlackWhite: "Czarno-białe",
+    toastDansEarned: "+{n} dan 🪙",
+    accountPersonalizeBtn: "🎨 Personalizacje",
+    personalizeTitle: "Personalizacje",
+    personalizeNoBanner: "Brak",
+    personalizeDefaultDeck: "Domyślna talia",
+    personalizeDefaultBg: "Domyślne tło",
     turnsSubtitle: "w {n} tur",
     diffTitle: "Wybierz poziom trudnosci",
     diffEasy: "Latwy",
@@ -1467,6 +1692,34 @@ const I18N = {
     menuOnline: "1v1 online",
     menuFFA: "1v1v1v1",
     comingSoon: "Coming soon",
+    shopTitle: "Shop",
+    shopCurrencyLabel: "{n} coin(s)",
+    shopGuestMsg: "Log in to access the shop",
+    shopSectionBanners: "Banners",
+    shopSectionCards: "Cards",
+    shopSectionBg: "Backgrounds",
+    shopBuyBtn: "Buy",
+    shopEquipBtn: "Equip",
+    shopEquippedLabel: "Equipped",
+    shopUnequipBtn: "Unequip",
+    shopComingSoonMsg: "Coming soon.",
+    shopNotEnough: "Not enough coins.",
+    shopAlreadyOwned: "Already owned.",
+    shopError: "Something went wrong.",
+    shopBannerPreviewName: "Player name",
+    shopSoonBtn: "Soon",
+    deckNameDeckerBw: "Black & White",
+    deckNameKerenel: "Classic Pixel",
+    deckNameDefaultGreen: "Green Shine",
+    deckNameDefaultGold: "Golden Shine",
+    deckNameCards2Sobre: "Sober",
+    bgNameBlackWhite: "Black & White",
+    toastDansEarned: "+{n} dan(s) 🪙",
+    accountPersonalizeBtn: "🎨 Personalization",
+    personalizeTitle: "Personalization",
+    personalizeNoBanner: "None",
+    personalizeDefaultDeck: "Default deck",
+    personalizeDefaultBg: "Default background",
     turnsSubtitle: "in {n} turns",
     diffTitle: "Choose difficulty",
     diffEasy: "Easy",
@@ -2340,6 +2593,110 @@ function eloTier(elo){
   return ELO_TIERS[ELO_TIERS.length-1];
 }
 
+// Distance perceptuelle grossiere entre 2 couleurs hex (#rrggbb) -- juste
+// assez pour decider "est-ce que le texte va se fondre dans le fond
+// derriere lui", pas une vraie formule de contraste WCAG. Utilise pour
+// savoir si le nom (colore par palier d'Elo) reste lisible une fois pose
+// sur le fond colore d'une banniere -- ex: la banniere "star" est EXACTEMENT
+// la meme couleur que le palier Amateur (les deux #4caf50).
+function colorDistance(hex1, hex2){
+  const a = Phaser.Display.Color.HexStringToColor(hex1);
+  const b = Phaser.Display.Color.HexStringToColor(hex2);
+  return Math.sqrt((a.red-b.red)**2 + (a.green-b.green)**2 + (a.blue-b.blue)**2);
+}
+const COLOR_TOO_CLOSE_THRESHOLD = 75;
+function isColorTooClose(hex1, hex2){ return colorDistance(hex1, hex2) < COLOR_TOO_CLOSE_THRESHOLD; }
+
+// Catalogue des bannieres achetables (boutique) : 2 emojis (gauche/droite
+// du pseudo) + une couleur de fond derriere le nom. Duplique volontairement
+// cote serveur (voir purchase_banner() dans schema.sql, qui verifie/impose
+// le PRIX reel -- celui-ci n'est jamais transmis par le client) puisqu'il
+// n'existe pas de table banners partagee : ce catalogue-ci ne pilote que
+// l'AFFICHAGE (emoji/couleur), jamais le prix paye. N'importe quel joueur
+// (soi-meme ou l'adversaire, via profiles.equipped_banner) peut avoir
+// n'importe lequel de ces ids equipe -- si l'id est inconnu (catalogue
+// futur pas encore synchronise entre deux clients), on affiche simplement
+// rien plutot que de planter.
+const BANNER_CATALOG = [
+  { id:'flame',   left:'🔥', right:'🔥', color:'#ff6b35', price:5  },
+  { id:'skull',   left:'💀', right:'💀', color:'#8a8a8a', price:5  },
+  { id:'star',    left:'⭐', right:'⭐', color:'#4caf50', price:4  },
+  { id:'snake',   left:'🐍', right:'🐍', color:'#3fa7ff', price:6  },
+  { id:'shark',   left:'🦈', right:'🦈', color:'#2f8f4e', price:8  },
+  { id:'sun',     left:'🌞', right:'🌞', color:'#ffa733', price:30 },
+  { id:'crown',   left:'👑', right:'👑', color:'#ffd23f', price:12 },
+  { id:'diamond', left:'💎', right:'💎', color:'#5fdc7a', price:15 }
+];
+function getBanner(id){ return id ? BANNER_CATALOG.find(b=>b.id===id) || null : null; }
+
+// Catalogue des jeux de cartes achetables (boutique) : chacun remplace les
+// 13x4 images de rang+suit chargees par MainScene.preload() (voir
+// this.texKey(card) plus bas, et assets/cards/decks/<id>/<lettre suit>/<fichier>.png,
+// meme convention de nommage que le deck par defaut, RANK_TO_FILE plus haut).
+// Prix duplique cote SERVEUR (purchase_card_deck() dans schema.sql, jamais
+// fourni par le client) pour la meme raison que BANNER_CATALOG ci-dessus.
+// "deckerbw" (Black & White, DeckerPlayingCards) volontairement absent du
+// catalogue pour l'instant : source basse resolution (~58x97px) qui rendait
+// flou une fois agrandi dans le jeu, pas au niveau du kerenel -- les
+// fichiers restent sur disque (assets/cards/decks/deckerbw/) au cas ou de
+// meilleurs assets remplacent la source plus tard.
+// "cards2sobre" (Sobre) egalement retire : le pic-a-travers du dos de carte
+// (voir drawStackedZone) et le fond uni du deck rendaient les cartes
+// voisines/empilees difficiles a distinguer -- meme constat que
+// "deckerbw" ci-dessus, fichiers gardes sur disque.
+const CARD_DECK_CATALOG = [
+  { id:'kerenelpixel',nameKey:'deckNameKerenel',    price:80 },
+  // Variantes du deck PAR DEFAUT (le tout premier, assets/cards/*.png) avec
+  // un halo colore ajoute le long du bord existant -- meme deck de base,
+  // donc rang seul comme l'original (pas de suit distinct par carte), mais
+  // duplique dans les 4 sous-dossiers S/H/D/C pour reutiliser tel quel le
+  // meme pipeline de chargement/texKey() que les decks a suits distincts,
+  // sans avoir a distinguer "deck a suits" / "deck a rang seul" dans le code.
+  { id:'defaultgreen',nameKey:'deckNameDefaultGreen',price:20 }
+  // "defaultgold" (Eclat Dore) mis de cote pour l'instant, encore en cours
+  // d'ajustement (couleurs/contraste) -- fichiers deja generes sur disque
+  // (assets/cards/decks/defaultgold/), a reactiver ici une fois pret.
+];
+function getCardDeck(id){ return id ? CARD_DECK_CATALOG.find(d=>d.id===id) || null : null; }
+
+// Catalogue des fonds de table (boutique) : PAS ENCORE FONCTIONNEL (aucune
+// image reelle derriere, aucune colonne/RPC serveur -- voir purchase_banner/
+// purchase_card_deck pour le modele complet une fois pret). Juste affiche
+// dans la section "Fonds" de la boutique, bouton desactive, pour previsualiser
+// la structure avant de construire le vrai asset.
+const BACKGROUND_CATALOG = [
+  { id:'bw', nameKey:'bgNameBlackWhite', price:50 }
+];
+
+// Ordre d'affichage commun a la boutique ET a l'ecran "Personnalisations"
+// (qui doit rester le MEME ordre, voir sa propre section plus bas) : par
+// prix croissant au sein de chaque categorie -- plus lisible qu'un ordre
+// arbitraire (celui d'ajout au catalogue) une fois qu'il y a plus de
+// quelques items par section.
+function byPrice(catalog){ return catalog.slice().sort((a,b)=>a.price-b.price); }
+
+// Choix "partage" deterministe entre 2 valeurs (deck/fond de table equipes
+// par l'hote et l'invite) pour un 1v1 en ligne : les DEUX clients doivent
+// afficher exactement la meme chose sans echange reseau supplementaire, donc
+// on derive le choix d'un hash de la lobby (identique des deux cotes) plutot
+// que Math.random() (qui divergerait entre les deux clients). `salt`
+// distingue plusieurs tirages independants sur la meme lobby (deck vs fond
+// de table) pour eviter qu'ils soient toujours correles entre eux.
+// IMPORTANT : `a` et `b` doivent etre dans le MEME ordre absolu (par ex.
+// toujours "valeur de l'hote" puis "valeur de l'invite") des DEUX cotes de
+// l'appel -- jamais "ma valeur" puis "celle de l'adversaire", puisque l'hote
+// et l'invite n'ont pas le meme "moi" : les inverser d'un cote a l'autre
+// ferait retomber le hash (identique) sur des cases differentes, donc un
+// resultat DIFFERENT pour chaque joueur au lieu du meme choix partage.
+function pickShared(lobbyId, salt, a, b){
+  if(a==null) return b;
+  if(b==null) return a;
+  const s = String(lobbyId) + '|' + salt;
+  let hash = 0;
+  for(let i=0; i<s.length; i++){ hash = ((hash<<5) - hash + s.charCodeAt(i)) | 0; }
+  return (hash & 1) === 0 ? a : b;
+}
+
 /* =========================================================
    RENDU PHASER (assets pixel art)
    ========================================================= */
@@ -2375,14 +2732,33 @@ let groupClickCardId = null;
 // difficulte, avant de lancer une partie. Les regles precises de chaque
 // mode sont documentees a chaque endroit ou "difficulty" est lue.
 let difficulty = 'normal';
+// Nombre de "dans" (monnaie in-jeu) gagnes pour une partie terminee --
+// DOIT rester en phase avec le meme bareme cote serveur (record_ai_match/
+// report_online_match dans supabase/*.sql, seuls habilites a vraiment
+// crediter le compte) : calcule ici uniquement pour l'AFFICHAGE immediat
+// (toast de fin de partie), avant meme que la reponse serveur revienne --
+// un ecart entre les deux serait un simple bug d'affichage cosmetique,
+// jamais un risque de triche (le solde reel reste entierement serveur).
+function dansEarned(won, isOnline, ranked){
+  if(!won) return 1;
+  if(isOnline && ranked) return 5;
+  return 3;
+}
 // Remonte le resultat d'une partie offline vs IA vers Supabase, une seule
 // fois par partie (garde via gameState.resultSubmitted, remis a false par
 // createGame()). No-op silencieux tant qu'aucun profil n'existe : le mode
 // offline ne depend jamais de ca pour fonctionner (voir js/account.js).
-function maybeReportMatchResult(onlineRole, onlineLobbyId, onlineRanked){
+// `scene` : juste pour afficher le toast "+N dans" (showToast), aucune
+// autre dependance sur Phaser ici.
+function maybeReportMatchResult(scene, onlineRole, onlineLobbyId, onlineRanked){
   if(!gameState.winner || gameState.resultSubmitted) return;
   gameState.resultSubmitted = true;
-  if(gameState.winner==='player') sfxVictory(); else sfxDefeat();
+  const won = gameState.winner==='player';
+  if(won) sfxVictory(); else sfxDefeat();
+  if(scene && scene.showToast){
+    const n = dansEarned(won, !!onlineRole, !!onlineRanked);
+    scene.showToast(t('toastDansEarned', {n}), {borderColor:0x5fdc7a, textColor:'#c9ffcf'});
+  }
   if(onlineRole){
     // Elo 1v1 en ligne : seul l'HOTE rapporte le resultat (jamais l'invite,
     // qui compterait le meme match une deuxieme fois -- voir
@@ -2607,6 +2983,9 @@ class MenuScene extends Phaser.Scene {
     // largeur fixe qui est soit trop large (chevauchement) soit trop
     // etroite (illisible) selon la taille d'ecran.
     if(window.__setAccountHintAvail) window.__setAccountHintAvail(titleObj.getBounds().right, W);
+    // Meme pont, symetrique, pour la bulle boutique a gauche du titre --
+    // voir window.__setShopBubblePos plus bas.
+    if(window.__setShopBubblePos) window.__setShopBubblePos(titleObj.getBounds().left, W);
 
     if(isPortraitMenu){
       // Empile en 1 colonne pleine largeur : une grille 2 colonnes ne
@@ -3316,12 +3695,11 @@ class OnlineLobbyScene extends Phaser.Scene {
   enterMatchedState(role){
     this.onlineRole = role;
     this.setMode('matched');
-    // Lance la recherche des infos adverses (pseudo + elo, pour la couleur
-    // de palier) tout de suite, en parallele du court delai cosmetique
-    // ci-dessous (pas d'attente supplementaire dans le cas courant) --
-    // affichees a cote de sa main une fois en jeu (voir MainScene). Echec
-    // silencieux (catch->null) : rien affiche plutot que de bloquer
-    // l'entree en partie pour ca.
+    // Lance la recherche des infos adverses (pseudo + elo + banniere
+    // equipee, pour l'ecran VS et la couleur de palier) tout de suite, en
+    // parallele du court delai cosmetique ci-dessous (pas d'attente
+    // supplementaire dans le cas courant). Echec silencieux (catch->null) :
+    // rien affiche plutot que de bloquer l'entree en partie pour ca.
     const opponentInfoPromise = window.DaniszOnline
       ? window.DaniszOnline.getOpponentInfo(this.lobbyId).catch(()=>null)
       : Promise.resolve(null);
@@ -3329,12 +3707,17 @@ class OnlineLobbyScene extends Phaser.Scene {
       if(!this.scene.isActive()) return;
       const opponentInfo = await opponentInfoPromise;
       if(!this.scene.isActive()) return;
-      window.__onlineMatch = {
+      const myProfile = window.DaniszAccount ? window.DaniszAccount.getState().profile : null;
+      // Transfert vers l'ecran "VS" (intro de combat, 1.5s) plutot que
+      // directement vers 'main' : il lira window.__vsIntroData puis posera
+      // lui-meme window.__onlineMatch (meme forme qu'avant, plus les
+      // bannieres) avant son propre scene.start('main').
+      window.__vsIntroData = {
         lobbyId: this.lobbyId, role, ranked: this.ranked,
-        opponentPseudo: opponentInfo ? opponentInfo.pseudo : null,
-        opponentElo: opponentInfo ? opponentInfo.elo : null
+        me: myProfile ? { pseudo: myProfile.pseudo, elo: myProfile.elo, banner: myProfile.equipped_banner, cardDeck: myProfile.equipped_card_deck } : null,
+        opponent: opponentInfo ? { pseudo: opponentInfo.pseudo, elo: opponentInfo.elo, banner: opponentInfo.equippedBanner, cardDeck: opponentInfo.equippedCardDeck } : null
       };
-      this.scene.start('main');
+      this.scene.start('vs-intro');
     });
   }
 
@@ -3513,6 +3896,117 @@ class OnlineLobbyScene extends Phaser.Scene {
   }
 }
 
+// Ecran "VS", intro de combat courte (1.5s, duree fixe) affichee AVANT
+// d'entrer en partie pour un 1v1 en ligne -- hote et invite la voient
+// tous les deux, pas seulement l'un des deux. Purement cosmetique : les
+// infos des deux joueurs (pseudo/elo/banniere) sont deja resolues cote
+// OnlineLobbyScene.enterMatchedState() avant meme d'arriver ici (voir
+// window.__vsIntroData), donc rien a attendre/charger dans cette scene,
+// juste un court affichage puis le transfert normal vers 'main' (voir
+// window.__onlineMatch, deja utilise par MainScene.create()).
+class VsIntroScene extends Phaser.Scene {
+  constructor(){ super('vs-intro'); }
+
+  create(){
+    if(window.__onSceneChange) window.__onSceneChange('vs-intro');
+    this.cameras.main.setBackgroundColor(0x0c1410);
+    // window.__vsIntroData pose juste avant scene.start('vs-intro') (voir
+    // OnlineLobbyScene.enterMatchedState) -- consomme immediatement (mis a
+    // null) comme window.__onlineMatch plus bas, meme raison : un 2e
+    // passage par cette scene (retour au menu puis re-matchmaking) ne doit
+    // jamais reutiliser par erreur les donnees d'un match precedent.
+    this.data_ = window.__vsIntroData || {};
+    window.__vsIntroData = null;
+    this.render();
+    const onResize = ()=>this.render();
+    this.scale.on('resize', onResize);
+    this.events.once('shutdown', ()=>{ this.scale.off('resize', onResize); });
+    whenFontsReady(()=>{ if(this.scene.isActive()) this.render(); });
+
+    this.time.delayedCall(1500, ()=>{
+      if(!this.scene.isActive()) return;
+      const d = this.data_;
+      window.__onlineMatch = {
+        lobbyId: d.lobbyId, role: d.role, ranked: d.ranked,
+        opponentPseudo: d.opponent ? d.opponent.pseudo : null,
+        opponentElo: d.opponent && d.opponent.elo!=null ? d.opponent.elo : null,
+        opponentBanner: d.opponent ? d.opponent.banner : null,
+        myBanner: d.me ? d.me.banner : null,
+        opponentCardDeck: d.opponent ? d.opponent.cardDeck : null,
+        myCardDeck: d.me ? d.me.cardDeck : null
+      };
+      this.scene.start('main');
+    });
+  }
+
+  // side: {pseudo, elo, banner} ou null/undefined (adversaire pas encore
+  // resolu -- affiche un pseudo generique plutot que de bloquer l'ecran).
+  // PAS de wordWrap ici (retire) : un pseudo long ("Adversaire IA") passait
+  // sur 2 lignes tout en debordant quand meme de la bulle banniere (hauteur
+  // fixe, jamais recalculee pour une 2e ligne) -- on force desormais UNE
+  // seule ligne en retrecissant la police jusqu'a ce que le texte tienne
+  // (meme technique de "shrink to fit" que le titre de OnlineLobbyScene),
+  // et la bulle banniere s'adapte a la largeur reelle du texte plutot
+  // qu'une largeur fixe qui pouvait etre trop juste.
+  drawSide(cx, W, H, side){
+    const pseudo = (side && side.pseudo) ? side.pseudo : '???';
+    const tier = (side && side.elo!=null) ? eloTier(side.elo) : null;
+    const banner = side ? getBanner(side.banner) : null;
+    const label = banner ? `${banner.left}  ${pseudo}  ${banner.right}` : pseudo;
+    const maxTextWidth = W*0.86;
+
+    let nameSize = Math.max(13, Math.min(26, Math.round(W*0.075)));
+    const probe = this.add.text(0, 0, label, {fontFamily:'"Press Start 2P"', fontSize:nameSize+'px'}).setVisible(false);
+    while(probe.width > maxTextWidth && nameSize > 9){
+      nameSize--;
+      probe.setFontSize(nameSize+'px');
+    }
+    const textWidth = probe.width;
+    probe.destroy();
+
+    if(banner){
+      const bw = Math.min(Math.max(textWidth + 24, 80), W*0.9), bh = Math.round(nameSize*2.1);
+      const g = this.add.graphics();
+      g.fillStyle(Phaser.Display.Color.HexStringToColor(banner.color).color, 1);
+      g.fillRoundedRect(cx-bw/2, H/2-bh/2, bw, bh, 8);
+      // Le nom garde la couleur de son palier meme sur le fond colore de la
+      // banniere -- contour noir seulement si les 2 couleurs sont trop
+      // proches pour rester lisibles (voir isColorTooClose()).
+      const nameColor = tier ? tier.color : '#e9ddc8';
+      const needsOutline = tier && isColorTooClose(nameColor, banner.color);
+      this.add.text(cx, H/2, label, Object.assign(
+        {fontFamily:'"Press Start 2P"', fontSize:nameSize+'px', color:nameColor},
+        needsOutline ? {stroke:'#000000', strokeThickness:Math.max(2, Math.round(nameSize*0.12))} : {}
+      )).setOrigin(0.5);
+    } else {
+      this.add.text(cx, H/2, label, {
+        fontFamily:'"Press Start 2P"', fontSize:nameSize+'px', color: tier ? tier.color : '#e9ddc8'
+      }).setOrigin(0.5);
+    }
+    if(tier){
+      this.add.text(cx, H/2 + nameSize*1.7, `${tier.emoji} ${t(tier.key)}`, {
+        fontFamily:'"VT323"', fontSize:Math.max(12, Math.round(nameSize*0.75))+'px', color:tier.color
+      }).setOrigin(0.5);
+    }
+  }
+
+  render(){
+    if(!this.scene.isActive() || !this.cameras || !this.cameras.main) return;
+    const W = this.scale.width, H = this.scale.height;
+    if(!W || !H || W<10 || H<10) return;
+    this.children.removeAll();
+    const d = this.data_ || {};
+
+    this.drawSide(W*0.27, W*0.5, H, d.me);
+    this.drawSide(W*0.73, W*0.5, H, d.opponent);
+
+    const vsSize = Math.max(24, Math.min(52, Math.round(H*0.11)));
+    this.add.text(W/2, H/2, 'VS', {
+      fontFamily:'"Press Start 2P"', fontSize:vsSize+'px', color:'#ff5f5f'
+    }).setOrigin(0.5);
+  }
+}
+
 class MainScene extends Phaser.Scene {
   constructor(){ super('main'); }
 
@@ -3529,18 +4023,74 @@ class MainScene extends Phaser.Scene {
 
   preload(){
     this.load.image('card_back', 'assets/cards/back.png');
-    const files = {
-      '2':'2.png','3':'3.png','4':'4.png','5':'5.png','6':'6.png','7':'7.png',
-      '8':'8.png','9':'9.png','10':'10.png','J':'11-J.png','Q':'12-Q.png',
-      'K':'13-K.png','A':'14-A.png'
-    };
-    for(const [rank, file] of Object.entries(files)){
-      this.load.image(RANK_TO_TEXTURE[rank], 'assets/cards/'+file);
+    // Deck de cartes actif pour CETTE partie : le sien en offline, un choix
+    // "partage" (voir pickShared plus haut) entre celui de l'hote et celui
+    // de l'invite en ligne -- les DEUX joueurs doivent voir exactement le
+    // meme jeu de cartes pendant le match, pas chacun le sien (deja tranche
+    // explicitement par le joueur). window.__onlineMatch est deja pose par
+    // VsIntroScene a ce stade (consomme -- mis a null -- plus bas dans
+    // create(), pas ici) : le lire ici pour le deck ne le perturbe pas.
+    // Deck inconnu/pas encore possede -> null -> repli sur le deck par
+    // defaut (aucun changement de comportement pour un joueur qui n'a rien
+    // achete).
+    const myProfile = window.DaniszAccount ? window.DaniszAccount.getState().profile : null;
+    const myDeckId = myProfile ? myProfile.equipped_card_deck : null;
+    if(window.__onlineMatch){
+      // pickShared() doit recevoir les 2 valeurs dans le MEME ordre absolu
+      // (hote, invite) des DEUX cotes, jamais "moi, l'adversaire" -- sinon
+      // le hash (identique des deux cotes, meme lobbyId) tombe sur des
+      // valeurs differentes selon qui pose la question (l'hote et l'invite
+      // n'ont pas le meme "moi"). Voir aussi la meme remarque sur
+      // pickShared() plus haut dans le fichier.
+      const om = window.__onlineMatch;
+      const hostDeck = om.role==='host' ? myDeckId : om.opponentCardDeck;
+      const guestDeck = om.role==='host' ? om.opponentCardDeck : myDeckId;
+      this.activeDeck = pickShared(om.lobbyId, 'deck', hostDeck, guestDeck);
+    } else {
+      this.activeDeck = myDeckId;
+    }
+    if(this.activeDeck && !getCardDeck(this.activeDeck)) this.activeDeck = null; // catalogue futur pas encore synchronise entre deux clients -> repli silencieux
+    if(this.activeDeck){
+      for(const suit of SUITS){
+        for(const rank of RANKS){
+          this.load.image(this.deckTexKey(this.activeDeck, rank, suit),
+            `assets/cards/decks/${this.activeDeck}/${SUIT_LETTER[suit]}/${RANK_TO_FILE[rank]}`);
+        }
+      }
+      // Dos de carte assorti au deck (voir this.backTexKey() plus bas) :
+      // le dos par defaut (bleu, motif "R") jurait visuellement avec un
+      // deck achete au theme different -- chaque deck a maintenant le sien.
+      this.load.image(this.backTexKey(), `assets/cards/decks/${this.activeDeck}/back.png`);
+    } else {
+      for(const [rank, file] of Object.entries(RANK_TO_FILE)){
+        this.load.image(RANK_TO_TEXTURE[rank], 'assets/cards/'+file);
+      }
     }
     // 'tableTexture' est deja chargee par MenuScene.preload() (toujours
     // visitee avant MainScene) -- pas besoin de la recharger ici.
     // Texture (1200x600) pour les bandeaux (au-dessus/en-dessous du feutre).
     this.load.image('woodTexture', 'assets/woodbackground.png');
+  }
+
+  // Cle de texture Phaser pour un deck de la boutique : unique par
+  // deck+rang+suit (jamais reutilisee par un AUTRE deck), pour ne jamais
+  // risquer de reafficher les cartes d'une partie precedente si le joueur
+  // change de deck equipe entre deux parties (Phaser ne recharge pas une
+  // texture dont la cle existe deja dans son cache global).
+  deckTexKey(deckId, rank, suit){ return `deck_${deckId}_${rank}_${SUIT_LETTER[suit]}`; }
+
+  // Meme raison/technique que deckTexKey() (cle unique par deck, jamais
+  // partagee) pour le dos de carte : 'card_back' (le dos par defaut,
+  // toujours charge plus haut dans preload()) si aucun deck actif, sinon
+  // le dos propre a ce deck.
+  backTexKey(){ return this.activeDeck ? `deck_${this.activeDeck}_back` : 'card_back'; }
+
+  // Remplace RANK_TO_TEXTURE[card.rank] partout dans cette scene : meme
+  // deck par defaut (rang seul, aucun suit affiche) si aucun deck de la
+  // boutique n'est actif pour cette partie, sinon la texture deck+suit
+  // correspondante (this.activeDeck, deja chargee par preload() ci-dessus).
+  texKey(card){
+    return this.activeDeck ? this.deckTexKey(this.activeDeck, card.rank, card.suit) : RANK_TO_TEXTURE[card.rank];
   }
 
   create(){
@@ -3577,6 +4127,11 @@ class MainScene extends Phaser.Scene {
       this.onlineRanked = !!window.__onlineMatch.ranked;
       this.onlineOpponentPseudo = window.__onlineMatch.opponentPseudo || null;
       this.onlineOpponentElo = window.__onlineMatch.opponentElo!=null ? window.__onlineMatch.opponentElo : null;
+      // Bannieres (voir la boutique + VsIntroScene, deja affichees a
+      // l'ecran "VS" juste avant d'arriver ici) -- conservees pour un usage
+      // ulterieur dans la partie elle-meme (pas encore affichees ici).
+      this.onlineOpponentBanner = window.__onlineMatch.opponentBanner || null;
+      this.onlineMyBanner = window.__onlineMatch.myBanner || null;
       window.__onlineMatch = null;
     }
     if(this.onlineRole==='guest'){
@@ -4139,10 +4694,10 @@ class MainScene extends Phaser.Scene {
   // (main de l'IA, generique puisque cachee) ----
   fallbackOrigin(who, fromZone){
     if(who==='ai' && fromZone==='hand'){
-      return {x:this.aiHandX, y:this.aiHandOffY+70, scale:0.38, angle:0, textureKey:'card_back'};
+      return {x:this.aiHandX, y:this.aiHandOffY+70, scale:0.38, angle:0, textureKey:this.backTexKey()};
     }
     // repli generique : centre de la pile
-    return {x:this.pileX, y:this.pileY, scale:0.5, angle:0, textureKey:'card_back'};
+    return {x:this.pileX, y:this.pileY, scale:0.5, angle:0, textureKey:this.backTexKey()};
   }
 
   // ---- Anime le resultat d'une action (jouer des cartes OU prendre le tas) ----
@@ -4205,11 +4760,11 @@ class MainScene extends Phaser.Scene {
       if(dragOrigin){
         // La carte vient d'un drag & drop : le vol reprend exactement la ou
         // elle a ete lachee, pour enchainer sans saut avec le geste du joueur.
-        origin = { x:dragOrigin.x, y:dragOrigin.y, scale:dragOrigin.scale, angle:0, textureKey:RANK_TO_TEXTURE[card.rank] };
+        origin = { x:dragOrigin.x, y:dragOrigin.y, scale:dragOrigin.scale, angle:0, textureKey:this.texKey(card) };
         needsFlip = false;
       } else if(this.spriteByCardId[card.id]){
         origin = this.captureSpriteOrigin(this.spriteByCardId[card.id]);
-        needsFlip = origin.textureKey === 'card_back';
+        needsFlip = origin.textureKey === this.backTexKey();
         // On retire tout de suite la REFERENCE (pour eviter tout doublon
         // logique), mais la destruction reelle est reportee (safeDestroy) :
         // ce chemin peut etre declenche par un simple clic sur "Jouer",
@@ -4218,10 +4773,10 @@ class MainScene extends Phaser.Scene {
         delete this.spriteByCardId[card.id];
       } else {
         origin = this.fallbackOrigin(who, res.fromZone);
-        needsFlip = origin.textureKey === 'card_back';
+        needsFlip = origin.textureKey === this.backTexKey();
       }
       this.time.delayedCall(i*90, ()=>{
-        this.flyCardToPile(origin, RANK_TO_TEXTURE[card.rank], needsFlip, i, onOneDone);
+        this.flyCardToPile(origin, this.texKey(card), needsFlip, i, onOneDone);
       });
     });
     this.dragReleasePos = {};
@@ -4241,7 +4796,7 @@ class MainScene extends Phaser.Scene {
     this.tweens.add({
       targets: spr, scaleX: 0, duration: 130, ease:'Sine.easeIn',
       onComplete: ()=>{
-        spr.setTexture(RANK_TO_TEXTURE[card.rank]);
+        spr.setTexture(this.texKey(card));
         this.tweens.add({
           targets: spr, scaleX: origin.scale, duration: 130, ease:'Sine.easeOut',
           onComplete: ()=>{
@@ -4341,7 +4896,7 @@ class MainScene extends Phaser.Scene {
       const dragOrigin = this.dragReleasePos[card.id];
       let origin;
       if(dragOrigin){
-        origin = { x:dragOrigin.x, y:dragOrigin.y, scale:dragOrigin.scale, angle:0, textureKey:RANK_TO_TEXTURE[card.rank] };
+        origin = { x:dragOrigin.x, y:dragOrigin.y, scale:dragOrigin.scale, angle:0, textureKey:this.texKey(card) };
       } else if(this.spriteByCardId[card.id]){
         origin = this.captureSpriteOrigin(this.spriteByCardId[card.id]);
       } else {
@@ -4352,7 +4907,7 @@ class MainScene extends Phaser.Scene {
         delete this.spriteByCardId[card.id];
       }
       this.time.delayedCall(i*90, ()=>{
-        this.flyCardToPile(origin, RANK_TO_TEXTURE[card.rank], false, i, ()=>{
+        this.flyCardToPile(origin, this.texKey(card), false, i, ()=>{
           entry.done = true;
           entry.callbacks.forEach(cb=>cb());
           entry.callbacks = [];
@@ -4407,7 +4962,7 @@ class MainScene extends Phaser.Scene {
       const spinCount = Math.min(8, pileSnapshotBefore ? pileSnapshotBefore.length : 0);
       const shown = spinCount>0 ? pileSnapshotBefore.slice(-spinCount) : [];
       if(shown.length===0){
-        const spr = this.add.image(this.pileX, this.pileY, 'card_back').setScale(1.0).setDepth(2000);
+        const spr = this.add.image(this.pileX, this.pileY, this.backTexKey()).setScale(1.0).setDepth(2000);
         this.tweens.add({
           targets: spr, x: destX, y: destY, scale:0.35, alpha:0, duration, ease:'Sine.easeInOut',
           onComplete: ()=>{ spr.destroy(); label.destroy(); onComplete(); }
@@ -4420,7 +4975,7 @@ class MainScene extends Phaser.Scene {
         this.time.delayedCall(i*60, ()=>{
           const jitterX = this.pileX + (Math.random()*50-25);
           const jitterY = this.pileY + (Math.random()*36-18);
-          const cs = this.add.image(jitterX, jitterY, RANK_TO_TEXTURE[c.rank]).setScale(0.9).setDepth(2000+i);
+          const cs = this.add.image(jitterX, jitterY, this.texKey(c)).setScale(0.9).setDepth(2000+i);
           const arcX = destX + (Math.random()*70-35);
           this.tweens.add({
             targets: cs, x: arcX, y: destY, scale:0.3, alpha:0,
@@ -4454,7 +5009,7 @@ class MainScene extends Phaser.Scene {
     const shown = (pileSnapshotBefore && pileSnapshotBefore.length>0) ? pileSnapshotBefore.slice(-8) : [];
     if(shown.length===0){
       // Filet de securite si jamais aucun snapshot n'est disponible.
-      const spr = this.add.image(this.pileX, this.pileY, 'card_back').setScale(1.0);
+      const spr = this.add.image(this.pileX, this.pileY, this.backTexKey()).setScale(1.0);
       spr.setDepth(2000);
       this.tweens.add({
         targets: spr, x: destX, y: destY, scale:0.35, alpha:0, duration:430, ease:'Sine.easeIn',
@@ -4467,7 +5022,7 @@ class MainScene extends Phaser.Scene {
       this.time.delayedCall(i*90, ()=>{
         const jitterX = this.pileX + (Math.random()*24-12);
         const jitterY = this.pileY + (Math.random()*16-8);
-        const cs = this.add.image(jitterX, jitterY, RANK_TO_TEXTURE[c.rank]).setScale(0.85).setDepth(2000+i);
+        const cs = this.add.image(jitterX, jitterY, this.texKey(c)).setScale(0.85).setDepth(2000+i);
         this.tweens.add({
           targets: cs, x: destX + (Math.random()*30-15), y: destY, scale:0.32, alpha:0,
           duration: 430, ease:'Sine.easeIn',
@@ -4552,14 +5107,14 @@ class MainScene extends Phaser.Scene {
   drawStackedZone(centerX, centerY, faceDownCard, faceUpCard, scale, clickableUp, clickableDown, peekOffsetX=0, revealTexture=null){
     if(faceDownCard){
       const dx = faceUpCard ? -peekOffsetX : 0;
-      const spr = this.addCardSprite(centerX + dx, centerY, revealTexture || 'card_back', scale,
+      const spr = this.addCardSprite(centerX + dx, centerY, revealTexture || this.backTexKey(), scale,
         clickableDown ? ()=>this.onPlayerFaceDownClick(faceDownCard) : null);
       this.spriteByCardId[faceDownCard.id] = spr;
     }
     if(faceUpCard){
       const isSel = selected.some(s=>s.id===faceUpCard.id);
       const dragCfg = clickableUp ? { onDrop: (pointer)=>this.onCardDropped(faceUpCard, pointer), card: faceUpCard } : null;
-      const spr = this.addCardSprite(centerX, centerY - 6*scale, RANK_TO_TEXTURE[faceUpCard.rank], scale,
+      const spr = this.addCardSprite(centerX, centerY - 6*scale, this.texKey(faceUpCard), scale,
         clickableUp ? ()=>this.onPlayerCardClick(faceUpCard) : null, isSel, 0, dragCfg);
       this.spriteByCardId[faceUpCard.id] = spr;
     }
@@ -4654,7 +5209,12 @@ class MainScene extends Phaser.Scene {
   // apres l'appel (ex: onPlayClick rappelle render() immediatement apres).
   // this.W/this.H (pas this.scale.width/height) : coordonnees du monde
   // virtuel de la camera zoomee de cette scene, pas des pixels ecran reels.
-  showToast(message){
+  // opts.borderColor/opts.textColor (optionnels) : par defaut le rouge
+  // "avertissement" historique (toastInvalidPlay etc.) -- passe un vert pour
+  // un toast positif (voir le message "+N dans" en fin de partie plus bas)
+  // plutot que de dupliquer toute la fonction pour une seule difference de
+  // couleur.
+  showToast(message, opts={}){
     if(this.toastObjs.length){
       if(this.toastTimer) this.toastTimer.remove();
       this.toastObjs.forEach(o=>o.destroy());
@@ -4671,9 +5231,9 @@ class MainScene extends Phaser.Scene {
     const g = this.add.graphics();
     g.fillStyle(0x2a1010, 0.88);
     g.fillRoundedRect(cx-w/2-padX, y-h/2-padY, w+padX*2, h+padY*2, 8);
-    g.lineStyle(2, 0xff5f5f, 0.9);
+    g.lineStyle(2, opts.borderColor ?? 0xff5f5f, 0.9);
     g.strokeRoundedRect(cx-w/2-padX, y-h/2-padY, w+padX*2, h+padY*2, 8);
-    const txt = this.add.text(cx, y, message, Object.assign({color:'#ffd8d8'}, textOpts)).setOrigin(0.5);
+    const txt = this.add.text(cx, y, message, Object.assign({color: opts.textColor ?? '#ffd8d8'}, textOpts)).setOrigin(0.5);
     g.setDepth(6000);
     txt.setDepth(6001);
     g.setAlpha(0); txt.setAlpha(0);
@@ -4729,7 +5289,7 @@ class MainScene extends Phaser.Scene {
   // Dispatch vers la bonne mise en page selon l'orientation detectee dans
   // layoutAndDraw().
   drawAll(){
-    maybeReportMatchResult(this.onlineRole, this.onlineLobbyId, this.onlineRanked);
+    maybeReportMatchResult(this, this.onlineRole, this.onlineLobbyId, this.onlineRanked);
     // drawAllLandscape()/drawAllPortrait() (plus bas) detruisent TOUS les
     // sprites, y compris une eventuelle carte encore en vol optimiste (voir
     // startOptimisticFlight) -- et tuent son tween au passage (killTweensOf,
@@ -4858,7 +5418,7 @@ class MainScene extends Phaser.Scene {
       const u = fanCount>1 ? (i-(fanCount-1)/2)/aiHalfSpan : 0;
       const y = 50 + aiArcHeight*(1-u*u);
       const angle = aiMaxAngle*u;
-      this.addCardSprite(W/2 - (fanCount-1)*aiFanSpacing/2 + i*aiFanSpacing, y, 'card_back', aiCardScale, null, false, angle);
+      this.addCardSprite(W/2 - (fanCount-1)*aiFanSpacing/2 + i*aiFanSpacing, y, this.backTexKey(), aiCardScale, null, false, angle);
     }
     // Juste le nombre reel de cartes (pas de texte "MAIN ADVERSAIRE :"),
     // colle a GAUCHE de l'eventail visuel (le journal, en haut a droite,
@@ -4874,7 +5434,13 @@ class MainScene extends Phaser.Scene {
     // contrairement au chiffre seul) : savoir qui on affronte n'est pas une
     // info de triche a masquer.
     if(this.onlineRole && this.onlineOpponentPseudo){
-      const oppLabel = difficulty!=='nightmare' ? `${this.onlineOpponentPseudo} (${aiHandCount})` : this.onlineOpponentPseudo;
+      let oppLabel = difficulty!=='nightmare' ? `${this.onlineOpponentPseudo} (${aiHandCount})` : this.onlineOpponentPseudo;
+      // Banniere de l'adversaire (voir la boutique) : visible ici pendant la
+      // partie elle-meme, pas seulement sur l'ecran "VS" d'avant-match --
+      // juste les emojis autour du pseudo (pas de fond colore ici, cette
+      // etiquette est deja tres exigue en place, voir plus haut).
+      const oppBanner = getBanner(this.onlineOpponentBanner);
+      if(oppBanner) oppLabel = `${oppBanner.left} ${oppLabel} ${oppBanner.right}`;
       // Couleur = palier d'Elo de l'adversaire (voir eloTier()), UNIQUEMENT
       // en mode classe -- en "1v1 en ligne" casual, l'Elo ne joue plus aucun
       // role, le colorer laisserait croire au contraire. Jaune par defaut
@@ -4931,7 +5497,7 @@ class MainScene extends Phaser.Scene {
     const shownExtras = Math.min(16, hiddenCount);
     const anglePerCard = 3;
     for(let depth=shownExtras; depth>=1; depth--){
-      const spr = this.add.image(pivotX, pivotY, 'card_back');
+      const spr = this.add.image(pivotX, pivotY, this.backTexKey());
       spr.setOrigin(0,1);
       spr.setScale(FAN_SCALE);
       spr.setAngle(-32 - depth*anglePerCard);
@@ -4940,14 +5506,14 @@ class MainScene extends Phaser.Scene {
     const previous2 = gameState.pile.slice(-3,-1); // ordre : plus ancien -> plus recent
     previous2.forEach((c, idx)=>{
       const depthFromTop = previous2.length - idx; // ancien=2, recent=1
-      const spr = this.add.image(pivotX, pivotY, RANK_TO_TEXTURE[c.rank]);
+      const spr = this.add.image(pivotX, pivotY, this.texKey(c));
       spr.setOrigin(0,1);
       spr.setScale(FAN_SCALE);
       spr.setAngle(-16*depthFromTop);
     });
 
     if(top){
-      const sprTop = this.addCardSprite(this.pileX, this.pileY, RANK_TO_TEXTURE[top.rank], 1.25);
+      const sprTop = this.addCardSprite(this.pileX, this.pileY, this.texKey(top), 1.25);
       this.spriteByCardId[top.id] = sprTop;
     }
     // Numero a DROITE de la pile (a gauche il se faisait recouvrir par
@@ -4961,10 +5527,10 @@ class MainScene extends Phaser.Scene {
     const deckX = sx(ZONES.deck.x), deckY = ty(ZONES.deck.y);
     const deckSliverCount = Math.min(2, Math.max(0, gameState.deck.length-1));
     for(let i=deckSliverCount; i>=1; i--){
-      this.addCardSprite(deckX + i*13, deckY, 'card_back', 1.25);
+      this.addCardSprite(deckX + i*13, deckY, this.backTexKey(), 1.25);
     }
     if(gameState.deck.length>0){
-      this.addCardSprite(deckX, deckY, 'card_back', 1.25);
+      this.addCardSprite(deckX, deckY, this.backTexKey(), 1.25);
     }
     this.autoLabel(deckX, deckY+95, `${gameState.deck.length}`,
       {fontSize:'18px', originX:0.5, originY:0.5}, {alpha:0.45});
@@ -4976,7 +5542,7 @@ class MainScene extends Phaser.Scene {
     // dessous. Le compteur, lui, reste exact (gameState.discardOut.length).
     const cutX = sx(ZONES.cut.x), cutY = ty(ZONES.cut.y);
     gameState.cutBatches.slice(-CUT_FAN_MAX).forEach((batch, i)=>{
-      this.addCardSprite(cutX, cutY, 'card_back', 1.0, null, false, batch.angle);
+      this.addCardSprite(cutX, cutY, this.backTexKey(), 1.0, null, false, batch.angle);
     });
     this.autoLabel(cutX, cutY+70, t('cutCount', {n: gameState.discardOut.length}),
       {fontSize:'17px', originX:0.5, originY:0.5}, {alpha:0.45});
@@ -5024,7 +5590,7 @@ class MainScene extends Phaser.Scene {
       // empile normal (deux cartes visibles au meme endroit sans que l'une
       // ne soit sensee etre la, en plus de ne rien apprendre au joueur).
       const revealDown = gameState.winner && gameState.winner!=='player' && fd && !fu
-        ? RANK_TO_TEXTURE[fd.rank] : null;
+        ? this.texKey(fd) : null;
       this.drawStackedZone(cx(z.x), ty(z.y), fd, fu, 1.25, canClickUp, canClickDown, 15, revealDown);
     }
 
@@ -5080,7 +5646,7 @@ class MainScene extends Phaser.Scene {
       // hors de son tour, donc aucun risque de jouer par ce biais.
       const canDragHand = pZoneInfo.zone==='hand' && !gameState.winner && !this.animating;
       const dragCfg = canDragHand ? { onDrop: (pointer)=>this.onCardDropped(c, pointer), card: c } : null;
-      const spr = this.addCardSprite(startX + i*spacing, handY, RANK_TO_TEXTURE[c.rank], handScale,
+      const spr = this.addCardSprite(startX + i*spacing, handY, this.texKey(c), handScale,
         interactive ? ()=>this.onPlayerCardClick(c) : null, isSel, 0, dragCfg);
       if(difficulty==='easy' && isHandActive && !playable){
         // Grisage adouci : l'ancienne version (alpha 0.42 + gris 0x777777)
@@ -5249,14 +5815,16 @@ class MainScene extends Phaser.Scene {
       const u = fanCount>1 ? (i-(fanCount-1)/2)/aiHalfSpan : 0;
       const y = aiFanY + aiArcHeight*(1-u*u);
       const angle = aiMaxAngle*u;
-      this.addCardSprite(cx - (fanCount-1)*10*spaceScale + i*20*spaceScale, y, 'card_back', aiScale, null, false, angle);
+      this.addCardSprite(cx - (fanCount-1)*10*spaceScale + i*20*spaceScale, y, this.backTexKey(), aiScale, null, false, angle);
     }
     // En 1v1 en ligne : meme principe qu'en paysage (voir la-bas pour le
     // pourquoi) -- le pseudo remplace/complete le chiffre dans le MEME
     // emplacement plutot qu'une etiquette separee, cette zone n'a pas de
     // marge verticale a donner.
     if(this.onlineRole && this.onlineOpponentPseudo){
-      const oppLabel = difficulty!=='nightmare' ? `${this.onlineOpponentPseudo} (${aiHandCount})` : this.onlineOpponentPseudo;
+      let oppLabel = difficulty!=='nightmare' ? `${this.onlineOpponentPseudo} (${aiHandCount})` : this.onlineOpponentPseudo;
+      const oppBanner = getBanner(this.onlineOpponentBanner);
+      if(oppBanner) oppLabel = `${oppBanner.left} ${oppLabel} ${oppBanner.right}`;
       const oppColor = this.onlineOpponentElo!=null ? eloTier(this.onlineOpponentElo).color : '#ffd23f';
       this.label(cx - (fanCount-1)*10*spaceScale - 20*spaceScale - 12, aiFanY, oppLabel,
         {fontFamily:'"Press Start 2P"', fontSize:'12px', color:oppColor, originX:1, originY:0.5});
@@ -5296,7 +5864,7 @@ class MainScene extends Phaser.Scene {
     const shownExtras = Math.min(16, hiddenCount);
     const anglePerCard = 3;
     for(let depth=shownExtras; depth>=1; depth--){
-      const spr = this.add.image(pivotX, pivotY, 'card_back');
+      const spr = this.add.image(pivotX, pivotY, this.backTexKey());
       spr.setOrigin(0,1);
       spr.setScale(FAN_SCALE);
       spr.setAngle(-32 - depth*anglePerCard);
@@ -5304,13 +5872,13 @@ class MainScene extends Phaser.Scene {
     const previous2 = gameState.pile.slice(-3,-1);
     previous2.forEach((c, idx)=>{
       const depthFromTop = previous2.length - idx;
-      const spr = this.add.image(pivotX, pivotY, RANK_TO_TEXTURE[c.rank]);
+      const spr = this.add.image(pivotX, pivotY, this.texKey(c));
       spr.setOrigin(0,1);
       spr.setScale(FAN_SCALE);
       spr.setAngle(-16*depthFromTop);
     });
     if(top){
-      const sprTop = this.addCardSprite(this.pileX, this.pileY, RANK_TO_TEXTURE[top.rank], TOP_SCALE);
+      const sprTop = this.addCardSprite(this.pileX, this.pileY, this.texKey(top), TOP_SCALE);
       this.spriteByCardId[top.id] = sprTop;
     }
     if(difficulty!=='nightmare'){
@@ -5321,15 +5889,15 @@ class MainScene extends Phaser.Scene {
     const deckX = cx + 112*spaceScale, deckY = this.pileY;
     const deckSliverCount = Math.min(2, Math.max(0, gameState.deck.length-1));
     for(let i=deckSliverCount; i>=1; i--){
-      this.addCardSprite(deckX + i*9, deckY, 'card_back', TOP_SCALE);
+      this.addCardSprite(deckX + i*9, deckY, this.backTexKey(), TOP_SCALE);
     }
-    if(gameState.deck.length>0) this.addCardSprite(deckX, deckY, 'card_back', TOP_SCALE);
+    if(gameState.deck.length>0) this.addCardSprite(deckX, deckY, this.backTexKey(), TOP_SCALE);
     this.label(deckX, deckY+70*spaceScale, `${gameState.deck.length}`,
       {fontSize:'14px', color:'#c9d6e3', originX:0.5, originY:0.5});
 
     const cutX = cx - 112*spaceScale, cutY = this.pileY;
     gameState.cutBatches.slice(-CUT_FAN_MAX).forEach(batch=>{
-      this.addCardSprite(cutX, cutY, 'card_back', 0.7*spaceScale, null, false, batch.angle);
+      this.addCardSprite(cutX, cutY, this.backTexKey(), 0.7*spaceScale, null, false, batch.angle);
     });
     this.autoLabel(cutX, cutY+54*spaceScale, t('cutCount', {n: gameState.discardOut.length}),
       {fontSize:'14px', originX:0.5, originY:0.5}, {alpha:0.45});
@@ -5366,7 +5934,7 @@ class MainScene extends Phaser.Scene {
       // restantes d'une partie perdue, sauf celles encore couvertes par
       // une face visible non jouee.
       const revealDown = gameState.winner && gameState.winner!=='player' && fd && !fu
-        ? RANK_TO_TEXTURE[fd.rank] : null;
+        ? this.texKey(fd) : null;
       this.drawStackedZone(x, playerZoneY, fd, fu, 0.75*spaceScale, canClickUp, canClickDown, 15, revealDown);
     }
 
@@ -5459,7 +6027,7 @@ class MainScene extends Phaser.Scene {
         const dragCfg = canDragHand ? { onDrop: (pointer)=>this.onCardDropped(c, pointer), card: c } : null;
         const u = n>1 ? (i-(n-1)/2)/half : 0;
         const cardY = rowY - arcHeight*(1-u*u);
-        const spr = this.addCardSprite(startX + i*spacing, cardY, RANK_TO_TEXTURE[c.rank], handScale,
+        const spr = this.addCardSprite(startX + i*spacing, cardY, this.texKey(c), handScale,
           interactive ? ()=>this.onPlayerCardClick(c) : null, isSel, 0, dragCfg);
         if(difficulty==='easy' && isHandActive && !playable){
           spr.setAlpha(0.65);
@@ -5768,7 +6336,7 @@ const config = {
   // automatique : le jeu doit continuer a tourner (animations, tour de l'IA)
   // meme si le focus de la fenetre bouge un peu.
   disableVisibilityChange: true,
-  scene: [MenuScene, DifficultyScene, ConfirmScene, OnlineLobbyScene, MainScene]
+  scene: [MenuScene, DifficultyScene, ConfirmScene, OnlineLobbyScene, VsIntroScene, MainScene]
 };
 game = new Phaser.Game(config);
 
@@ -5901,9 +6469,17 @@ window.__updateLangPopup(lang);
     if(!window.confirm(t('confirmQuitGame'))) return;
     popup.classList.remove('open');
     // Quitte proprement une partie en ligne aussi : MainScene nettoie son
-    // canal Realtime sur son propre evenement 'shutdown', declenche
-    // automatiquement par ce scene.start (pas de logique reseau a dupliquer ici).
-    if(game && game.scene) game.scene.start('menu');
+    // canal Realtime sur son propre evenement 'shutdown', declenche par ce
+    // scene.start -- mais SEULEMENT si on l'appelle depuis l'instance de la
+    // scene elle-meme (this.scene.start()). game.scene.start(key) (le
+    // SceneManager global, seul disponible ici puisqu'on est hors d'une
+    // scene) ne stoppe PAS la scene en cours : sans ce detour, 'main'
+    // restait actif (canvas de jeu toujours visible) en meme temps que
+    // 'menu' demarrait par-dessus (barre de compte/bulle boutique qui
+    // apparaissent), constate en test reel.
+    const mainScene = game && game.scene ? game.scene.getScene('main') : null;
+    if(mainScene && mainScene.scene.isActive()) mainScene.scene.start('menu');
+    else if(game && game.scene) game.scene.start('menu');
   });
 
   refresh();
@@ -5947,6 +6523,7 @@ window.__updateLangPopup(lang);
   const signinBtn = document.getElementById('account-signin-btn');
   const needsPseudoInput = document.getElementById('account-needspseudo-input');
   const needsPseudoBtn = document.getElementById('account-needspseudo-btn');
+  const personalizeBtn = document.getElementById('account-personalize-btn');
   const signoutBtn = document.getElementById('account-signout-btn');
   const deleteBtn = document.getElementById('account-delete-btn');
   const consentCheckbox = document.getElementById('account-consent-checkbox');
@@ -6010,11 +6587,32 @@ window.__updateLangPopup(lang);
     // seulement une fois en partie.
     if(state.profile){
       const tier = eloTier(state.profile.elo);
-      btnLabel.textContent = `${tier.emoji} ${state.profile.pseudo}`;
+      const myBanner = getBanner(state.profile.equipped_banner);
+      // Meme banniere (emojis + fond colore) que sur le profil complet et
+      // en partie (voir la boutique) : visible aussi ici, juste a cote de
+      // "Profil", pas seulement une fois le panneau ouvert.
+      if(myBanner){
+        btnLabel.textContent = `${myBanner.left} ${state.profile.pseudo} ${myBanner.right}`;
+        btnLabel.style.background = myBanner.color;
+        btnLabel.style.borderRadius = '4px';
+        btnLabel.style.padding = '2px 6px';
+        // Le nom garde la couleur de son palier meme sur un fond de
+        // banniere -- contour noir seulement si les deux couleurs sont
+        // trop proches pour rester lisibles (voir isColorTooClose()).
+        btnLabel.style.webkitTextStroke = isColorTooClose(tier.color, myBanner.color) ? '1px #000' : '';
+      } else {
+        btnLabel.textContent = `${tier.emoji} ${state.profile.pseudo}`;
+        btnLabel.style.background = '';
+        btnLabel.style.padding = '';
+        btnLabel.style.webkitTextStroke = '';
+      }
       btnLabel.style.color = tier.color;
     } else {
       btnLabel.textContent = t('accountMenuLabel');
       btnLabel.style.color = '';
+      btnLabel.style.background = '';
+      btnLabel.style.padding = '';
+      btnLabel.style.webkitTextStroke = '';
     }
     // Bulle d'incitation a se creer un compte : uniquement tant que non
     // connecte, disparait immediatement des que state.profile existe (voir
@@ -6038,14 +6636,36 @@ window.__updateLangPopup(lang);
     signinBtn.textContent = t('accountSigninBtn');
     needsPseudoInput.placeholder = t('accountPseudoPlaceholder');
     needsPseudoBtn.textContent = t('accountSignupBtn');
+    personalizeBtn.textContent = t('accountPersonalizeBtn');
     signoutBtn.textContent = t('accountSignoutBtn');
     deleteBtn.textContent = t('accountDeleteBtn');
     consentText.innerHTML = t('accountConsentPrefix') + ' <a href="#" id="account-consent-link">' + t('accountConsentLinkText') + '</a>.';
     if(state.profile){
       guestBox.style.display = 'none';
       loggedBox.style.display = 'block';
-      pseudoDisplay.textContent = state.profile.pseudo;
+      // Banniere equipee (voir la boutique) : 2 emojis autour du pseudo +
+      // couleur de fond derriere, visible ici sur son PROPRE profil (le
+      // meme rendu, cote de l'adversaire, se retrouve sur l'ecran VS et
+      // dans la partie -- voir VsIntroScene). Pas de banniere equipee =
+      // simple pseudo sans decoration, comme avant.
+      const myBanner = getBanner(state.profile.equipped_banner);
       const myTier = eloTier(state.profile.elo);
+      // Le nom garde la couleur de son palier meme sur un fond de banniere
+      // -- contour noir seulement si les deux couleurs sont trop proches
+      // pour rester lisibles (voir isColorTooClose()).
+      pseudoDisplay.style.color = myTier.color;
+      if(myBanner){
+        pseudoDisplay.textContent = `${myBanner.left} ${state.profile.pseudo} ${myBanner.right}`;
+        pseudoDisplay.style.background = myBanner.color;
+        pseudoDisplay.style.borderRadius = '4px';
+        pseudoDisplay.style.padding = '3px 8px';
+        pseudoDisplay.style.webkitTextStroke = isColorTooClose(myTier.color, myBanner.color) ? '1px #000' : '';
+      } else {
+        pseudoDisplay.textContent = state.profile.pseudo;
+        pseudoDisplay.style.background = '';
+        pseudoDisplay.style.padding = '';
+        pseudoDisplay.style.webkitTextStroke = '';
+      }
       eloDisplay.textContent = `${myTier.emoji} ${t(myTier.key)} · ` + t('accountEloLabel', {elo: state.profile.elo});
       eloDisplay.style.color = myTier.color;
       loggedTabProfile.textContent = t('accountTabProfileView');
@@ -6176,6 +6796,14 @@ window.__updateLangPopup(lang);
     await window.DaniszAccount.signOut();
     setGuestMode('signup');
     refreshAccountUI();
+  });
+
+  // Ouvre le nouvel ecran "Personnalisations" (voir #personalize-overlay,
+  // bloc dedie plus bas dans le fichier -- window.__openPersonalize, meme
+  // pont que window.__openPrivacyPolicy juste en dessous).
+  personalizeBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    if(window.__openPersonalize) window.__openPersonalize();
   });
 
   // Suppression definitive du compte (droit a l'effacement RGPD) : double
@@ -6452,6 +7080,467 @@ window.__updateLangPopup(lang);
   window.__applyLang = function(newLang){
     prevApplyLang2(newLang);
     refreshJoinTexts();
+  };
+})();
+</script>
+<script>
+/* =========================================================
+   Boutique (overlay DOM, voir #shop-overlay plus haut) : bannieres
+   joueur (catalogue BANNER_CATALOG, script principal), + sections
+   "Cartes"/"Fonds" en "Bientot disponible" (pas encore de catalogue --
+   le joueur cherche encore des assets libres de droits). Bulle
+   #shop-bubble : meme design que la bulle "cree-toi un compte", mais
+   TOUJOURS affichee (pas conditionnee a l'etat de connexion) et
+   toujours cliquable -- elle EST le bouton d'entree. Uniquement visible
+   sur l'ecran de menu (voir window.__onSceneChange, deja enchaine par
+   plusieurs blocs plus haut, celui-ci s'y ajoute a son tour).
+   ========================================================= */
+(function(){
+  const shopBubble = document.getElementById('shop-bubble');
+  const overlay = document.getElementById('shop-overlay');
+  const closeBtn = document.getElementById('shop-close-btn');
+  const titleEl = document.getElementById('shop-title');
+  const currencyEl = document.getElementById('shop-currency');
+  const guestMsgEl = document.getElementById('shop-guest-msg');
+  const msgEl = document.getElementById('shop-msg');
+  const bodyEl = document.getElementById('shop-body');
+  const sectionBannersEl = document.getElementById('shop-section-banners');
+  const bannerGridEl = document.getElementById('shop-banner-grid');
+  const sectionCardsEl = document.getElementById('shop-section-cards');
+  const deckGridEl = document.getElementById('shop-deck-grid');
+  const sectionBgEl = document.getElementById('shop-section-bg');
+  const bgGridEl = document.getElementById('shop-bg-grid');
+  const bgSoonEl = document.getElementById('shop-bg-soon');
+
+  shopBubble.style.display = 'none'; // repli avant le tout premier changement de scene
+
+  let msgTimer = null;
+  function showMsg(text){
+    msgEl.textContent = text;
+    if(msgTimer) clearTimeout(msgTimer);
+    msgTimer = setTimeout(()=>{ msgEl.textContent = ''; }, 3000);
+  }
+
+  function bannerErrorKey(err){
+    if(err === 'notEnoughCurrency') return 'shopNotEnough';
+    if(err === 'alreadyOwned') return 'shopAlreadyOwned';
+    return 'shopError';
+  }
+
+  function renderBannerGrid(){
+    const state = window.DaniszAccount ? window.DaniszAccount.getState() : {profile:null};
+    const profile = state.profile;
+    bannerGridEl.innerHTML = '';
+    byPrice(BANNER_CATALOG).forEach(banner=>{
+      const owned = !!(profile && profile.owned_banners && profile.owned_banners.includes(banner.id));
+      const equipped = !!(profile && profile.equipped_banner === banner.id);
+
+      const card = document.createElement('div');
+      card.className = 'shop-banner-card';
+
+      const preview = document.createElement('div');
+      preview.className = 'shop-banner-preview';
+      preview.style.background = banner.color;
+      // Le VRAI pseudo du joueur connecte plutot qu'un placeholder generique
+      // (ou juste les 2 emojis separes par un point) : montre directement
+      // l'effet reel (fond colore + emojis) tel qu'il apparaitra sur SON
+      // profil/en partie. Style neutre (pas d'italique) : ce n'est qu'un
+      // apercu de mise en page, pas une promesse que ce sera fige ainsi.
+      const previewName = (profile && profile.pseudo) ? profile.pseudo : t('shopBannerPreviewName');
+      preview.textContent = `${banner.left} ${previewName} ${banner.right}`;
+      card.appendChild(preview);
+
+      const price = document.createElement('div');
+      price.className = 'shop-banner-price';
+      price.textContent = owned ? '' : `${banner.price} 🪙`;
+      card.appendChild(price);
+
+      const btn = document.createElement('button');
+      if(equipped){
+        btn.className = 'shop-banner-btn equipped unequip';
+        btn.textContent = t('shopUnequipBtn');
+        btn.addEventListener('click', async ()=>{
+          btn.disabled = true;
+          const res = await window.DaniszAccount.equipBanner(null);
+          if(res.error){ showMsg(t('shopError')); btn.disabled = false; return; }
+          renderBannerGrid();
+        });
+      } else if(owned){
+        btn.className = 'shop-banner-btn';
+        btn.textContent = t('shopEquipBtn');
+        btn.addEventListener('click', async ()=>{
+          btn.disabled = true;
+          const res = await window.DaniszAccount.equipBanner(banner.id);
+          if(res.error){ showMsg(t('shopError')); btn.disabled = false; return; }
+          renderBannerGrid();
+        });
+      } else {
+        btn.className = 'shop-banner-btn';
+        btn.textContent = t('shopBuyBtn');
+        btn.addEventListener('click', async ()=>{
+          btn.disabled = true;
+          const res = await window.DaniszAccount.purchaseBanner(banner.id);
+          if(res.error){ showMsg(t(bannerErrorKey(res.error))); btn.disabled = false; return; }
+          renderCurrency();
+          renderBannerGrid();
+        });
+      }
+      card.appendChild(btn);
+
+      bannerGridEl.appendChild(card);
+    });
+  }
+
+  // Meme structure/ordre que renderBannerGrid ci-dessus, pour les jeux de
+  // cartes (CARD_DECK_CATALOG) : vignette = la Dame du deck (vraie image,
+  // assets/cards/decks/<id>/S/12-Q.png -- toujours le suit Pique pour
+  // l'apercu, peu importe le suit reellement utilise en partie ; la Dame
+  // plutot que l'As, plus reconnaissable/detaillee sur ces decks) plutot
+  // qu'un emoji, sinon memes etats (achete/equipe/a acheter).
+  function renderCardDeckGrid(){
+    const state = window.DaniszAccount ? window.DaniszAccount.getState() : {profile:null};
+    const profile = state.profile;
+    deckGridEl.innerHTML = '';
+    byPrice(CARD_DECK_CATALOG).forEach(deck=>{
+      const owned = !!(profile && profile.owned_card_decks && profile.owned_card_decks.includes(deck.id));
+      const equipped = !!(profile && profile.equipped_card_deck === deck.id);
+
+      const card = document.createElement('div');
+      card.className = 'shop-banner-card';
+
+      const preview = document.createElement('div');
+      preview.className = 'shop-banner-preview';
+      const img = document.createElement('img');
+      img.src = `assets/cards/decks/${deck.id}/S/12-Q.png`;
+      img.alt = t(deck.nameKey);
+      preview.appendChild(img);
+      card.appendChild(preview);
+
+      const name = document.createElement('div');
+      name.className = 'shop-banner-price';
+      name.textContent = t(deck.nameKey);
+      card.appendChild(name);
+
+      const price = document.createElement('div');
+      price.className = 'shop-banner-price';
+      price.textContent = owned ? '' : `${deck.price} 🪙`;
+      card.appendChild(price);
+
+      const btn = document.createElement('button');
+      if(equipped){
+        btn.className = 'shop-banner-btn equipped unequip';
+        btn.textContent = t('shopUnequipBtn');
+        btn.addEventListener('click', async ()=>{
+          btn.disabled = true;
+          const res = await window.DaniszAccount.equipCardDeck(null);
+          if(res.error){ showMsg(t('shopError')); btn.disabled = false; return; }
+          renderCardDeckGrid();
+        });
+      } else if(owned){
+        btn.className = 'shop-banner-btn';
+        btn.textContent = t('shopEquipBtn');
+        btn.addEventListener('click', async ()=>{
+          btn.disabled = true;
+          const res = await window.DaniszAccount.equipCardDeck(deck.id);
+          if(res.error){ showMsg(t('shopError')); btn.disabled = false; return; }
+          renderCardDeckGrid();
+        });
+      } else {
+        btn.className = 'shop-banner-btn';
+        btn.textContent = t('shopBuyBtn');
+        btn.addEventListener('click', async ()=>{
+          btn.disabled = true;
+          const res = await window.DaniszAccount.purchaseCardDeck(deck.id);
+          if(res.error){ showMsg(t(bannerErrorKey(res.error))); btn.disabled = false; return; }
+          renderCurrency();
+          renderCardDeckGrid();
+        });
+      }
+      card.appendChild(btn);
+
+      deckGridEl.appendChild(card);
+    });
+  }
+
+  // Fonds de table (BACKGROUND_CATALOG) : PAS ENCORE FONCTIONNEL (voir la
+  // definition du catalogue plus haut dans le script principal) -- affiche
+  // juste la structure/le prix, bouton toujours desactive ("Bientot"),
+  // jamais d'appel serveur ici tant qu'aucune image/RPC reelle n'existe.
+  function renderBackgroundGrid(){
+    bgGridEl.innerHTML = '';
+    byPrice(BACKGROUND_CATALOG).forEach(bg=>{
+      const card = document.createElement('div');
+      card.className = 'shop-banner-card shop-item-disabled';
+
+      const preview = document.createElement('div');
+      preview.className = 'shop-banner-preview';
+      preview.style.background = '#3a3a3a';
+      preview.style.color = '#f2ead9';
+      preview.textContent = '🖼️';
+      card.appendChild(preview);
+
+      const name = document.createElement('div');
+      name.className = 'shop-banner-price';
+      name.textContent = t(bg.nameKey);
+      card.appendChild(name);
+
+      const price = document.createElement('div');
+      price.className = 'shop-banner-price';
+      price.textContent = `${bg.price} 🪙`;
+      card.appendChild(price);
+
+      const btn = document.createElement('button');
+      btn.className = 'shop-banner-btn';
+      btn.disabled = true;
+      btn.textContent = t('shopSoonBtn');
+      card.appendChild(btn);
+
+      bgGridEl.appendChild(card);
+    });
+  }
+
+  function renderCurrency(){
+    const state = window.DaniszAccount ? window.DaniszAccount.getState() : {profile:null};
+    const n = state.profile ? (state.profile.currency || 0) : 0;
+    currencyEl.innerHTML = '<span class="coin">🪙</span> ' + t('shopCurrencyLabel', {n});
+  }
+
+  function refreshTexts(){
+    titleEl.textContent = t('shopTitle');
+    guestMsgEl.textContent = t('shopGuestMsg');
+    sectionBannersEl.textContent = t('shopSectionBanners');
+    sectionCardsEl.textContent = t('shopSectionCards');
+    sectionBgEl.textContent = t('shopSectionBg');
+    bgSoonEl.textContent = t('shopComingSoonMsg');
+  }
+
+  function openShop(){
+    msgEl.textContent = '';
+    refreshTexts();
+    renderCurrency();
+    const state = window.DaniszAccount ? window.DaniszAccount.getState() : {session:null, profile:null};
+    const loggedIn = !!(state.session && state.profile);
+    guestMsgEl.style.display = loggedIn ? 'none' : 'block';
+    bodyEl.style.display = loggedIn ? 'block' : 'none';
+    if(loggedIn){ renderBannerGrid(); renderCardDeckGrid(); renderBackgroundGrid(); }
+    overlay.classList.add('open');
+    // Sans ca, un clic sur un bouton de la boutique (DOM, par-dessus le
+    // canvas) declenchait AUSSI le bouton du menu (Phaser) juste en dessous
+    // a la meme position ecran -- constate en test reel. La boutique n'est
+    // de toute facon visible que sur l'ecran de menu (voir shopBubble plus
+    // haut), desactiver l'input Phaser pendant qu'elle est ouverte n'a donc
+    // aucun autre effet de bord.
+    if(game && game.input) game.input.enabled = false;
+  }
+  function closeShop(){
+    overlay.classList.remove('open');
+    if(game && game.input) game.input.enabled = true;
+  }
+
+  shopBubble.addEventListener('click', (e)=>{ e.stopPropagation(); openShop(); });
+  closeBtn.addEventListener('click', closeShop);
+  overlay.addEventListener('click', (e)=>{ if(e.target === overlay) closeShop(); });
+
+  // Repositionne la bulle par rapport au bord GAUCHE du titre "Danisz"
+  // (dessine sur le canvas Phaser, coordonnees inconnues d'ici sans ce
+  // pont) -- appele par MenuScene.render() a chaque rendu. Retrecit (mais
+  // ne disparait que si vraiment plus aucune place) plutot que de risquer
+  // un chevauchement avec le titre sur un tout petit ecran.
+  window.__setShopBubblePos = function(titleLeftPx, screenW){
+    const marginTitle = 14, marginEdge = 8;
+    const avail = titleLeftPx - marginTitle - marginEdge;
+    const size = Math.max(34, Math.min(56, avail));
+    shopBubble.style.width = size + 'px';
+    shopBubble.style.height = size + 'px';
+    shopBubble.style.fontSize = Math.max(15, Math.round(size * 0.46)) + 'px';
+    shopBubble.style.display = avail >= 24 ? 'flex' : 'none';
+  };
+
+  const prevOnSceneChangeShop = window.__onSceneChange;
+  window.__onSceneChange = function(key){
+    if(prevOnSceneChangeShop) prevOnSceneChangeShop(key);
+    if(key !== 'menu'){ shopBubble.style.display = 'none'; closeShop(); }
+    // Sinon, le prochain MenuScene.render() rappellera __setShopBubblePos
+    // et la reaffichera a la bonne taille -- pas besoin de le faire ici.
+  };
+
+  const prevApplyLangShop = window.__applyLang;
+  window.__applyLang = function(newLang){
+    prevApplyLangShop(newLang);
+    if(overlay.classList.contains('open')) refreshTexts();
+  };
+})();
+</script>
+<script>
+/* =========================================================
+   Personnalisations (overlay DOM, voir #personalize-overlay plus haut) :
+   ouvert depuis le bouton "🎨 Personnalisations" du panneau Profil (voir
+   window.__openPersonalize plus bas, appele depuis le bloc compte plus
+   haut). Meme catalogues que la boutique (BANNER_CATALOG, CARD_DECK_CATALOG,
+   meme ORDRE d'affichage), mais filtre aux items DEJA possedes -- pas de
+   prix/bouton "Acheter" ici, juste equiper/retirer.
+   ========================================================= */
+(function(){
+  const overlay = document.getElementById('personalize-overlay');
+  const closeBtn = document.getElementById('personalize-close-btn');
+  const titleEl = document.getElementById('personalize-title');
+  const sectionBannersEl = document.getElementById('personalize-section-banners');
+  const bannerGridEl = document.getElementById('personalize-banner-grid');
+  const sectionCardsEl = document.getElementById('personalize-section-cards');
+  const deckGridEl = document.getElementById('personalize-deck-grid');
+  const sectionBgEl = document.getElementById('personalize-section-bg');
+  const bgGridEl = document.getElementById('personalize-bg-grid');
+
+  function equipButton(equipped, onEquip, onUnequip){
+    const btn = document.createElement('button');
+    if(equipped){
+      btn.className = 'shop-banner-btn equipped unequip';
+      btn.textContent = t('shopUnequipBtn');
+      btn.addEventListener('click', async ()=>{ btn.disabled = true; await onUnequip(); render(); });
+    } else {
+      btn.className = 'shop-banner-btn';
+      btn.textContent = t('shopEquipBtn');
+      btn.addEventListener('click', async ()=>{ btn.disabled = true; await onEquip(); render(); });
+    }
+    return btn;
+  }
+
+  function render(){
+    const state = window.DaniszAccount ? window.DaniszAccount.getState() : {profile:null};
+    const profile = state.profile;
+    const ownedBanners = (profile && profile.owned_banners) || [];
+    const ownedDecks = (profile && profile.owned_card_decks) || [];
+
+    bannerGridEl.innerHTML = '';
+    // "Aucune" en tout premier, toujours disponible (gratuit) -- seul moyen
+    // explicite de revenir a "pas de banniere" une fois qu'on en a equipe
+    // une (le bouton "Retirer" n'existe que SUR la banniere deja equipee).
+    const noPreviewName = (profile && profile.pseudo) ? profile.pseudo : t('shopBannerPreviewName');
+    const noneCard = document.createElement('div');
+    noneCard.className = 'shop-banner-card';
+    const nonePreview = document.createElement('div');
+    nonePreview.className = 'shop-banner-preview';
+    nonePreview.textContent = noPreviewName;
+    noneCard.appendChild(nonePreview);
+    const noneLabel = document.createElement('div');
+    noneLabel.className = 'shop-banner-price';
+    noneLabel.textContent = t('personalizeNoBanner');
+    noneCard.appendChild(noneLabel);
+    const noneEquipped = !profile || !profile.equipped_banner;
+    noneCard.appendChild(equipButton(noneEquipped,
+      ()=>window.DaniszAccount.equipBanner(null),
+      ()=>window.DaniszAccount.equipBanner(null)));
+    bannerGridEl.appendChild(noneCard);
+
+    byPrice(BANNER_CATALOG).filter(b=>ownedBanners.includes(b.id)).forEach(banner=>{
+      const equipped = profile.equipped_banner === banner.id;
+      const card = document.createElement('div');
+      card.className = 'shop-banner-card';
+      const preview = document.createElement('div');
+      preview.className = 'shop-banner-preview';
+      preview.style.background = banner.color;
+      const previewName = (profile && profile.pseudo) ? profile.pseudo : t('shopBannerPreviewName');
+      preview.textContent = `${banner.left} ${previewName} ${banner.right}`;
+      card.appendChild(preview);
+      card.appendChild(equipButton(equipped,
+        ()=>window.DaniszAccount.equipBanner(banner.id),
+        ()=>window.DaniszAccount.equipBanner(null)));
+      bannerGridEl.appendChild(card);
+    });
+
+    deckGridEl.innerHTML = '';
+    // "Deck par defaut" en tout premier, toujours disponible (c'est celui
+    // d'avant la boutique, gratuit) -- meme raison que "Aucune" ci-dessus.
+    const defaultDeckCard = document.createElement('div');
+    defaultDeckCard.className = 'shop-banner-card';
+    const defaultPreview = document.createElement('div');
+    defaultPreview.className = 'shop-banner-preview';
+    const defaultImg = document.createElement('img');
+    defaultImg.src = 'assets/cards/12-Q.png';
+    defaultImg.alt = t('personalizeDefaultDeck');
+    defaultPreview.appendChild(defaultImg);
+    defaultDeckCard.appendChild(defaultPreview);
+    const defaultName = document.createElement('div');
+    defaultName.className = 'shop-banner-price';
+    defaultName.textContent = t('personalizeDefaultDeck');
+    defaultDeckCard.appendChild(defaultName);
+    const defaultDeckEquipped = !profile || !profile.equipped_card_deck;
+    defaultDeckCard.appendChild(equipButton(defaultDeckEquipped,
+      ()=>window.DaniszAccount.equipCardDeck(null),
+      ()=>window.DaniszAccount.equipCardDeck(null)));
+    deckGridEl.appendChild(defaultDeckCard);
+
+    byPrice(CARD_DECK_CATALOG).filter(d=>ownedDecks.includes(d.id)).forEach(deck=>{
+      const equipped = profile.equipped_card_deck === deck.id;
+      const card = document.createElement('div');
+      card.className = 'shop-banner-card';
+      const preview = document.createElement('div');
+      preview.className = 'shop-banner-preview';
+      const img = document.createElement('img');
+      img.src = `assets/cards/decks/${deck.id}/S/12-Q.png`;
+      img.alt = t(deck.nameKey);
+      preview.appendChild(img);
+      card.appendChild(preview);
+      const name = document.createElement('div');
+      name.className = 'shop-banner-price';
+      name.textContent = t(deck.nameKey);
+      card.appendChild(name);
+      card.appendChild(equipButton(equipped,
+        ()=>window.DaniszAccount.equipCardDeck(deck.id),
+        ()=>window.DaniszAccount.equipCardDeck(null)));
+      deckGridEl.appendChild(card);
+    });
+
+    // Fond de table : pas encore fonctionnel (voir BACKGROUND_CATALOG plus
+    // haut, aucun asset/RPC reel) -- juste l'option "par defaut", toujours
+    // active puisqu'il n'y a rien d'autre a choisir pour l'instant.
+    bgGridEl.innerHTML = '';
+    const defaultBgCard = document.createElement('div');
+    defaultBgCard.className = 'shop-banner-card';
+    const bgPreview = document.createElement('div');
+    bgPreview.className = 'shop-banner-preview';
+    bgPreview.textContent = '🖼️';
+    defaultBgCard.appendChild(bgPreview);
+    const bgName = document.createElement('div');
+    bgName.className = 'shop-banner-price';
+    bgName.textContent = t('personalizeDefaultBg');
+    defaultBgCard.appendChild(bgName);
+    const bgBtn = document.createElement('button');
+    bgBtn.className = 'shop-banner-btn equipped';
+    bgBtn.textContent = t('shopEquippedLabel');
+    bgBtn.disabled = true;
+    defaultBgCard.appendChild(bgBtn);
+    bgGridEl.appendChild(defaultBgCard);
+  }
+
+  function refreshTexts(){
+    titleEl.textContent = t('personalizeTitle');
+    sectionBannersEl.textContent = t('shopSectionBanners');
+    sectionCardsEl.textContent = t('shopSectionCards');
+    sectionBgEl.textContent = t('shopSectionBg');
+  }
+
+  window.__openPersonalize = function(){
+    refreshTexts();
+    render();
+    overlay.classList.add('open');
+    // Meme raison que la boutique (voir openShop() plus haut) : sans ca, un
+    // clic sur "Equiper"/"Retirer" ici declenchait AUSSI le bouton Phaser a
+    // la meme position ecran, juste en dessous. Seul accessible depuis le
+    // panneau Profil (ecran de menu), aucun autre effet de bord.
+    if(game && game.input) game.input.enabled = false;
+  };
+  function closePersonalize(){
+    overlay.classList.remove('open');
+    if(game && game.input) game.input.enabled = true;
+  }
+  closeBtn.addEventListener('click', closePersonalize);
+  overlay.addEventListener('click', (e)=>{ if(e.target === overlay) closePersonalize(); });
+
+  const prevApplyLangPersonalize = window.__applyLang;
+  window.__applyLang = function(newLang){
+    prevApplyLangPersonalize(newLang);
+    if(overlay.classList.contains('open')){ refreshTexts(); render(); }
   };
 })();
 </script>

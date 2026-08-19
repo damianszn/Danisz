@@ -83,9 +83,9 @@
     const opponentId = lobby.joueur1 === user.id ? lobby.joueur2 : lobby.joueur1;
     if(!opponentId) return null;
     const { data: profile, error: profileErr } = await sb
-      .from('profiles').select('pseudo, elo').eq('id', opponentId).maybeSingle();
+      .from('profiles').select('pseudo, elo, equipped_banner, equipped_card_deck').eq('id', opponentId).maybeSingle();
     if(profileErr || !profile) { console.warn('[DaniszOnline] getOpponentInfo profile fetch failed', profileErr); return null; }
-    return { pseudo: profile.pseudo, elo: profile.elo };
+    return { pseudo: profile.pseudo, elo: profile.elo, equippedBanner: profile.equipped_banner, equippedCardDeck: profile.equipped_card_deck };
   }
 
   // Rapporte le resultat d'une partie 1v1 en ligne terminee -- Elo calcule

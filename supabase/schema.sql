@@ -94,10 +94,14 @@ begin
   insert into public.matches (joueur1, mode, joueur1_gagne, tours)
   values (auth.uid(), p_mode, p_won, p_turns);
 
+  -- 3 dans (victoire) / 1 dan (defaite) -- meme bareme que 1v1 en ligne
+  -- casual (voir report_online_match dans schema_online.sql), la victoire
+  -- classee y rapportant plus (5). DOIT rester en phase avec dansEarned()
+  -- cote client (index.html, juste pour l'affichage immediat du toast).
   update public.profiles
   set parties_jouees = parties_jouees + 1,
       victoires = victoires + case when p_won then 1 else 0 end,
-      currency = currency + 1
+      currency = currency + case when p_won then 3 else 1 end
   where id = auth.uid();
 end;
 $$;
@@ -131,3 +135,192 @@ $$;
 
 revoke all on function public.delete_user() from public;
 grant execute on function public.delete_user() to authenticated;
+
+/* =========================================================
+   Bannieres joueur (cosmetique, boutique). Une banniere = 2
+   emojis (gauche/droite du pseudo) + une couleur de fond derriere le nom,
+   visible par l'adversaire en 1v1 en ligne et sur son propre profil.
+   Catalogue fixe cote CLIENT (index.html, BANNER_CATALOG) -- pas de table
+   dediee, juste un id text -- mais le PRIX reste cote SERVEUR ici (jamais
+   fourni par le client) pour ne pas pouvoir tricher en passant un prix a 0.
+   ========================================================= */
+
+alter table public.profiles add column owned_banners text[] not null default '{}';
+alter table public.profiles add column equipped_banner text;
+
+-- Achete une banniere avec la monnaie in-jeu (profiles.currency, +1 par
+-- partie terminee, voir record_ai_match/report_online_match) : verifie le
+-- solde et l'absence de doublon cote serveur, jamais fait confiance au
+-- client pour le prix -- catalogue duplique ici volontairement (voir le
+-- meme catalogue cote client dans index.html, BANNER_CATALOG) puisqu'il
+-- n'y a pas de table banners partagee.
+create or replace function public.purchase_banner(p_banner_id text)
+returns table(new_currency integer, owned_banners text[])
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_price integer;
+  v_currency integer;
+  v_owned text[];
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  v_price := case p_banner_id
+    when 'flame' then 5
+    when 'skull' then 5
+    when 'star' then 4
+    when 'snake' then 6
+    when 'shark' then 8
+    when 'sun' then 30
+    when 'crown' then 12
+    when 'diamond' then 15
+    else null
+  end;
+  if v_price is null then
+    raise exception 'unknown_banner';
+  end if;
+
+  -- Alias "p" partout ci-dessous (public.profiles p / p.owned_banners) :
+  -- le nom de colonne en sortie de la fonction (returns table(...,
+  -- owned_banners text[]) plus haut) cree une variable PL/pgSQL implicite
+  -- du meme nom, qui rentre alors en collision avec la vraie colonne
+  -- profiles.owned_banners des qu'on la reference sans qualifier -- erreur
+  -- Postgres 42702 "column reference is ambiguous", observee en test reel.
+  select p.currency, p.owned_banners into v_currency, v_owned from public.profiles p where p.id = v_uid;
+  if v_owned @> array[p_banner_id] then
+    raise exception 'already_owned';
+  end if;
+  if v_currency < v_price then
+    raise exception 'not_enough_currency';
+  end if;
+
+  update public.profiles p
+  set currency = p.currency - v_price, owned_banners = array_append(p.owned_banners, p_banner_id)
+  where p.id = v_uid;
+
+  select p.currency, p.owned_banners into v_currency, v_owned from public.profiles p where p.id = v_uid;
+  return query select v_currency, v_owned;
+end;
+$$;
+
+-- Equipe (ou retire, p_banner_id null) une banniere DEJA possedee.
+create or replace function public.equip_banner(p_banner_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_owned text[];
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+  if p_banner_id is not null then
+    select owned_banners into v_owned from public.profiles where id = v_uid;
+    if not (v_owned @> array[p_banner_id]) then
+      raise exception 'not_owned';
+    end if;
+  end if;
+  update public.profiles set equipped_banner = p_banner_id where id = v_uid;
+end;
+$$;
+
+revoke all on function public.purchase_banner(text) from public;
+revoke all on function public.equip_banner(text) from public;
+grant execute on function public.purchase_banner(text) to authenticated;
+grant execute on function public.equip_banner(text) to authenticated;
+
+/* =========================================================
+   Jeux de cartes (cosmetique, boutique). Remplace les 13x4 images de
+   rang+suit affichees en partie (voir CARD_DECK_CATALOG + MainScene.texKey()
+   dans index.html, assets/cards/decks/<id>/<lettre suit>/<fichier>.png).
+   Meme modele que les bannieres ci-dessus : catalogue fixe cote CLIENT
+   (affichage uniquement), PRIX toujours cote SERVEUR ici.
+   ========================================================= */
+
+alter table public.profiles add column owned_card_decks text[] not null default '{}';
+alter table public.profiles add column equipped_card_deck text;
+
+create or replace function public.purchase_card_deck(p_deck_id text)
+returns table(new_currency integer, owned_card_decks text[])
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_price integer;
+  v_currency integer;
+  v_owned text[];
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  v_price := case p_deck_id
+    when 'deckerbw' then 100
+    when 'kerenelpixel' then 80
+    when 'cards2sobre' then 111
+    when 'defaultgreen' then 20
+    when 'defaultgold' then 50
+    else null
+  end;
+  if v_price is null then
+    raise exception 'unknown_deck';
+  end if;
+
+  -- Alias "p" partout ci-dessous : meme raison que purchase_banner()
+  -- plus haut (colonne de sortie owned_card_decks en collision avec la
+  -- variable PL/pgSQL implicite du meme nom -- erreur 42702 ambiguous).
+  select p.currency, p.owned_card_decks into v_currency, v_owned from public.profiles p where p.id = v_uid;
+  if v_owned @> array[p_deck_id] then
+    raise exception 'already_owned';
+  end if;
+  if v_currency < v_price then
+    raise exception 'not_enough_currency';
+  end if;
+
+  update public.profiles p
+  set currency = p.currency - v_price, owned_card_decks = array_append(p.owned_card_decks, p_deck_id)
+  where p.id = v_uid;
+
+  select p.currency, p.owned_card_decks into v_currency, v_owned from public.profiles p where p.id = v_uid;
+  return query select v_currency, v_owned;
+end;
+$$;
+
+-- Equipe (ou retire, p_deck_id null) un deck DEJA possede.
+create or replace function public.equip_card_deck(p_deck_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_owned text[];
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+  if p_deck_id is not null then
+    select owned_card_decks into v_owned from public.profiles where id = v_uid;
+    if not (v_owned @> array[p_deck_id]) then
+      raise exception 'not_owned';
+    end if;
+  end if;
+  update public.profiles set equipped_card_deck = p_deck_id where id = v_uid;
+end;
+$$;
+
+revoke all on function public.purchase_card_deck(text) from public;
+revoke all on function public.equip_card_deck(text) from public;
+grant execute on function public.purchase_card_deck(text) to authenticated;
+grant execute on function public.equip_card_deck(text) to authenticated;

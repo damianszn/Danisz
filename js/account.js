@@ -164,10 +164,12 @@
     if(error){ console.warn('[DaniszAccount] report match failed', error); return; }
     state.profile.parties_jouees += 1;
     if(won) state.profile.victoires += 1;
-    // +1 par partie terminee, peu importe mode/victoire -- pas encore
-    // affichee nulle part, juste tenue a jour en cache pour rester coherente
-    // avec la colonne cote serveur.
-    state.profile.currency = (state.profile.currency || 0) + 1;
+    // 3 dans pour une victoire (offline), 1 pour une defaite -- DOIT rester
+    // en phase avec le meme bareme cote serveur (record_ai_match dans
+    // supabase/schema.sql, seul habilite a vraiment crediter le compte) et
+    // avec dansEarned() dans index.html (meme calcul, pour le toast affiche
+    // avant meme que cette reponse serveur revienne).
+    state.profile.currency = (state.profile.currency || 0) + (won ? 3 : 1);
     notify();
   }
 
@@ -177,6 +179,68 @@
   async function refreshProfile(){
     await loadProfile();
     notify();
+  }
+
+  // Achete une banniere (voir BANNER_CATALOG dans index.html pour les
+  // emojis/couleurs cote affichage -- le prix, lui, est verifie cote
+  // serveur, jamais fourni par le client, voir purchase_banner() dans
+  // schema.sql). { ok:true, currency, ownedBanners } ou { error }.
+  async function purchaseBanner(bannerId){
+    if(!state.session) return { error: 'notLoggedIn' };
+    await init();
+    const { data, error } = await supabase.rpc('purchase_banner', { p_banner_id: bannerId });
+    if(error){
+      const key = error.message === 'already_owned' ? 'alreadyOwned'
+        : error.message === 'not_enough_currency' ? 'notEnoughCurrency'
+        : 'unknown';
+      return { error: key };
+    }
+    const row = data[0];
+    state.profile.currency = row.new_currency;
+    state.profile.owned_banners = row.owned_banners;
+    notify();
+    return { ok: true, currency: row.new_currency, ownedBanners: row.owned_banners };
+  }
+
+  // Equipe (ou retire, bannerId=null) une banniere deja possedee.
+  async function equipBanner(bannerId){
+    if(!state.session) return { error: 'notLoggedIn' };
+    await init();
+    const { error } = await supabase.rpc('equip_banner', { p_banner_id: bannerId });
+    if(error) return { error: 'unknown' };
+    state.profile.equipped_banner = bannerId;
+    notify();
+    return { ok: true };
+  }
+
+  // Meme principe que purchaseBanner/equipBanner ci-dessus, pour les jeux de
+  // cartes (voir CARD_DECK_CATALOG dans index.html + purchase_card_deck/
+  // equip_card_deck dans schema.sql -- prix toujours verifie cote serveur).
+  async function purchaseCardDeck(deckId){
+    if(!state.session) return { error: 'notLoggedIn' };
+    await init();
+    const { data, error } = await supabase.rpc('purchase_card_deck', { p_deck_id: deckId });
+    if(error){
+      const key = error.message === 'already_owned' ? 'alreadyOwned'
+        : error.message === 'not_enough_currency' ? 'notEnoughCurrency'
+        : 'unknown';
+      return { error: key };
+    }
+    const row = data[0];
+    state.profile.currency = row.new_currency;
+    state.profile.owned_card_decks = row.owned_card_decks;
+    notify();
+    return { ok: true, currency: row.new_currency, ownedCardDecks: row.owned_card_decks };
+  }
+
+  async function equipCardDeck(deckId){
+    if(!state.session) return { error: 'notLoggedIn' };
+    await init();
+    const { error } = await supabase.rpc('equip_card_deck', { p_deck_id: deckId });
+    if(error) return { error: 'unknown' };
+    state.profile.equipped_card_deck = deckId;
+    notify();
+    return { ok: true };
   }
 
   // Meilleurs scores (nombre de tours minimum, parties gagnees uniquement)
@@ -319,6 +383,6 @@
   // mais etat memoire separe).
   async function getClient(){ await init(); return supabase; }
 
-  window.DaniszAccount = { signUp, signIn, signOut, deleteAccount, setPseudo, reportAiMatch, refreshProfile, fetchMyTopScores, fetchModeLeaderboard, fetchMyOnlineHistory, fetchMyMedals, hasAccount, getState, onChange, getClient };
+  window.DaniszAccount = { signUp, signIn, signOut, deleteAccount, setPseudo, reportAiMatch, refreshProfile, purchaseBanner, equipBanner, purchaseCardDeck, equipCardDeck, fetchMyTopScores, fetchModeLeaderboard, fetchMyOnlineHistory, fetchMyMedals, hasAccount, getState, onChange, getClient };
   init().catch(e=>console.error('[DaniszAccount] init failed', e));
 })();

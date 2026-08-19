@@ -634,3 +634,78 @@ $$;
 
 revoke all on function public.join_random_queue(boolean) from public;
 grant execute on function public.join_random_queue(boolean) to authenticated;
+
+
+/* =========================================================
+   PHASE 8 : les parties 1v1 en ligne (classe ET casual) rapportent
+   desormais aussi de la monnaie in-jeu, avec un bareme par palier -- 1 dan
+   pour toute partie terminee et PERDUE (peu importe le mode), 3 dans pour
+   une victoire offline vs IA (record_ai_match dans schema.sql) OU une
+   victoire en ligne casual, 5 dans pour une victoire en ligne CLASSEE (le
+   mode qui demande le plus d'investissement). DOIT rester en phase avec
+   dansEarned() cote client (index.html, juste pour l'affichage immediat du
+   toast de fin de partie, avant meme que cette reponse serveur revienne).
+   ========================================================= */
+
+create or replace function public.report_online_match(p_lobby_id uuid, p_i_won boolean, p_tours integer)
+returns table(elo_delta integer, winner_elo_after integer, loser_elo_after integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_lobby public.lobbies%rowtype;
+  v_opponent uuid;
+  v_winner uuid;
+  v_loser uuid;
+  v_winner_elo integer;
+  v_loser_elo integer;
+  v_expected double precision;
+  v_delta integer;
+  v_k constant integer := 24;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_lobby from public.lobbies where id = p_lobby_id;
+  if not found then
+    raise exception 'lobby_not_found';
+  end if;
+  if auth.uid() <> v_lobby.joueur1 and auth.uid() <> v_lobby.joueur2 then
+    raise exception 'not_a_participant';
+  end if;
+
+  v_opponent := case when auth.uid() = v_lobby.joueur1 then v_lobby.joueur2 else v_lobby.joueur1 end;
+  if v_opponent is null then
+    raise exception 'no_opponent';
+  end if;
+
+  v_winner := case when p_i_won then auth.uid() else v_opponent end;
+  v_loser := case when p_i_won then v_opponent else auth.uid() end;
+
+  select elo into v_winner_elo from public.profiles where id = v_winner;
+  select elo into v_loser_elo from public.profiles where id = v_loser;
+
+  if v_lobby.ranked then
+    v_expected := 1.0 / (1.0 + power(10.0, (v_loser_elo - v_winner_elo) / 400.0));
+    v_delta := greatest(1, round(v_k * (1 - v_expected))::integer);
+    update public.profiles set elo = elo + v_delta, currency = currency + 5 where id = v_winner;
+    update public.profiles set elo = elo - v_delta, currency = currency + 1 where id = v_loser;
+  else
+    v_delta := 0;
+    update public.profiles set currency = currency + 3 where id = v_winner;
+    update public.profiles set currency = currency + 1 where id = v_loser;
+  end if;
+
+  insert into public.online_matches
+    (lobby_id, winner, loser, winner_elo_before, loser_elo_before, winner_elo_after, loser_elo_after, tours, ranked)
+  values
+    (p_lobby_id, v_winner, v_loser, v_winner_elo, v_loser_elo, v_winner_elo + v_delta, v_loser_elo - v_delta, p_tours, v_lobby.ranked);
+
+  return query select v_delta, (v_winner_elo + v_delta), (v_loser_elo - v_delta);
+end;
+$$;
+
+revoke all on function public.report_online_match(uuid, boolean, integer) from public;
+grant execute on function public.report_online_match(uuid, boolean, integer) to authenticated;
