@@ -2674,10 +2674,19 @@ class MenuScene extends Phaser.Scene {
       // 350-400px une fois la barre du navigateur deduite, insuffisante pour
       // la grille + le bouton Tutoriel a taille fixe -- ils finissaient hors
       // ecran en bas.
-      const availH = Math.max(160, H - gridTop - bottomMargin);
+      // Planchers abaisses (etaient 160/0.65) : sur un paysage vraiment tres
+      // bas (~280px, telephone avec barre d'adresse), le plancher de 160
+      // sur availH forcait un calcul de mise a l'echelle base sur PLUS
+      // d'espace que ce qui existait reellement, et le plancher de 0.65 sur
+      // scale l'empechait ensuite de retrecir suffisamment pour compenser --
+      // la grille+Tutoriel debordait alors reellement en bas de l'ecran
+      // (mesure : ~26px de depassement a 700x280). 130/0.5 laissent encore
+      // les boutons lisibles/tappables tout en collant bien plus pres de
+      // l'espace reel disponible.
+      const availH = Math.max(130, H - gridTop - bottomMargin);
       const idealBtnH = 66, idealGapY = 40, idealTutGapConst = 60, idealTutH = 48;
       const idealTotal = 2*idealBtnH + idealGapY + idealTutGapConst + idealTutH/2;
-      const scale = Math.max(0.65, Math.min(1, availH/idealTotal));
+      const scale = Math.max(0.5, Math.min(1, availH/idealTotal));
 
       const btnH = idealBtnH*scale, gapY = idealGapY*scale;
       const fontSize = Math.round(17*scale), subFontSize = Math.round(14*scale);
