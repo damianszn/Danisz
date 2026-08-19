@@ -3894,6 +3894,25 @@ class MainScene extends Phaser.Scene {
     const pileTopBefore = pileTop(gameState);
     const pileSnapshotBefore = [...gameState.pile];
     const res = networkResolveMove(gameState, move);
+    if(!res || !res.ok){
+      // Coup propose par l'invite refuse (etat perime cote invite au moment
+      // ou il a valide localement, message reseau en double...) : jusqu'ici
+      // on se contentait de l'ignorer cote hote sans rien renvoyer -- l'etat
+      // reel ne changeant jamais, l'invite restait persuade (a tort, son
+      // vol optimiste ayant deja joue visuellement) que son coup avait
+      // reussi, sans JAMAIS recevoir de correction. Observe en vrai partie
+      // apres un enchainement de tours bonus (plusieurs 8) : "plus rien a
+      // jouer, la carte revient dans sa main" -- en realite l'invite
+      // restait bloque indefiniment, chaque nouvelle tentative subissant le
+      // meme refus silencieux. On renvoie desormais l'etat REEL actuel
+      // (inchange, ctx=null comme la toute premiere distribution) : l'invite
+      // se resynchronise et voit sa carte revenir correctement dans sa main
+      // au lieu de rester dans les limbes.
+      this.disarmWatchdog();
+      this.animating = false;
+      this.broadcastOnlineState(null);
+      return;
+    }
     this.animateResult('ai', res, pileTopBefore, pileSnapshotBefore);
   }
 
