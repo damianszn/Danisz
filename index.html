@@ -981,6 +981,7 @@ const I18N = {
     leaderboardTitle: "Classement",
     leaderboardLoading: "Chargement...",
     leaderboardEmpty: "Pas encore de scores enregistrés.",
+    leaderboardGuestMsg: "Connecte-toi pour apparaître dans ce classement",
     leaderboardColPseudo: "Joueur",
     leaderboardColWins: "Victoires",
     leaderboardColGames: "Parties",
@@ -1158,6 +1159,7 @@ const I18N = {
     leaderboardTitle: "Klassement",
     leaderboardLoading: "Laden...",
     leaderboardEmpty: "Nog geen scores geregistreerd.",
+    leaderboardGuestMsg: "Log in om op dit klassement te verschijnen",
     leaderboardColPseudo: "Speler",
     leaderboardColWins: "Overwinningen",
     leaderboardColGames: "Partijen",
@@ -1335,6 +1337,7 @@ const I18N = {
     leaderboardTitle: "Ranking",
     leaderboardLoading: "Ładowanie...",
     leaderboardEmpty: "Brak zapisanych wyników.",
+    leaderboardGuestMsg: "Zaloguj się, aby pojawić się w tym rankingu",
     leaderboardColPseudo: "Gracz",
     leaderboardColWins: "Zwycięstwa",
     leaderboardColGames: "Gry",
@@ -1512,6 +1515,7 @@ const I18N = {
     leaderboardTitle: "Leaderboard",
     leaderboardLoading: "Loading...",
     leaderboardEmpty: "No scores recorded yet.",
+    leaderboardGuestMsg: "Log in to appear on this leaderboard",
     leaderboardColPseudo: "Player",
     leaderboardColWins: "Wins",
     leaderboardColGames: "Games",
@@ -3035,6 +3039,26 @@ class ConfirmScene extends Phaser.Scene {
       this.add.text(colTurnsX, ry, `${group.tours}`,
         {fontFamily:'"VT323"', fontSize:rowFont+'px', color:'#e9ddc8'}).setOrigin(1,0);
     });
+
+    // Invite (pas de compte) : le classement reste public/lisible (RLS),
+    // mais grise legerement + un message explique pourquoi il n'y apparait
+    // jamais lui-meme -- pas un vrai blocage d'acces, juste un rappel.
+    if(!window.DaniszAccount || !window.DaniszAccount.hasAccount()){
+      const overlay = this.add.graphics();
+      overlay.fillStyle(0x0c1410, 0.35);
+      overlay.fillRoundedRect(x, y, w, h, 6);
+      const msgY = y + h - 34;
+      const msg = t('leaderboardGuestMsg');
+      const probe = this.add.text(0, 0, msg, {fontFamily:'"VT323"', fontSize:'16px', align:'center', wordWrap:{width:w-40}}).setVisible(false);
+      const mw = probe.width + 20, mh = probe.height + 14;
+      probe.destroy();
+      const mg = this.add.graphics();
+      mg.fillStyle(0x0c1410, 0.85);
+      mg.fillRoundedRect(cx-mw/2, msgY-mh/2, mw, mh, 6);
+      mg.lineStyle(1, 0xd7a45c, 0.5);
+      mg.strokeRoundedRect(cx-mw/2, msgY-mh/2, mw, mh, 6);
+      this.add.text(cx, msgY, msg, {fontFamily:'"VT323"', fontSize:'16px', color:'#e9ddc8', align:'center', wordWrap:{width:w-40}}).setOrigin(0.5);
+    }
   }
 
   drawRules(x, y, w, h){
