@@ -844,7 +844,7 @@
     <h3>Tes droits</h3>
     <ul>
       <li><strong>Consultation</strong> : tes données s'affichent dans ton profil (pseudo, stats).</li>
-      <li><strong>Rectification / question</strong> : contacte-moi directement.</li>
+      <li><strong>Rectification / question</strong> : contacte-moi sur Github.</li>
       <li><strong>Suppression définitive</strong> : bouton "Supprimer mon compte" dans le panneau Profil -- effet immédiat et irréversible sur ton compte et toutes tes statistiques.</li>
     </ul>
   </div>
@@ -1086,6 +1086,8 @@ const I18N = {
     shopUnequipBtn: "Retirer",
     shopComingSoonMsg: "Bientôt disponible.",
     shopNotEnough: "Pas assez de dans.",
+    shopCrownCondition: "🥇 requis",
+    shopConditionNotMet: "Il te faut au moins 1 médaille d'or.",
     shopAlreadyOwned: "Déjà possédée.",
     shopError: "Une erreur est survenue.",
     shopBannerPreviewName: "Joueur",
@@ -1292,6 +1294,8 @@ const I18N = {
     shopUnequipBtn: "Verwijderen",
     shopComingSoonMsg: "Binnenkort beschikbaar.",
     shopNotEnough: "Niet genoeg dans.",
+    shopCrownCondition: "🥇 vereist",
+    shopConditionNotMet: "Je hebt minstens 1 gouden medaille nodig.",
     shopAlreadyOwned: "Al in bezit.",
     shopError: "Er is een fout opgetreden.",
     shopBannerPreviewName: "Spelernaam",
@@ -1498,6 +1502,8 @@ const I18N = {
     shopUnequipBtn: "Zdejmij",
     shopComingSoonMsg: "Wkrótce dostępne.",
     shopNotEnough: "Za mało dan.",
+    shopCrownCondition: "🥇 wymagane",
+    shopConditionNotMet: "Potrzebujesz co najmniej 1 złotego medalu.",
     shopAlreadyOwned: "Już posiadany.",
     shopError: "Wystąpił błąd.",
     shopBannerPreviewName: "Nazwa gracza",
@@ -1704,6 +1710,8 @@ const I18N = {
     shopUnequipBtn: "Unequip",
     shopComingSoonMsg: "Coming soon.",
     shopNotEnough: "Not enough dans.",
+    shopCrownCondition: "🥇 required",
+    shopConditionNotMet: "You need at least 1 gold medal.",
     shopAlreadyOwned: "Already owned.",
     shopError: "Something went wrong.",
     shopBannerPreviewName: "Player name",
@@ -2624,7 +2632,12 @@ const BANNER_CATALOG = [
   { id:'snake',   left:'🐍', right:'🐍', color:'#3fa7ff', price:6  },
   { id:'shark',   left:'🦈', right:'🦈', color:'#2f8f4e', price:8  },
   { id:'sun',     left:'🌞', right:'🌞', color:'#ffa733', price:30 },
-  { id:'crown',   left:'👑', right:'👑', color:'#ffd23f', price:12 },
+  // Gratuite, mais soumise a condition (au moins 1 medaille d'or, voir
+  // player_has_gold_medal() dans schema.sql) plutot qu'a un prix -- price:0
+  // reste utilise pour le tri (byPrice), conditionKey pilote l'affichage
+  // ("prix" remplace par le libelle de la condition) et le message d'erreur
+  // si la condition n'est pas remplie (voir purchase_banner()).
+  { id:'crown',   left:'👑', right:'👑', color:'#ffd23f', price:0, conditionKey:'shopCrownCondition' },
   { id:'diamond', left:'💎', right:'💎', color:'#5fdc7a', price:15 }
 ];
 function getBanner(id){ return id ? BANNER_CATALOG.find(b=>b.id===id) || null : null; }
@@ -2757,7 +2770,7 @@ function maybeReportMatchResult(scene, onlineRole, onlineLobbyId, onlineRanked){
   if(won) sfxVictory(); else sfxDefeat();
   if(scene && scene.showToast){
     const n = dansEarned(won, !!onlineRole, !!onlineRanked);
-    scene.showToast(t('toastDansEarned', {n}), {borderColor:0x5fdc7a, textColor:'#c9ffcf'});
+    scene.showToast(t('toastDansEarned', {n}), {borderColor:0x5fdc7a, textColor:'#c9ffcf', duration:2600});
   }
   if(onlineRole){
     // Elo 1v1 en ligne : seul l'HOTE rapporte le resultat (jamais l'invite,
@@ -2790,7 +2803,7 @@ function maybeReportMatchResult(scene, onlineRole, onlineLobbyId, onlineRanked){
 }
 // Date de derniere mise a jour du jeu, affichee en bulle sur l'ecran de
 // demarrage. A mettre a jour a chaque nouvelle session de modifications.
-const LAST_UPDATE = "19/08/2026";
+const LAST_UPDATE = "20/08/2026";
 
 // Attend que les 2 polices web (Press Start 2P / VT323) soient VRAIMENT
 // chargees avant d'appeler cb. document.fonts.ready seul ne suffit pas ici :
@@ -3948,7 +3961,11 @@ class VsIntroScene extends Phaser.Scene {
   // (meme technique de "shrink to fit" que le titre de OnlineLobbyScene),
   // et la bulle banniere s'adapte a la largeur reelle du texte plutot
   // qu'une largeur fixe qui pouvait etre trop juste.
-  drawSide(cx, W, H, side){
+  // cx/cy : centre de ce cote. W : largeur DISPONIBLE pour ce cote (pas
+  // forcement la largeur totale de l'ecran -- voir render(), qui passe la
+  // moitie de l'ecran en paysage mais la quasi-totalite en portrait, ou les
+  // deux cotes sont empiles au lieu d'etre cote a cote).
+  drawSide(cx, cy, W, side){
     const pseudo = (side && side.pseudo) ? side.pseudo : '???';
     const tier = (side && side.elo!=null) ? eloTier(side.elo) : null;
     const banner = side ? getBanner(side.banner) : null;
@@ -3968,23 +3985,23 @@ class VsIntroScene extends Phaser.Scene {
       const bw = Math.min(Math.max(textWidth + 24, 80), W*0.9), bh = Math.round(nameSize*2.1);
       const g = this.add.graphics();
       g.fillStyle(Phaser.Display.Color.HexStringToColor(banner.color).color, 1);
-      g.fillRoundedRect(cx-bw/2, H/2-bh/2, bw, bh, 8);
+      g.fillRoundedRect(cx-bw/2, cy-bh/2, bw, bh, 8);
       // Le nom garde la couleur de son palier meme sur le fond colore de la
       // banniere -- contour noir seulement si les 2 couleurs sont trop
       // proches pour rester lisibles (voir isColorTooClose()).
       const nameColor = tier ? tier.color : '#e9ddc8';
       const needsOutline = tier && isColorTooClose(nameColor, banner.color);
-      this.add.text(cx, H/2, label, Object.assign(
+      this.add.text(cx, cy, label, Object.assign(
         {fontFamily:'"Press Start 2P"', fontSize:nameSize+'px', color:nameColor},
         needsOutline ? {stroke:'#000000', strokeThickness:Math.max(2, Math.round(nameSize*0.12))} : {}
       )).setOrigin(0.5);
     } else {
-      this.add.text(cx, H/2, label, {
+      this.add.text(cx, cy, label, {
         fontFamily:'"Press Start 2P"', fontSize:nameSize+'px', color: tier ? tier.color : '#e9ddc8'
       }).setOrigin(0.5);
     }
     if(tier){
-      this.add.text(cx, H/2 + nameSize*1.7, `${tier.emoji} ${t(tier.key)}`, {
+      this.add.text(cx, cy + nameSize*1.7, `${tier.emoji} ${t(tier.key)}`, {
         fontFamily:'"VT323"', fontSize:Math.max(12, Math.round(nameSize*0.75))+'px', color:tier.color
       }).setOrigin(0.5);
     }
@@ -3997,8 +4014,20 @@ class VsIntroScene extends Phaser.Scene {
     this.children.removeAll();
     const d = this.data_ || {};
 
-    this.drawSide(W*0.27, W*0.5, H, d.me);
-    this.drawSide(W*0.73, W*0.5, H, d.opponent);
+    // Cote a cote en paysage (chaque cote n'a que la moitie de l'ecran en
+    // largeur -- un pseudo long finissait par deborder sur l'autre cote
+    // meme apres retrecissement de la police, constate en test mobile
+    // portrait). Empiles verticalement en portrait a la place : chaque
+    // cote recupere alors la quasi-totalite de la largeur (comme le reste
+    // du menu, voir isPortraitMenu ailleurs dans le fichier), largement
+    // assez pour un pseudo de 20 caracteres (max autorise a l'inscription).
+    if(H > W){
+      this.drawSide(W/2, H*0.28, W*0.92, d.me);
+      this.drawSide(W/2, H*0.72, W*0.92, d.opponent);
+    } else {
+      this.drawSide(W*0.27, H/2, W*0.5, d.me);
+      this.drawSide(W*0.73, H/2, W*0.5, d.opponent);
+    }
 
     const vsSize = Math.max(24, Math.min(52, Math.round(H*0.11)));
     this.add.text(W/2, H/2, 'VS', {
@@ -5239,7 +5268,7 @@ class MainScene extends Phaser.Scene {
     g.setAlpha(0); txt.setAlpha(0);
     this.tweens.add({ targets:[g, txt], alpha:1, duration:120 });
     this.toastObjs = [g, txt];
-    this.toastTimer = this.time.delayedCall(1400, ()=>{
+    this.toastTimer = this.time.delayedCall(opts.duration ?? 1400, ()=>{
       this.tweens.add({
         targets:[g, txt], alpha:0, duration:220,
         onComplete: ()=>{ g.destroy(); txt.destroy(); this.toastObjs = this.toastObjs.filter(o=>o!==g && o!==txt); }
@@ -7124,6 +7153,7 @@ window.__updateLangPopup(lang);
   function bannerErrorKey(err){
     if(err === 'notEnoughCurrency') return 'shopNotEnough';
     if(err === 'alreadyOwned') return 'shopAlreadyOwned';
+    if(err === 'conditionNotMet') return 'shopConditionNotMet';
     return 'shopError';
   }
 
@@ -7152,7 +7182,9 @@ window.__updateLangPopup(lang);
 
       const price = document.createElement('div');
       price.className = 'shop-banner-price';
-      price.textContent = owned ? '' : `${banner.price} 🪙`;
+      // Banniere a condition (voir "crown" dans BANNER_CATALOG) : le libelle
+      // de la condition remplace le prix en dans, meme emplacement compact.
+      price.textContent = owned ? '' : (banner.conditionKey ? t(banner.conditionKey) : `${banner.price} 🪙`);
       card.appendChild(price);
 
       const btn = document.createElement('button');

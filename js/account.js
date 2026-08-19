@@ -192,6 +192,7 @@
     if(error){
       const key = error.message === 'already_owned' ? 'alreadyOwned'
         : error.message === 'not_enough_currency' ? 'notEnoughCurrency'
+        : error.message === 'condition_not_met' ? 'conditionNotMet'
         : 'unknown';
       return { error: key };
     }

@@ -154,6 +154,42 @@ alter table public.profiles add column equipped_banner text;
 -- client pour le prix -- catalogue duplique ici volontairement (voir le
 -- meme catalogue cote client dans index.html, BANNER_CATALOG) puisqu'il
 -- n'y a pas de table banners partagee.
+-- Vrai si p_uid detient au moins 1 medaille d'or (1er, classement "dense" --
+-- ex-aequo inclus) sur au moins un des 4 classements par difficulte (voir
+-- fetchMyMedals()/fetchModeLeaderboard() dans js/account.js pour la version
+-- cote client, utilisee pour l'AFFICHAGE -- celle-ci est la verification
+-- SERVEUR, seule habilitee a conditionner un achat, jamais un calcul refait
+-- cote client). Se contente de LIRE matches (deja public en lecture, voir
+-- policy "matches are publicly readable" plus haut) : ne consomme ni ne
+-- modifie jamais aucune medaille, purement une condition d'eligibilite.
+create or replace function public.player_has_gold_medal(p_uid uuid)
+returns boolean
+language sql
+stable
+set search_path = public
+as $$
+  with best_per_player as (
+    select mode, joueur1, min(tours) as best_tours
+    from public.matches
+    where joueur1_gagne
+    group by mode, joueur1
+  ),
+  best_per_mode as (
+    select mode, min(best_tours) as top_tours
+    from best_per_player
+    group by mode
+  )
+  select exists (
+    select 1
+    from best_per_player bp
+    join best_per_mode bm on bm.mode = bp.mode and bm.top_tours = bp.best_tours
+    where bp.joueur1 = p_uid
+  );
+$$;
+
+revoke all on function public.player_has_gold_medal(uuid) from public;
+grant execute on function public.player_has_gold_medal(uuid) to authenticated;
+
 create or replace function public.purchase_banner(p_banner_id text)
 returns table(new_currency integer, owned_banners text[])
 language plpgsql
@@ -177,12 +213,19 @@ begin
     when 'snake' then 6
     when 'shark' then 8
     when 'sun' then 30
-    when 'crown' then 12
+    -- Gratuite, mais reservee a qui a au moins 1 medaille d'or (voir
+    -- player_has_gold_medal ci-dessus) -- verifiee juste apres, jamais
+    -- juste "gratuite pour tous".
+    when 'crown' then 0
     when 'diamond' then 15
     else null
   end;
   if v_price is null then
     raise exception 'unknown_banner';
+  end if;
+
+  if p_banner_id = 'crown' and not public.player_has_gold_medal(v_uid) then
+    raise exception 'condition_not_met';
   end if;
 
   -- Alias "p" partout ci-dessous (public.profiles p / p.owned_banners) :
