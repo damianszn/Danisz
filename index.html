@@ -2603,7 +2603,11 @@ class MenuScene extends Phaser.Scene {
       // uniformement (jamais sous 0.6, pour rester tappable) quand l'espace
       // ideal (5 rangees a 96px) ne tient pas dans l'espace reel.
       const topY = titleY + titleSize*0.8 + 40;
-      const bottomMargin = 34;
+      // 54 (pas 34) : laisse assez de place pour que la bulle "derniere
+      // mise a jour" (coin bas-droit, voir plus bas) ne chevauche jamais
+      // le dernier rang de boutons (Tutoriel/1v1v1v1), meme a sa taille
+      // max (17px + marges).
+      const bottomMargin = 54;
       const availH = Math.max(220, H - topY - bottomMargin);
       const idealStep = 96, idealTutGap = 20, idealTutH = 52;
       const idealTotal = idealStep*4 + idealTutGap + idealTutH;
@@ -2646,7 +2650,11 @@ class MenuScene extends Phaser.Scene {
       const btnW = Math.min(320, W*0.4);
       const gapX = 26;
       const gridTop = titleY + titleSize*0.75 + 30;
-      const bottomMargin = 34;
+      // 54 (pas 34) : laisse assez de place pour que la bulle "derniere
+      // mise a jour" (coin bas-droit, voir plus bas) ne chevauche jamais
+      // le dernier rang de boutons (Tutoriel/1v1v1v1), meme a sa taille
+      // max (17px + marges).
+      const bottomMargin = 54;
       // Meme logique de mise a l'echelle que le mode portrait (voir plus
       // haut) : un telephone en paysage n'a souvent qu'une hauteur reelle de
       // 350-400px une fois la barre du navigateur deduite, insuffisante pour
@@ -2694,13 +2702,22 @@ class MenuScene extends Phaser.Scene {
     markText.on('pointerdown', ()=>{ if(window.__openPrivacyPolicy) window.__openPrivacyPolicy(); });
 
     // Bulle "derniere mise a jour", coin bas-droit (le bas-centre est deja
-    // pris par la marque).
+    // pris par la marque). Taille de police a l'echelle de H (comme le
+    // reste du menu) plutot que fixe a 17px : sur un petit ecran/paysage
+    // bas, une taille fixe combinee au texte complet "Derniere mise a
+    // jour : ..." (plus long que l'ancien "MAJ") pouvait chevaucher la
+    // grille de boutons juste au-dessus (voir aussi bottomMargin plus haut,
+    // qui reserve maintenant assez de place pour cette bulle).
     const updText = `${t('lastUpdateLabel')} ${LAST_UPDATE}`;
-    const updSize = 17;
+    const updSize = Math.max(11, Math.min(17, Math.round(H*0.022)));
     const probe = this.add.text(0, 0, updText, {fontFamily:'"VT323"', fontSize:updSize+'px'}).setVisible(false);
     const padX = 10, padY = 6;
     const bw = probe.width + padX*2, bh = probe.height + padY*2;
     probe.destroy();
+    // Coin bas-droit fige (jamais recalcule ailleurs qu'ici) : W et H sont
+    // les dimensions REELLES de l'ecran a ce rendu, donc bx/by suivent
+    // toujours le vrai coin, peu importe la taille -- rien ne doit
+    // desormais l'en faire deborder (voir bottomMargin cote grille).
     const bx = W - 14 - bw, by = H - 14 - bh;
     const g = this.add.graphics();
     g.fillStyle(0x0c1410, 0.5);
