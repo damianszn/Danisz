@@ -1722,23 +1722,28 @@ function getActiveZoneCards(pState){
   return {zone:'done', cards:[]};
 }
 
-// ---- Cas special : pioche vide, main contenant encore au moins une carte
-// d'un rang qui existe aussi parmi les cartes face visible deja decouvertes.
-// Ces dernieres restent normalement bloquees dans leur propre zone tant que
-// la main n'est pas ENTIEREMENT vide (voir getActiveZoneCards ci-dessus),
-// meme quand elles partagent exactement le meme rang qu'une carte encore en
-// main -- sans ce cas special, il fallait les jouer separement (un coup a
-// la fois, parfois sur plusieurs tours) plutot qu'en un seul groupe, comme
-// n'importe quelles cartes de meme rang ailleurs dans le jeu. Marche avec
-// n'importe quelle repartition (1 en main + 3 decouvertes, 3 en main + 1
-// decouverte, etc.), pas seulement le cas "1 derniere carte" -- rank est
-// TOUJOURS fourni par l'appelant (carte cliquee ou groupe en cours de jeu),
-// jamais devine depuis la main. Renvoie le sous-ensemble concerne des
-// cartes face visible (vide si la pioche n'est pas vide, ou si la main n'a
-// aucune carte de ce rang).
+// ---- Cas special : pioche vide ET main ENTIEREMENT du meme rang qu'une ou
+// plusieurs cartes face visible deja decouvertes. Ces dernieres restent
+// normalement bloquees dans leur propre zone tant que la main n'est pas
+// ENTIEREMENT vide (voir getActiveZoneCards ci-dessus), meme quand elles
+// partagent exactement le meme rang qu'une carte encore en main -- sans ce
+// cas special, il fallait les jouer separement (un coup a la fois, parfois
+// sur plusieurs tours) plutot qu'en un seul groupe, comme n'importe quelles
+// cartes de meme rang ailleurs dans le jeu.
+//
+// hand.every(...) et PAS hand.some(...) : `some` etait toujours vrai des
+// qu'on cliquait N'IMPORTE QUELLE carte de ce rang (elle est forcement dans
+// la main, donc some() est trivialement vrai pour elle-meme) -- ca
+// combinait une carte face visible sans rapport des qu'on jouait une simple
+// carte normale avec d'autres rangs encore en main (ex: main [Q,10,5], la
+// dame decouverte se soulevait juste en jouant SA dame en main, meme avec
+// 10 et 5 encore a jouer). `every` exige que la main COMPLETE soit de ce
+// rang (main [J] seule, ou [J,J,J], mais pas [Q,10,5]) : la combinaison ne
+// se declenche que quand il ne reste vraiment plus rien d'autre a gerer
+// separement en main.
 function combinableFaceUp(state, pState, rank){
-  if(state.deck.length>0) return [];
-  if(!pState.hand.some(c=>c.rank===rank)) return [];
+  if(state.deck.length>0 || pState.hand.length===0) return [];
+  if(!pState.hand.every(c=>c.rank===rank)) return [];
   return pState.faceUp.filter(c=>c.rank===rank);
 }
 
