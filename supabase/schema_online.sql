@@ -576,3 +576,61 @@ $$;
 
 revoke all on function public.report_online_match(uuid, boolean, integer) from public;
 grant execute on function public.report_online_match(uuid, boolean, integer) to authenticated;
+
+
+/* =========================================================
+   PHASE 7 : la recherche rapide ("1v1 classe") tient maintenant compte de
+   l'Elo pour choisir avec qui apparier -- avant, c'etait du pur FIFO
+   (la plus ancienne lobby en attente, peu importe l'ecart d'Elo). Casual
+   ("1v1 en ligne") reste du FIFO pur, l'Elo n'y a aucun sens.
+   ========================================================= */
+
+-- Meme signature qu'avant (create or replace suffit, pas de drop) : la
+-- seule chose qui change est l'ORDRE de selection parmi les lobbies en
+-- attente compatibles -- toujours la premiere trouvee, mais desormais
+-- classee par ecart d'Elo (le plus proche d'abord) en mode classe, plutot
+-- que par anciennete pure. Pas de rayon de recherche qui s'elargit avec le
+-- temps (complexite pas justifiee vu la taille du groupe de joueurs pour
+-- l'instant) : s'il n'y a qu'un seul adversaire en attente, on l'apparie
+-- quand meme, ecart d'Elo ou pas -- mieux vaut jouer que rester bloque en
+-- file d'attente indefiniment.
+create or replace function public.join_random_queue(p_ranked boolean default true)
+returns table(lobby_id uuid, opponent_joined boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_my_elo integer;
+  v_existing public.lobbies%rowtype;
+  v_new_id uuid;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select elo into v_my_elo from public.profiles where id = v_uid;
+
+  select l.* into v_existing from public.lobbies l
+    join public.profiles p on p.id = l.joueur1
+    where l.status = 'waiting' and l.code is null and l.joueur1 <> v_uid and l.ranked = p_ranked
+    order by (case when p_ranked then abs(p.elo - v_my_elo) else 0 end) asc, l.created_at asc
+    limit 1
+    for update of l skip locked;
+
+  if found then
+    update public.lobbies set joueur2 = v_uid, status = 'active' where id = v_existing.id;
+    return query select v_existing.id, true;
+    return;
+  end if;
+
+  delete from public.lobbies where joueur1 = v_uid and status = 'waiting' and code is null and ranked = p_ranked;
+
+  insert into public.lobbies (joueur1, status, ranked) values (v_uid, 'waiting', p_ranked) returning id into v_new_id;
+  return query select v_new_id, false;
+end;
+$$;
+
+revoke all on function public.join_random_queue(boolean) from public;
+grant execute on function public.join_random_queue(boolean) to authenticated;
