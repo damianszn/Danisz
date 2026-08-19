@@ -220,6 +220,31 @@
     font-family:'VT323',monospace; font-size:14px; cursor:pointer; opacity:0.8;
   }
   #account-panel button.danger:hover{ opacity:1; border-color:rgba(255,95,95,0.7); color:#ff8a7a; }
+  /* Formulaires inscription/connexion en 2 colonnes sur petit ecran : un
+     compte signale comme impossible a creer sur mobile, bouton "Inscription"
+     hors-vue et le scroll de la page qui revient tout seul en haut des qu'un
+     champ prend le focus (le clavier virtuel qui reduit la hauteur visible
+     perturbe le scroll du panneau position:fixed) -- la vraie source du
+     probleme (comportement clavier/scroll mobile) n'est pas corrigeable
+     depuis ce CSS, mais reduire la hauteur totale du formulaire limite
+     fortement le risque que le bouton finisse hors-vue en premier lieu.
+     L'ordre naturel des enfants (pseudo, email, mdp, confirmation, ...)
+     suffit a les repartir en 2 colonnes sans selecteur par champ -- seuls
+     les elements qui doivent rester pleine largeur (case a cocher, bouton)
+     sont forces a s'etaler sur les 2 colonnes. */
+  @media (max-width: 640px){
+    #account-panel{
+      width: min(94vw, 380px);
+      padding-bottom: 22px;
+    }
+    #account-signup-fields, #account-signin-fields{
+      display:grid; grid-template-columns: 1fr 1fr; column-gap:10px;
+    }
+    #account-consent-label, #account-signup-fields button.primary, #account-signin-fields button.primary{
+      grid-column: 1 / -1;
+    }
+    #account-signup-fields button.primary{ margin-top:4px; margin-bottom:6px; }
+  }
   /* Case a cocher de consentement (RGPD) avant l'inscription : minuscule,
      alignee avec le texte, le lien vers la politique de confidentialite
      ouvre l'overlay dedie plutot que de quitter la page. */
@@ -5841,8 +5866,12 @@ window.__updateLangPopup(lang);
     errorBox.textContent = '';
     tabSignup.classList.toggle('active', mode==='signup');
     tabSignin.classList.toggle('active', mode==='signin');
-    signupFields.style.display = mode==='signup' ? 'block' : 'none';
-    signinFields.style.display = mode==='signin' ? 'block' : 'none';
+    // '' (pas 'block') quand visible : laisse la feuille de style decider
+    // (grid en 2 colonnes sur mobile, voir la media query plus haut) plutot
+    // qu'un style inline qui l'ecraserait systematiquement, quelle que soit
+    // la largeur d'ecran.
+    signupFields.style.display = mode==='signup' ? '' : 'none';
+    signinFields.style.display = mode==='signin' ? '' : 'none';
     needsPseudoFields.style.display = mode==='needsPseudo' ? 'block' : 'none';
     tabsBar.style.display = mode==='needsPseudo' ? 'none' : 'flex';
   }
