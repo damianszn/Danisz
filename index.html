@@ -779,11 +779,11 @@
   document.addEventListener('fullscreenchange', updateIcon);
   document.addEventListener('webkitfullscreenchange', updateIcon);
 
-  // Plein ecran AUTOMATIQUE des qu'on est en paysage sur mobile : la barre
-  // d'adresse/navigation bouffe une part deja precieuse de la hauteur en
-  // paysage sur telephone (tout le travail de placement des cartes en tient
-  // compte). L'API Fullscreen exige un vrai geste utilisateur -- impossible
-  // de la declencher toute seule au chargement ou sur un simple changement
+  // Plein ecran AUTOMATIQUE sur mobile : la barre d'adresse/navigation
+  // bouffe une part deja precieuse de la hauteur en paysage sur telephone
+  // (tout le travail de placement des cartes en tient compte). L'API
+  // Fullscreen exige un vrai geste utilisateur -- impossible de la
+  // declencher toute seule au chargement ou sur un simple changement
   // d'orientation -- donc on la tente sur CHAQUE tap/clic tant qu'on n'est
   // pas deja en plein ecran : au pire ca prend le tout premier tap (menu,
   // carte...) pour y passer, sans bloquer ni retarder ce clic lui-meme
@@ -794,11 +794,21 @@
   // plein ecran au premier clic alors que ce correctif ne visait QUE le vrai
   // mobile (barre d'adresse qui bouffe la hauteur en paysage). On exige donc
   // EN PLUS un user-agent mobile reel.
+  //
+  // PAS de condition "deja en paysage" ici (contrairement a une version
+  // precedente) : un joueur qui commence en portrait (cas courant, ex. en
+  // remplissant le formulaire d'inscription) et tourne son telephone
+  // seulement APRES ce tout premier tap se retrouvait en paysage SANS plein
+  // ecran, exactement le probleme signale ("la barre de recherche ecrase
+  // le jeu") -- en tentant le plein ecran des le tout premier tap peu
+  // importe l'orientation du moment, il est deja actif par le temps que le
+  // joueur bascule en paysage. Passer en plein ecran depuis le portrait ne
+  // gene en rien (juste la barre d'adresse en moins), donc aucune raison de
+  // reserver la tentative au paysage.
   const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
   const isMobileUA = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
-  function isLandscapeNow(){ return window.innerWidth > window.innerHeight; }
   function autoFullscreenOnGesture(){
-    if(!isTouchDevice || !isMobileUA || isFs() || !isLandscapeNow()) return;
+    if(!isTouchDevice || !isMobileUA || isFs()) return;
     requestFs();
   }
   document.addEventListener('click', autoFullscreenOnGesture, true);
