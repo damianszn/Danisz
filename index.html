@@ -1829,9 +1829,25 @@ function resolvePlay(state, who, cards){
       return applyRankEffect(state, who, effectiveRank, 1);
     }
     // Plusieurs 3 joues ensemble : la valeur de comparaison suit quand meme
-    // (sinon n'importe quelle carte redeviendrait jouable juste apres),
-    // mais pas d'heritage de l'effet special du rang copie.
+    // (sinon n'importe quelle carte redeviendrait jouable juste apres), et
+    // le plafond du 7 aussi (voir juste en dessous) -- mais pas les AUTRES
+    // effets speciaux du rang copie (skip+tour bonus du 8, coupe du 10,
+    // declaration de guerre de l'As), reserves a une copie ISOLEE pour ne
+    // jamais les redeclencher plusieurs fois d'un coup.
     state.copyEffectiveTop = effectiveRank;
+    // Le plafond du 7 est un simple etat ("rien au-dessus de 7"), pas un
+    // declenchement ponctuel comme les autres effets -- le reappliquer ici
+    // ne le "redeclenche" pas plusieurs fois, il reste juste correctement
+    // en vigueur. Sans ce cas particulier, applyRankEffect(...'3'...)
+    // tombait dans son cas par defaut (forceMax=null) et effacait le
+    // plafond en cours : un groupe de 3 copiant un 7 faisait disparaitre sa
+    // restriction, rendant n'importe quelle carte (meme un 8) a nouveau
+    // jouable juste apres -- bug reporte en jeu reel (pile 7-3-3, un 8 a pu
+    // etre pose dessus).
+    if(effectiveRank === '7'){
+      state.forceMax = RANK_VALUE['7'];
+      return { replay:false };
+    }
     return applyRankEffect(state, who, rank, count);
   }
 
