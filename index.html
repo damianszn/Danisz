@@ -5793,8 +5793,12 @@ window.__updateLangPopup(lang);
     // connecte, disparait immediatement des que state.profile existe (voir
     // signIn/signUp -- notify() declenche refreshAccountUI() a chaque
     // changement de state, donc pas de delai/etape supplementaire ici).
+    // navigator.onLine en plus : inviter a creer un compte alors qu'il n'y a
+    // pas de reseau n'a aucun sens, la tentative echouerait immediatement
+    // (voir aussi l'ecouteur 'online'/'offline' plus bas qui redeclenche ce
+    // rafraichissement des que la connexion change).
     hintBubble.textContent = t('accountHintBubble');
-    hintBubble.classList.toggle('show', !state.profile);
+    hintBubble.classList.toggle('show', !state.profile && navigator.onLine);
     tabSignup.textContent = t('accountTabSignup');
     tabSignin.textContent = t('accountTabSignin');
     pseudoInput.placeholder = t('accountPseudoPlaceholder');
@@ -5862,6 +5866,11 @@ window.__updateLangPopup(lang);
     panel.classList.toggle('open');
   });
   hintBubble.addEventListener('click', (e)=>{ e.stopPropagation(); btn.click(); });
+  // La bulle depend de navigator.onLine (voir refreshAccountUI) : la
+  // reevaluer des que la connexion change, pas seulement au prochain
+  // changement d'ecran/etat de compte.
+  window.addEventListener('online', refreshAccountUI);
+  window.addEventListener('offline', refreshAccountUI);
   // Appele par MenuScene.render() (voir la-bas) : occupe une bonne partie
   // (3/4) de l'espace REELLEMENT disponible entre le bord droit du titre
   // "Danisz" (dessine sur le canvas, donc inconnu d'ici sans ce pont) et le
