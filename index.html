@@ -4482,10 +4482,15 @@ class MainScene extends Phaser.Scene {
   // que de rester quasi invisible derriere (seul un mince liseret vertical
   // de 6*scale la distinguait avant). Uniquement tant que la face visible
   // est encore la (sinon rien ne la cache, pas besoin de decalage).
-  drawStackedZone(centerX, centerY, faceDownCard, faceUpCard, scale, clickableUp, clickableDown, peekOffsetX=0){
+  // revealTexture (optionnel) : affiche la face REELLE de faceDownCard au
+  // lieu du dos de carte -- uniquement utilise en fin de partie perdue pour
+  // reveler les cartes cachees encore restantes (voir l'appelant). Jamais
+  // clickableDown en meme temps dans ce cas (la partie est deja finie,
+  // gameState.winner pose -> isPlayerTurn deja faux cote appelant).
+  drawStackedZone(centerX, centerY, faceDownCard, faceUpCard, scale, clickableUp, clickableDown, peekOffsetX=0, revealTexture=null){
     if(faceDownCard){
       const dx = faceUpCard ? -peekOffsetX : 0;
-      const spr = this.addCardSprite(centerX + dx, centerY, 'card_back', scale,
+      const spr = this.addCardSprite(centerX + dx, centerY, revealTexture || 'card_back', scale,
         clickableDown ? ()=>this.onPlayerFaceDownClick(faceDownCard) : null);
       this.spriteByCardId[faceDownCard.id] = spr;
     }
@@ -4950,7 +4955,15 @@ class MainScene extends Phaser.Scene {
       // cliquable en plus de la zone active habituelle.
       const canClickUp = isPlayerTurn && (pZoneInfo.zone==='faceUp' || (fu && combinableFaceUp(gameState, gameState.player, fu.rank).length>0));
       const canClickDown = isPlayerTurn && pZoneInfo.zone==='faceDown';
-      this.drawStackedZone(cx(z.x), ty(z.y), fd, fu, 1.25, canClickUp, canClickDown, 15);
+      // Partie perdue : revele les cartes cachees encore restantes, en
+      // clin d'oeil ("qu'est-ce qui te bloquait") -- SAUF si une carte
+      // face visible occupe encore ce meme emplacement (fu present) : elle
+      // n'a jamais ete "atteinte", la reveler en dessous casserait le rendu
+      // empile normal (deux cartes visibles au meme endroit sans que l'une
+      // ne soit sensee etre la, en plus de ne rien apprendre au joueur).
+      const revealDown = gameState.winner && gameState.winner!=='player' && fd && !fu
+        ? RANK_TO_TEXTURE[fd.rank] : null;
+      this.drawStackedZone(cx(z.x), ty(z.y), fd, fu, 1.25, canClickUp, canClickDown, 15, revealDown);
     }
 
     // ---- Main du joueur (sous la table) ----
@@ -5287,7 +5300,12 @@ class MainScene extends Phaser.Scene {
       // cliquable en plus de la zone active habituelle.
       const canClickUp = isPlayerTurn && (pZoneInfo.zone==='faceUp' || (fu && combinableFaceUp(gameState, gameState.player, fu.rank).length>0));
       const canClickDown = isPlayerTurn && pZoneInfo.zone==='faceDown';
-      this.drawStackedZone(x, playerZoneY, fd, fu, 0.75*spaceScale, canClickUp, canClickDown, 15);
+      // Voir le meme commentaire en paysage : revele les cartes cachees
+      // restantes d'une partie perdue, sauf celles encore couvertes par
+      // une face visible non jouee.
+      const revealDown = gameState.winner && gameState.winner!=='player' && fd && !fu
+        ? RANK_TO_TEXTURE[fd.rank] : null;
+      this.drawStackedZone(x, playerZoneY, fd, fu, 0.75*spaceScale, canClickUp, canClickDown, 15, revealDown);
     }
 
     // ---- Boutons Jouer/Prendre, cote a cote au-dessus de la main (pas de
