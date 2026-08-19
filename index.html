@@ -3414,9 +3414,23 @@ class OnlineLobbyScene extends Phaser.Scene {
     // paysage, H peut descendre tres bas (barre d'adresse comprise), et un
     // bloc d'entete a position fixe finit par chevaucher le contenu du mode
     // actif (cy-relatif, lui) des que l'ecran est assez court.
-    const titleSize = Math.max(18, Math.min(30, Math.round(H*0.08)));
+    let titleSize = Math.max(14, Math.min(30, Math.round(H*0.08)));
     const titleY = Math.max(30, Math.min(70, H*0.13));
-    this.add.text(cx, titleY, t(this.ranked ? 'menuRanked' : 'onlineLobbyTitle'), {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px', color:'#e9ddc8'}).setOrigin(0.5);
+    const titleText = t(this.ranked ? 'menuRanked' : 'onlineLobbyTitle');
+    // Retrecit si necessaire pour ne jamais chevaucher le bouton retour
+    // (centre en x=46, rayon 22) : le titre est centre sur cx, donc sur un
+    // ecran ETROIT (pas juste bas) sa largeur peut suffire a s'etendre
+    // par-dessus, meme si la taille "ideale" par rapport a H semblait
+    // correcte -- observe a 320px de large ("1v1 classe" chevauchant la
+    // fleche). 152 = marge symmetrique (2x ~76, juste au-dela du bouton).
+    const maxTitleWidth = Math.max(100, W - 152);
+    const titleProbe = this.add.text(0, 0, titleText, {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px'}).setVisible(false);
+    while(titleProbe.width > maxTitleWidth && titleSize > 12){
+      titleSize--;
+      titleProbe.setFontSize(titleSize+'px');
+    }
+    titleProbe.destroy();
+    this.add.text(cx, titleY, titleText, {fontFamily:'"Press Start 2P"', fontSize:titleSize+'px', color:'#e9ddc8'}).setOrigin(0.5);
 
     const hasAccount = window.DaniszAccount && window.DaniszAccount.hasAccount();
     if(!hasAccount){
