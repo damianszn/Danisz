@@ -1683,6 +1683,22 @@ function getActiveZoneCards(pState){
   return {zone:'done', cards:[]};
 }
 
+// ---- Cas special : pioche vide, main reduite a sa toute derniere carte,
+// qui partage son rang avec une ou plusieurs cartes face visible deja
+// decouvertes. Ces dernieres restent normalement bloquees dans leur propre
+// zone tant que la main n'est pas ENTIEREMENT vide (voir getActiveZoneCards
+// ci-dessus), alors qu'elles ont exactement le meme rang que cette derniere
+// carte -- sans ce cas special, il fallait les jouer separement (un coup a
+// la fois) plutot qu'en un seul groupe, comme n'importe quelles cartes de
+// meme rang. Renvoie le sous-ensemble concerne des cartes face visible
+// (peut etre vide si aucune ne correspond, ou si la pioche n'est pas vide,
+// ou si la main a encore plus d'une carte).
+function combinableFaceUp(state, pState){
+  if(state.deck.length>0 || pState.hand.length!==1) return [];
+  const rank = pState.hand[0].rank;
+  return pState.faceUp.filter(c=>c.rank===rank);
+}
+
 function pileTop(state){ return state.pile.length ? state.pile[state.pile.length-1] : null; }
 
 function canPlayGroup(state, rank){
@@ -1925,10 +1941,21 @@ function playGroup(state, who, chosenCards){
 
   if(!canPlayGroup(state, rank)) return {ok:false, message:"Cette carte n'est pas jouable actuellement."};
 
+  // Pool combine main+face visible (voir combinableFaceUp) : la zone
+  // "active" habituelle (zoneInfo.cards) reste la source normale, etendue
+  // uniquement dans le cas special pioche-vide/derniere-carte. On verifie
+  // sur ce pool combine, mais chaque carte est retiree de SA zone reelle
+  // (main ou face visible), jamais d'une seule zone supposee commune.
+  const combinable = combinableFaceUp(state, pState);
+  const pool = combinable.length>0 ? [...zoneInfo.cards, ...combinable] : zoneInfo.cards;
   for(const c of chosenCards){
-    const idx = zoneInfo.cards.findIndex(cc=>cc.id===c.id);
-    if(idx===-1) return {ok:false, message:"Carte introuvable dans ta zone active."};
-    zoneInfo.cards.splice(idx,1);
+    if(!pool.some(cc=>cc.id===c.id)) return {ok:false, message:"Carte introuvable dans ta zone active."};
+  }
+  for(const c of chosenCards){
+    let idx = pState.hand.findIndex(cc=>cc.id===c.id);
+    if(idx!==-1){ pState.hand.splice(idx,1); continue; }
+    idx = pState.faceUp.findIndex(cc=>cc.id===c.id);
+    if(idx!==-1){ pState.faceUp.splice(idx,1); }
   }
 
   const result = resolvePlay(state, who, chosenCards);
@@ -4835,7 +4862,10 @@ class MainScene extends Phaser.Scene {
       const z = ZONES.playerSlots[i];
       const fd = gameState.player.faceDown.find(c=>c.slot===i);
       const fu = gameState.player.faceUp.find(c=>c.slot===i);
-      const canClickUp = isPlayerTurn && pZoneInfo.zone==='faceUp';
+      // fu && ... : voir combinableFaceUp -- cas special pioche vide/derniere
+      // carte en main, ou une carte face visible de meme rang redevient
+      // cliquable en plus de la zone active habituelle.
+      const canClickUp = isPlayerTurn && (pZoneInfo.zone==='faceUp' || (fu && combinableFaceUp(gameState, gameState.player).some(c=>c.id===fu.id)));
       const canClickDown = isPlayerTurn && pZoneInfo.zone==='faceDown';
       this.drawStackedZone(cx(z.x), ty(z.y), fd, fu, 1.25, canClickUp, canClickDown, 15);
     }
@@ -5169,7 +5199,10 @@ class MainScene extends Phaser.Scene {
       const x = cx + (i-1)*playerSlotSpacing;
       const fd = gameState.player.faceDown.find(c=>c.slot===i);
       const fu = gameState.player.faceUp.find(c=>c.slot===i);
-      const canClickUp = isPlayerTurn && pZoneInfo.zone==='faceUp';
+      // fu && ... : voir combinableFaceUp -- cas special pioche vide/derniere
+      // carte en main, ou une carte face visible de meme rang redevient
+      // cliquable en plus de la zone active habituelle.
+      const canClickUp = isPlayerTurn && (pZoneInfo.zone==='faceUp' || (fu && combinableFaceUp(gameState, gameState.player).some(c=>c.id===fu.id)));
       const canClickDown = isPlayerTurn && pZoneInfo.zone==='faceDown';
       this.drawStackedZone(x, playerZoneY, fd, fu, 0.75*spaceScale, canClickUp, canClickDown, 15);
     }
@@ -5354,7 +5387,11 @@ class MainScene extends Phaser.Scene {
       }
     } else {
       const { cards } = getActiveZoneCards(gameState.player);
-      selected = cards.filter(c=>c.rank===card.rank);
+      // + combinableFaceUp (voir plus haut) : pioche vide, main reduite a sa
+      // derniere carte -- cliquer sur elle OU sur une carte face visible de
+      // meme rang preselectionne le groupe complet des deux zones a la fois.
+      const combinable = combinableFaceUp(gameState, gameState.player);
+      selected = [...cards, ...combinable].filter(c=>c.rank===card.rank);
       groupClickCardId = card.id;
     }
     this.render();
