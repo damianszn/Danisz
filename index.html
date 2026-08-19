@@ -3973,16 +3973,25 @@ class MainScene extends Phaser.Scene {
   // chien de garde : si jamais l'animation ne se termine pas normalement
   // (tween qui echoue a declencher son onComplete, focus de la fenetre qui
   // perturbe le timing, etc.), le jeu se debloque tout seul au bout de
-  // quelques secondes plutot que de rester fige indefiniment. ----
+  // quelques secondes plutot que de rester fige indefiniment.
+  //
+  // Appelle directement afterAnimation() (au lieu de sa propre logique de
+  // secours, qui ne faisait QUE relancer l'IA locale) : sinon, en 1v1 en
+  // ligne, cote INVITE, un etat recu PENDANT l'animation bloquee finissait
+  // en file d'attente (this.onlinePendingState, voir onOnlineState) et n'en
+  // sortait JAMAIS -- seul afterAnimation() la vide, et ce chien de garde
+  // se contentait de debloquer visuellement l'ecran (animating=false) sans
+  // jamais traiter cette file, laissant l'invite fige pour de bon des la
+  // premiere animation qui echoue a se terminer normalement. Observe en
+  // vrai partie ("l'adversaire pose deux 7, chez elle tout s'arrete, elle
+  // ne voit plus rien"). afterAnimation() gere deja tous les cas (diffusion
+  // cote hote, file d'attente hote/invite, relance de l'IA en solo), pas
+  // besoin de dupliquer cette logique ici. ----
   armAnimating(){
     this.animating = true;
     this.disarmWatchdog();
     this._animWatchdog = this.time.delayedCall(4000, ()=>{
-      if(this.animating){
-        this.animating = false;
-        this.render();
-        if(!gameState.winner && gameState.turn==='ai') this.time.delayedCall(300, ()=>this.aiLoop());
-      }
+      if(this.animating) this.afterAnimation();
     });
   }
 
