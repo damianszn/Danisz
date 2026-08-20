@@ -93,7 +93,7 @@
     display:inline-flex; align-items:center; gap:6px;
     min-width:34px; height:34px; padding:0 10px; margin:0;
     background:transparent; border:none;
-    color:#e9ddc8; font-size:20px; line-height:34px; text-align:center;
+    color:#e9ddc8; font-size:22px; line-height:34px; text-align:center;
     cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;
     opacity:0.85; font-family:'VT323',monospace; white-space:nowrap;
     transition: color 0.15s ease;
@@ -284,7 +284,7 @@
     color:#9aa8b0; font-family:'VT323',monospace; font-size:14px; cursor:pointer;
   }
   .account-tab.active{ color:#ffd23f; border-color:#ffd23f; }
-  #account-pseudo-display{ font-family:'Press Start 2P',monospace; font-size:13px; color:#ffd23f; margin-bottom:6px; }
+  #account-pseudo-display{ font-family:'Press Start 2P',monospace; font-size:15px; color:#ffd23f; margin-bottom:6px; }
   #account-error{ color:#ff5f5f; font-size:14px; margin-top:6px; min-height:1em; }
   #account-stats{ font-size:15px; color:#9aa8b0; margin:6px 0 10px; }
   #account-topscores-title{
@@ -444,7 +444,7 @@
      long que le placeholder "Nom du joueur" -- ne jamais dependre de la
      largeur pour empecher le retour a la ligne). */
   .shop-banner-preview{
-    font-size:18px; padding:4px 10px; border-radius:6px; line-height:1.3;
+    font-size:20px; padding:4px 10px; border-radius:6px; line-height:1.3;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; box-sizing:border-box;
   }
   /* Vignette (Ace du deck) pour un jeu de cartes : image plutot que texte,
@@ -3999,7 +3999,7 @@ class VsIntroScene extends Phaser.Scene {
     const label = banner ? `${banner.left}  ${pseudo}  ${banner.right}` : pseudo;
     const maxTextWidth = W*0.86;
 
-    let nameSize = Math.max(13, Math.min(26, Math.round(W*0.075)));
+    let nameSize = Math.max(15, Math.min(29, Math.round(W*0.083)));
     const probe = this.add.text(0, 0, label, {fontFamily:'"Press Start 2P"', fontSize:nameSize+'px'}).setVisible(false);
     while(probe.width > maxTextWidth && nameSize > 9){
       nameSize--;
@@ -5504,7 +5504,7 @@ class MainScene extends Phaser.Scene {
       // dans tous les autres cas (casual, ou echec reseau du fetch de l'elo).
       const oppColor = (this.onlineRanked && this.onlineOpponentElo!=null) ? eloTier(this.onlineOpponentElo).color : '#ffd23f';
       this.label(W/2 - (fanCount-1)*aiFanSpacing/2 - 24 - 14, 50, oppLabel,
-        {fontFamily:'"Press Start 2P"', fontSize:'12px', color:oppColor, originX:1, originY:0.5});
+        {fontFamily:'"Press Start 2P"', fontSize:'13px', color:oppColor, originX:1, originY:0.5});
     } else if(difficulty!=='nightmare'){
       this.label(W/2 - (fanCount-1)*aiFanSpacing/2 - 24 - 14, 50, `${aiHandCount}`,
         {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#e9ddc8', originX:1, originY:0.5});
@@ -5884,7 +5884,7 @@ class MainScene extends Phaser.Scene {
       if(oppBanner) oppLabel = `${oppBanner.left} ${oppLabel} ${oppBanner.right}`;
       const oppColor = this.onlineOpponentElo!=null ? eloTier(this.onlineOpponentElo).color : '#ffd23f';
       this.label(cx - (fanCount-1)*10*spaceScale - 20*spaceScale - 12, aiFanY, oppLabel,
-        {fontFamily:'"Press Start 2P"', fontSize:'12px', color:oppColor, originX:1, originY:0.5});
+        {fontFamily:'"Press Start 2P"', fontSize:'13px', color:oppColor, originX:1, originY:0.5});
     } else if(difficulty!=='nightmare'){
       this.label(cx - (fanCount-1)*10*spaceScale - 20*spaceScale - 12, aiFanY, `${aiHandCount}`,
         {fontFamily:'"Press Start 2P"', fontSize:'12px', color:'#e9ddc8', originX:1, originY:0.5});
