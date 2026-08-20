@@ -6743,10 +6743,32 @@ window.__updateLangPopup(lang);
     }
   }
 
+  // Desactive l'input Phaser tant qu'AU MOINS un de ces 3 popups DOM est
+  // ouvert (panneau compte, boutique, personnalisation) : sans ca, un clic
+  // sur un bouton de ces popups (par-dessus le canvas) declenchait AUSSI le
+  // bouton du menu juste en dessous, a la meme position ecran -- constate
+  // en test reel sur le panneau compte (mode "responsive"), deja corrige
+  // pour boutique/personnalisation mais pas ici. Recalcule l'etat "au moins
+  // un ouvert" plutot que de juste inverser un booleen a chaque ouverture/
+  // fermeture : ces 3 popups sont independants (pas de fermeture automatique
+  // des uns quand un autre s'ouvre, stopPropagation empeche meme la
+  // fermeture au clic exterieur habituelle dans ce cas), donc 2 pourraient
+  // se retrouver ouverts en meme temme -- fermer SEULEMENT celui-ci ne doit
+  // pas reactiver l'input si un autre est encore ouvert.
+  window.__updateGameInputGate = function(){
+    const shopOverlay = document.getElementById('shop-overlay');
+    const personalizeOverlay = document.getElementById('personalize-overlay');
+    const anyOpen = panel.classList.contains('open')
+      || (shopOverlay && shopOverlay.classList.contains('open'))
+      || (personalizeOverlay && personalizeOverlay.classList.contains('open'));
+    if(game && game.input) game.input.enabled = !anyOpen;
+  };
+
   function closePanel(){
     panel.classList.remove('open');
     errorBox.textContent = '';
     if(guestMode!=='needsPseudo') setGuestMode('signup');
+    window.__updateGameInputGate();
   }
 
   function showError(code){
@@ -6769,6 +6791,7 @@ window.__updateLangPopup(lang);
     e.stopPropagation();
     refreshAccountUI();
     panel.classList.toggle('open');
+    window.__updateGameInputGate();
   });
   hintBubble.addEventListener('click', (e)=>{ e.stopPropagation(); btn.click(); });
   // La bulle depend de navigator.onLine (voir refreshAccountUI) : la
@@ -7392,15 +7415,15 @@ window.__updateLangPopup(lang);
     overlay.classList.add('open');
     // Sans ca, un clic sur un bouton de la boutique (DOM, par-dessus le
     // canvas) declenchait AUSSI le bouton du menu (Phaser) juste en dessous
-    // a la meme position ecran -- constate en test reel. La boutique n'est
-    // de toute facon visible que sur l'ecran de menu (voir shopBubble plus
-    // haut), desactiver l'input Phaser pendant qu'elle est ouverte n'a donc
-    // aucun autre effet de bord.
-    if(game && game.input) game.input.enabled = false;
+    // a la meme position ecran -- constate en test reel. Voir
+    // window.__updateGameInputGate (bloc compte plus haut) : recalcule
+    // "au moins un popup ouvert" plutot que d'ecraser bêtement a false ici,
+    // au cas ou le panneau compte serait deja ouvert en meme temps.
+    window.__updateGameInputGate();
   }
   function closeShop(){
     overlay.classList.remove('open');
-    if(game && game.input) game.input.enabled = true;
+    window.__updateGameInputGate();
   }
 
   shopBubble.addEventListener('click', (e)=>{ e.stopPropagation(); openShop(); });
@@ -7591,15 +7614,13 @@ window.__updateLangPopup(lang);
     refreshTexts();
     render();
     overlay.classList.add('open');
-    // Meme raison que la boutique (voir openShop() plus haut) : sans ca, un
-    // clic sur "Equiper"/"Retirer" ici declenchait AUSSI le bouton Phaser a
-    // la meme position ecran, juste en dessous. Seul accessible depuis le
-    // panneau Profil (ecran de menu), aucun autre effet de bord.
-    if(game && game.input) game.input.enabled = false;
+    // Meme raison que la boutique (voir openShop() plus haut, et
+    // window.__updateGameInputGate dans le bloc compte).
+    window.__updateGameInputGate();
   };
   function closePersonalize(){
     overlay.classList.remove('open');
-    if(game && game.input) game.input.enabled = true;
+    window.__updateGameInputGate();
   }
   closeBtn.addEventListener('click', closePersonalize);
   overlay.addEventListener('click', (e)=>{ if(e.target === overlay) closePersonalize(); });
