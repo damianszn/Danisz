@@ -444,7 +444,7 @@
      long que le placeholder "Nom du joueur" -- ne jamais dependre de la
      largeur pour empecher le retour a la ligne). */
   .shop-banner-preview{
-    font-size:16px; padding:4px 10px; border-radius:6px; line-height:1.3;
+    font-size:18px; padding:4px 10px; border-radius:6px; line-height:1.3;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; box-sizing:border-box;
   }
   /* Vignette (Ace du deck) pour un jeu de cartes : image plutot que texte,
@@ -2601,19 +2601,45 @@ function eloTier(elo){
   return ELO_TIERS[ELO_TIERS.length-1];
 }
 
-// Distance perceptuelle grossiere entre 2 couleurs hex (#rrggbb) -- juste
-// assez pour decider "est-ce que le texte va se fondre dans le fond
-// derriere lui", pas une vraie formule de contraste WCAG. Utilise pour
-// savoir si le nom (colore par palier d'Elo) reste lisible une fois pose
-// sur le fond colore d'une banniere -- ex: la banniere "star" est EXACTEMENT
-// la meme couleur que le palier Amateur (les deux #4caf50).
-function colorDistance(hex1, hex2){
-  const a = Phaser.Display.Color.HexStringToColor(hex1);
-  const b = Phaser.Display.Color.HexStringToColor(hex2);
-  return Math.sqrt((a.red-b.red)**2 + (a.green-b.green)**2 + (a.blue-b.blue)**2);
+// Ratio de contraste WCAG entre 2 couleurs hex (#rrggbb) -- vraie formule
+// de luminance relative, pas juste une distance RVB brute (une distance RVB
+// ratait des cas reels : "e9ddc8" (creme, texte par defaut des apercus de
+// la boutique) contre "ffd23f"/"ffa733" (crown/sun) sont RVB-eloignes mais
+// ont une luminosite tres proche -- illisible en pratique malgre une
+// "distance" en apparence confortable). Utilise pour savoir si un texte
+// reste lisible une fois pose sur le fond colore d'une banniere -- que ce
+// texte soit colore par palier d'Elo (VS/profil/barre de compte) ou fixe
+// (apercus de la boutique, voir shopBannerPreviewName).
+function relativeLuminance(hex){
+  const c = Phaser.Display.Color.HexStringToColor(hex);
+  const lin = (v)=>{ v/=255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); };
+  return 0.2126*lin(c.red) + 0.7152*lin(c.green) + 0.0722*lin(c.blue);
 }
-const COLOR_TOO_CLOSE_THRESHOLD = 75;
-function isColorTooClose(hex1, hex2){ return colorDistance(hex1, hex2) < COLOR_TOO_CLOSE_THRESHOLD; }
+function contrastRatio(hex1, hex2){
+  const l1 = relativeLuminance(hex1), l2 = relativeLuminance(hex2);
+  return (Math.max(l1,l2) + 0.05) / (Math.min(l1,l2) + 0.05);
+}
+// Seuil WCAG AA pour du grand texte (3:1) : suffisant pour ces libelles en
+// gros pixel-font, pas besoin du seuil 4.5:1 (texte courant/petit).
+function isColorTooClose(hex1, hex2){ return contrastRatio(hex1, hex2) < 3; }
+
+// Fond de banniere legerement transparent (pas un aplat a 100%) partout ou
+// il est affiche en DOM (apercus boutique/personnalisation, profil, barre
+// de compte) -- laisse deviner le fond derriere plutot qu'un bloc de
+// couleur plein, moins agressif visuellement. alpha reglable par appelant.
+function bannerBg(hex, alpha=0.82){
+  const c = Phaser.Display.Color.HexStringToColor(hex);
+  return `rgba(${c.red}, ${c.green}, ${c.blue}, ${alpha})`;
+}
+// Contour de texte "trop proche du fond" : une version bien plus sombre de
+// la couleur de LA banniere elle-meme plutot qu'un noir generique -- reste
+// dans la meme famille de teinte, se fond mieux visuellement qu'un contour
+// neutre. Marche aussi bien en CSS (rgb(...)) qu'en style Phaser (stroke
+// accepte une chaine couleur CSS).
+function darkenColor(hex, factor=0.35){
+  const c = Phaser.Display.Color.HexStringToColor(hex);
+  return `rgb(${Math.round(c.red*factor)}, ${Math.round(c.green*factor)}, ${Math.round(c.blue*factor)})`;
+}
 
 // Catalogue des bannieres achetables (boutique) : 2 emojis (gauche/droite
 // du pseudo) + une couleur de fond derriere le nom. Duplique volontairement
@@ -2627,10 +2653,11 @@ function isColorTooClose(hex1, hex2){ return colorDistance(hex1, hex2) < COLOR_T
 // rien plutot que de planter.
 const BANNER_CATALOG = [
   { id:'flame',   left:'🔥', right:'🔥', color:'#ff6b35', price:5  },
-  { id:'skull',   left:'💀', right:'💀', color:'#8a8a8a', price:5  },
-  { id:'star',    left:'⭐', right:'⭐', color:'#4caf50', price:4  },
-  { id:'snake',   left:'🐍', right:'🐍', color:'#3fa7ff', price:6  },
-  { id:'shark',   left:'🦈', right:'🦈', color:'#2f8f4e', price:8  },
+  // Couleurs recalees sur ce qu'elles representent (skull=noir, snake=vert,
+  // shark=gris, diamond=bleu -- "star" retiree du catalogue entierement).
+  { id:'skull',   left:'💀', right:'💀', color:'#1a1a1a', price:5  },
+  { id:'snake',   left:'🐍', right:'🐍', color:'#2f8f4e', price:6  },
+  { id:'shark',   left:'🦈', right:'🦈', color:'#8a8a8a', price:8  },
   { id:'sun',     left:'🌞', right:'🌞', color:'#ffa733', price:30 },
   // Gratuite, mais soumise a condition (au moins 1 medaille d'or, voir
   // player_has_gold_medal() dans schema.sql) plutot qu'a un prix -- price:0
@@ -2638,7 +2665,7 @@ const BANNER_CATALOG = [
   // ("prix" remplace par le libelle de la condition) et le message d'erreur
   // si la condition n'est pas remplie (voir purchase_banner()).
   { id:'crown',   left:'👑', right:'👑', color:'#ffd23f', price:0, conditionKey:'shopCrownCondition' },
-  { id:'diamond', left:'💎', right:'💎', color:'#5fdc7a', price:15 }
+  { id:'diamond', left:'💎', right:'💎', color:'#3fa7ff', price:15 }
 ];
 function getBanner(id){ return id ? BANNER_CATALOG.find(b=>b.id===id) || null : null; }
 
@@ -3984,16 +4011,17 @@ class VsIntroScene extends Phaser.Scene {
     if(banner){
       const bw = Math.min(Math.max(textWidth + 24, 80), W*0.9), bh = Math.round(nameSize*2.1);
       const g = this.add.graphics();
-      g.fillStyle(Phaser.Display.Color.HexStringToColor(banner.color).color, 1);
+      g.fillStyle(Phaser.Display.Color.HexStringToColor(banner.color).color, 0.82);
       g.fillRoundedRect(cx-bw/2, cy-bh/2, bw, bh, 8);
       // Le nom garde la couleur de son palier meme sur le fond colore de la
-      // banniere -- contour noir seulement si les 2 couleurs sont trop
-      // proches pour rester lisibles (voir isColorTooClose()).
+      // banniere -- contour (version sombre de CETTE banniere, voir
+      // darkenColor()) seulement si les 2 couleurs sont trop proches pour
+      // rester lisibles (voir isColorTooClose()).
       const nameColor = tier ? tier.color : '#e9ddc8';
       const needsOutline = tier && isColorTooClose(nameColor, banner.color);
       this.add.text(cx, cy, label, Object.assign(
         {fontFamily:'"Press Start 2P"', fontSize:nameSize+'px', color:nameColor},
-        needsOutline ? {stroke:'#000000', strokeThickness:Math.max(2, Math.round(nameSize*0.12))} : {}
+        needsOutline ? {stroke:darkenColor(banner.color), strokeThickness:Math.max(1, Math.round(nameSize*0.08))} : {}
       )).setOrigin(0.5);
     } else {
       this.add.text(cx, cy, label, {
@@ -6622,13 +6650,14 @@ window.__updateLangPopup(lang);
       // "Profil", pas seulement une fois le panneau ouvert.
       if(myBanner){
         btnLabel.textContent = `${myBanner.left} ${state.profile.pseudo} ${myBanner.right}`;
-        btnLabel.style.background = myBanner.color;
+        btnLabel.style.background = bannerBg(myBanner.color);
         btnLabel.style.borderRadius = '4px';
         btnLabel.style.padding = '2px 6px';
         // Le nom garde la couleur de son palier meme sur un fond de
-        // banniere -- contour noir seulement si les deux couleurs sont
-        // trop proches pour rester lisibles (voir isColorTooClose()).
-        btnLabel.style.webkitTextStroke = isColorTooClose(tier.color, myBanner.color) ? '1px #000' : '';
+        // banniere -- contour (version sombre de CETTE banniere, voir
+        // darkenColor()) seulement si les deux couleurs sont trop proches
+        // pour rester lisibles (voir isColorTooClose()).
+        btnLabel.style.webkitTextStroke = isColorTooClose(tier.color, myBanner.color) ? `0.4px ${darkenColor(myBanner.color)}` : '';
       } else {
         btnLabel.textContent = `${tier.emoji} ${state.profile.pseudo}`;
         btnLabel.style.background = '';
@@ -6685,10 +6714,10 @@ window.__updateLangPopup(lang);
       pseudoDisplay.style.color = myTier.color;
       if(myBanner){
         pseudoDisplay.textContent = `${myBanner.left} ${state.profile.pseudo} ${myBanner.right}`;
-        pseudoDisplay.style.background = myBanner.color;
+        pseudoDisplay.style.background = bannerBg(myBanner.color);
         pseudoDisplay.style.borderRadius = '4px';
         pseudoDisplay.style.padding = '3px 8px';
-        pseudoDisplay.style.webkitTextStroke = isColorTooClose(myTier.color, myBanner.color) ? '1px #000' : '';
+        pseudoDisplay.style.webkitTextStroke = isColorTooClose(myTier.color, myBanner.color) ? `0.4px ${darkenColor(myBanner.color)}` : '';
       } else {
         pseudoDisplay.textContent = state.profile.pseudo;
         pseudoDisplay.style.background = '';
@@ -7170,7 +7199,7 @@ window.__updateLangPopup(lang);
 
       const preview = document.createElement('div');
       preview.className = 'shop-banner-preview';
-      preview.style.background = banner.color;
+      preview.style.background = bannerBg(banner.color);
       // Le VRAI pseudo du joueur connecte plutot qu'un placeholder generique
       // (ou juste les 2 emojis separes par un point) : montre directement
       // l'effet reel (fond colore + emojis) tel qu'il apparaitra sur SON
@@ -7178,6 +7207,11 @@ window.__updateLangPopup(lang);
       // apercu de mise en page, pas une promesse que ce sera fige ainsi.
       const previewName = (profile && profile.pseudo) ? profile.pseudo : t('shopBannerPreviewName');
       preview.textContent = `${banner.left} ${previewName} ${banner.right}`;
+      // Le texte de l'apercu est en couleur fixe (#e9ddc8, celle du modal --
+      // pas de palier d'Elo ici) : contour noir fin si elle manque de
+      // contraste sur le fond de CETTE banniere (crown/sun par ex., trop
+      // clairs tous les deux pour un texte creme, voir isColorTooClose()).
+      preview.style.webkitTextStroke = isColorTooClose('#e9ddc8', banner.color) ? `0.4px ${darkenColor(banner.color)}` : '';
       card.appendChild(preview);
 
       const price = document.createElement('div');
@@ -7470,9 +7504,10 @@ window.__updateLangPopup(lang);
       card.className = 'shop-banner-card';
       const preview = document.createElement('div');
       preview.className = 'shop-banner-preview';
-      preview.style.background = banner.color;
+      preview.style.background = bannerBg(banner.color);
       const previewName = (profile && profile.pseudo) ? profile.pseudo : t('shopBannerPreviewName');
       preview.textContent = `${banner.left} ${previewName} ${banner.right}`;
+      preview.style.webkitTextStroke = isColorTooClose('#e9ddc8', banner.color) ? `0.4px ${darkenColor(banner.color)}` : '';
       card.appendChild(preview);
       card.appendChild(equipButton(equipped,
         ()=>window.DaniszAccount.equipBanner(banner.id),

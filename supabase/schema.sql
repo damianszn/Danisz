@@ -209,7 +209,6 @@ begin
   v_price := case p_banner_id
     when 'flame' then 5
     when 'skull' then 5
-    when 'star' then 4
     when 'snake' then 6
     when 'shark' then 8
     when 'sun' then 30
